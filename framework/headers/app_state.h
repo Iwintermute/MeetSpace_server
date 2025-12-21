@@ -5,6 +5,7 @@
 #include <map>
 #include <ctime>
 
+// Типы экранов приложения
 enum class AppScreen
 {
     Login,
@@ -16,13 +17,14 @@ enum class AppScreen
     Conference
 };
 
+// Тип чата
 enum class ChatType
 {
     Personal,
     Group
 };
 
-
+// Статус пользователя
 enum class UserStatus
 {
     Online,
@@ -31,7 +33,7 @@ enum class UserStatus
     DoNotDisturb
 };
 
-
+// Структура сообщения
 struct Message
 {
     int id;
@@ -78,12 +80,14 @@ struct Chat
     std::vector<Message> messages;
     time_t created_at;
     int unread_count;
-    bool is_typing; 
+    bool is_typing; // Кто-то печатает
 
     Chat() : id(0), type(ChatType::Personal), created_at(0), unread_count(0), is_typing(false) {}
     Chat(int _id, const std::string& _name, ChatType _type, const std::vector<int>& _participants)
         : id(_id), name(_name), type(_type), participant_ids(_participants), 
           created_at(time(nullptr)), unread_count(0), is_typing(false) {}
+
+    // Получить последнее сообщение
     Message* GetLastMessage()
     {
         if (messages.empty()) return nullptr;
@@ -91,26 +95,40 @@ struct Chat
     }
 };
 
-
+// Главное состояние приложения
 class AppState
 {
 public:
     AppState();
     ~AppState();
 
+    // Текущий экран
     AppScreen current_screen;
+
+    // Текущий авторизованный пользователь
     User current_user;
     bool is_authenticated;
+
+    // Все пользователи (контакты)
     std::map<int, User> users;
+
+    // Все чаты
     std::map<int, Chat> chats;
+
+    // ID текущего выбранного чата
     int selected_chat_id;
 
+    // Временные данные для регистрации
     char phone_input[32];
     char verification_code[8];
     bool code_sent;
     std::string sent_to_phone;
+
+    // Временные данные для логина
     char login_phone[32];
     char login_password[64];
+
+    // Временные данные для создания чата
     bool show_create_chat_dialog;
     std::vector<int> selected_participants;
     char new_chat_name[128];
@@ -130,6 +148,8 @@ public:
     float left_panel_width;
     float right_panel_width;
     float right_panel_anim_width; // Анимированная ширина правой панели
+    float chat_info_anim_alpha;   // Анимация прозрачности инфо-диалога
+    float chat_info_anim_offset;  // Анимация смещения инфо-диалога
 
     // Анимация перехода от компактного окна авторизации к полному мессенджеру
     float auth_to_main_progress; // 0.0f -> 1.0f

@@ -79,7 +79,10 @@ static bool button_text(const char* label, const ImVec2& size_arg, ImU32 bg_col,
     }
     
     ImU32 text_col = get_contrast_text_color(bg_col);
-    draw->text_clipped(window->DrawList, font->get(inter_bold_data, 14),
+    // Check if label is a single uppercase letter (A-Z) - use icons font, otherwise use text font
+    bool is_icon = (strlen(label) == 1 && label[0] >= 'A' && label[0] <= 'Z');
+    ImFont* font_to_use = is_icon ? font->get(icons_data, 14) : font->get(inter_bold_data, 14);
+    draw->text_clipped(window->DrawList, font_to_use,
         total.Min, total.Max, text_col, label, nullptr, nullptr, ImVec2(0.5f, 0.5f));
 
     return pressed;
@@ -125,14 +128,21 @@ static bool button_icon(const char* icon, float radius, ImU32 bg_default, ImU32 
     // OPTIMIZATION: Do NOT scale font dynamically. 
     float font_sz = 16.0f;
 
-    draw->text_clipped(window->DrawList, font->get(inter_bold_data, font_sz),
+    draw->text_clipped(window->DrawList, font->get(icons_data, font_sz),
         total.Min, total.Max, IM_COL32(255,255,255,255), icon, nullptr, nullptr, ImVec2(0.5f, 0.5f));
         
     return pressed;
 }
 
-// Custom Cycle Selector (Modern)
+// Custom Cycle Selector (Modern with improved animations)
 static bool cycle_selector(const char* label, const char* current_val) {
+    struct selector_state
+    {
+        float hover_alpha{ 0.0f };
+        float click_animation{ 0.0f };
+        float glow_animation{ 0.0f };
+    };
+
     ImGuiWindow* window = gui->get_window();
     ImGuiContext& g = *GImGui;
     ImGuiID id = window->GetID(label);
@@ -147,35 +157,74 @@ static bool cycle_selector(const char* label, const char* current_val) {
     bool hovered, held;
     bool pressed = gui->button_behavior(rect, id, &hovered, &held, 0);
     
-    button_state* state = gui->anim_container<button_state>(id);
-    // OPTIMIZATION: Faster animation speed (30 -> 60)
-    gui->easing(state->alpha, hovered ? 1.0f : 0.0f, gui->fixed_speed(60.0f), dynamic_easing);
+    selector_state* state = gui->anim_container<selector_state>(id);
     
-    // Background
-    ImU32 bg = draw->get_clr(clr->messages.background);
-    ImU32 bg_hover = draw->get_clr(clr->main.outline);
+    // Анимация наведения
+    float target_hover = hovered ? 1.0f : 0.0f;
+    gui->easing(state->hover_alpha, target_hover, 15.f, dynamic_easing);
     
-    ImVec4 c1 = ImGui::ColorConvertU32ToFloat4(bg);
-    ImVec4 c2 = ImGui::ColorConvertU32ToFloat4(bg_hover);
-    ImVec4 c_lerp = ImLerp(c1, c2, state->alpha);
-    ImU32 final_bg = draw->get_clr(c_lerp);
+    // Анимация клика
+    if (pressed)
+    {
+        state->click_animation = 1.0f;
+    }
+    gui->easing(state->click_animation, 0.0f, 20.f, dynamic_easing);
     
-    draw->rect_filled(window->DrawList, rect.Min, rect.Max, final_bg, SCALE(12));
+    // Анимация подсветки
+    float target_glow = hovered ? 1.0f : 0.0f;
+    gui->easing(state->glow_animation, target_glow, 18.f, dynamic_easing);
+    
+    // Градиентные цвета
+    ImVec4 grad_color_1 = clr->messages.background.Value;
+    ImVec4 grad_color_2 = clr->main.outline.Value;
+    
+    if (hovered)
+    {
+        grad_color_1 = ImLerp(grad_color_1, clr->main.accent.Value, state->hover_alpha * 0.3f);
+        grad_color_2 = ImLerp(grad_color_2, clr->main.grad_1.Value, state->hover_alpha * 0.3f);
+    }
+    
+    ImU32 grad_col_1 = draw->get_clr(grad_color_1);
+    ImU32 grad_col_2 = draw->get_clr(grad_color_2);
+    
+    // Эффект клика - небольшое сжатие
+    float click_scale = 1.0f - (state->click_animation * 0.03f);
+    ImVec2 center = rect.GetCenter();
+    ImVec2 scaled_size = (rect.Max - rect.Min) * click_scale;
+    ImRect scaled_rect(center - scaled_size * 0.5f, center + scaled_size * 0.5f);
+    
+    // Градиентный фон
+    draw->rect_filled_multi_color(window->DrawList, scaled_rect.Min, scaled_rect.Max,
+        grad_col_1, grad_col_2, grad_col_2, grad_col_1, SCALE(12));
+    
+    // Анимированная подсветка
+    if (state->glow_animation > 0.01f)
+    {
+        float time = ImGui::GetTime();
+        float glow_intensity = sinf(time * 2.5f) * 0.2f + 0.8f;
+        ImVec4 glow_color = ImVec4(1.0f, 1.0f, 1.0f, 0.08f * state->glow_animation * glow_intensity);
+        ImU32 glow_col = draw->get_clr(glow_color);
+        draw->rect_filled_multi_color(window->DrawList, scaled_rect.Min, scaled_rect.Max,
+            glow_col, IM_COL32(255, 255, 255, 0), IM_COL32(255, 255, 255, 0), glow_col, SCALE(12));
+    }
         
     // Label
     draw->text_clipped(window->DrawList, font->get(inter_medium_data, 13),
-        rect.Min + SCALE(15, 0), rect.Max, draw->get_clr(clr->main.text_inactive), 
+        scaled_rect.Min + SCALE(15, 0), scaled_rect.Max, draw->get_clr(clr->main.text_inactive), 
         label, nullptr, nullptr, ImVec2(0, 0.5f));
         
-    // Value
+    // Value с анимацией при клике
+    ImVec4 value_color = hovered ? clr->main.accent.Value : clr->main.text.Value;
     draw->text_clipped(window->DrawList, font->get(inter_bold_data, 15),
-        rect.Min, rect.Max - SCALE(40, 0), draw->get_clr(clr->main.text), 
+        scaled_rect.Min, scaled_rect.Max - SCALE(40, 0), draw->get_clr(value_color), 
         current_val, nullptr, nullptr, ImVec2(1, 0.5f));
         
-    // Arrow
-    draw->text_clipped(window->DrawList, font->get(inter_bold_data, 12),
-        rect.Max - SCALE(30, 0), rect.Max, draw->get_clr(clr->main.text_inactive), 
-        ">", nullptr, nullptr, ImVec2(0, 0.5f));
+    // Arrow с анимацией
+    float arrow_offset = state->click_animation * SCALE(3.0f);
+    ImVec2 arrow_pos = scaled_rect.Max - SCALE(30, 0) + ImVec2(arrow_offset, 0);
+    draw->text_clipped(window->DrawList, font->get(icons_data, 12),
+        arrow_pos - ImVec2(SCALE(20), 0), arrow_pos + ImVec2(SCALE(20), scaled_rect.GetHeight()),
+        draw->get_clr(clr->main.text_inactive), "N", nullptr, nullptr, ImVec2(0, 0.5f)); // N=Next/Right
     
     return pressed;
 }
@@ -202,7 +251,7 @@ void c_conference_widgets::render_conference_list(bool interactable) {
     ImVec2 back_pos = content_pos + SCALE(30, 40);
     gui->set_pos(back_pos, pos_all);
     if (interactable) {
-        if (button_text("<", SCALE(40, 40), draw->get_clr(clr->window.background), draw->get_clr(clr->main.outline), true)) {
+        if (button_text("L", SCALE(40, 40), draw->get_clr(clr->window.background), draw->get_clr(clr->main.outline), true)) { // L=Left/Back
             app_state->current_screen = AppScreen::MainMessenger;
         }
     }
@@ -214,25 +263,77 @@ void c_conference_widgets::render_conference_list(bool interactable) {
     draw->text(window->DrawList, font->get(inter_medium_data, 14), 0, title_pos + SCALE(0, 32), 
         draw->get_clr(clr->main.text_inactive), "Manage your meetings and video calls");
 
-    // "Create" Button
+    // "Create" Button с градиентом и анимацией
+    struct create_btn_state
+    {
+        float glow_animation{ 0.0f };
+    };
+    
+    const ImGuiID create_btn_id = window->GetID("new_conference_btn");
+    create_btn_state* create_state = gui->anim_container<create_btn_state>(create_btn_id);
+    
     ImVec2 btn_size = SCALE(180, 44);
     ImVec2 btn_pos = content_pos + ImVec2(screen_size.x - btn_size.x - SCALE(40), SCALE(40));
+    ImRect create_btn_rect(btn_pos, btn_pos + btn_size);
+    bool create_btn_hovered = create_btn_rect.Contains(gui->mouse_pos());
+    bool create_btn_clicked = create_btn_hovered && gui->mouse_clicked(mouse_button_left);
     
-    if (interactable) {
-        gui->set_pos(btn_pos, pos_all);
-        if (button_text("+ New Conference", btn_size, draw->get_clr(clr->main.accent), draw->get_clr(clr->conference.primary), false)) {
+    if (create_btn_clicked && interactable) {
              ui_state = ConferenceUIState::CreationModal;
             show_create_modal = true;
             create_modal_alpha = 0.0f;
         }
+    
+    // Анимация подсветки
+    float create_target_glow = create_btn_hovered ? 1.0f : 0.0f;
+    gui->easing(create_state->glow_animation, create_target_glow, 15.f, dynamic_easing);
+    
+    // Градиентные цвета
+    ImVec4 create_grad_1 = clr->main.accent.Value;
+    ImVec4 create_grad_2 = clr->conference.primary.Value;
+    
+    if (create_btn_hovered) {
+        create_grad_1 = ImLerp(create_grad_1, ImVec4(create_grad_1.x * 1.2f, create_grad_1.y * 1.2f, create_grad_1.z * 1.2f, create_grad_1.w), create_state->glow_animation);
+        create_grad_2 = ImLerp(create_grad_2, ImVec4(create_grad_2.x * 1.2f, create_grad_2.y * 1.2f, create_grad_2.z * 1.2f, create_grad_2.w), create_state->glow_animation);
     }
+    
+    ImU32 create_col_1 = draw->get_clr(create_grad_1);
+    ImU32 create_col_2 = draw->get_clr(create_grad_2);
+    
+    if (create_btn_hovered) {
+        draw->shadow_rect(window->DrawList, create_btn_rect.Min, create_btn_rect.Max,
+            draw->get_clr(ImVec4(0, 0, 0, 0.2f)), SCALE(12), ImVec2(0, SCALE(3)),
+            0, SCALE(10));
+    }
+    
+    // Градиентная кнопка
+    draw->rect_filled_multi_color(window->DrawList, create_btn_rect.Min, create_btn_rect.Max,
+        create_col_1, create_col_2, create_col_2, create_col_1, SCALE(10));
+    
+    // Анимированная подсветка
+    if (create_state->glow_animation > 0.01f) {
+        float time = ImGui::GetTime();
+        float glow_intensity = sinf(time * 2.0f) * 0.3f + 0.7f;
+        ImVec4 glow_color_1 = ImVec4(1.0f, 1.0f, 1.0f, 0.15f * create_state->glow_animation * glow_intensity);
+        ImVec4 glow_color_2 = ImVec4(1.0f, 1.0f, 1.0f, 0.05f * create_state->glow_animation * glow_intensity);
+        ImU32 glow_col_1 = draw->get_clr(glow_color_1);
+        ImU32 glow_col_2 = draw->get_clr(glow_color_2);
+        draw->rect_filled_multi_color(window->DrawList, create_btn_rect.Min, create_btn_rect.Max,
+            glow_col_1, glow_col_2, glow_col_2, glow_col_1, SCALE(10));
+    }
+    
+    draw->text_clipped(window->DrawList, font->get(inter_bold_data, 14),
+        create_btn_rect.Min, create_btn_rect.Max,
+        draw->get_clr(clr->button.text), "+ New Conference", nullptr, nullptr, ImVec2(0.5f, 0.5f));
+    
+    gui->item_size(create_btn_rect);
 
     // --- List Area ---
     if (interactable) {
         ImVec2 list_pos = content_pos + ImVec2(0, header_height);
         ImVec2 list_size = content_size - ImVec2(0, header_height);
         
-        gui->begin_content("conf_list", list_size, SCALE(0, 0), SCALE(0, 20));
+        gui->begin_content("conf_list", list_size, SCALE(0, 0), SCALE(0, 30));
         {
             ImGuiWindow* list_window = gui->get_window();
             auto conferences = conference_manager->GetUserConferences(conference_manager->current_user_id);
@@ -247,60 +348,254 @@ void c_conference_widgets::render_conference_list(bool interactable) {
             float padding_x = SCALE(40);
             
             for (const auto& conf : conferences) {
+                // Получаем текущую позицию курсора
                 ImVec2 cur_pos = list_window->DC.CursorPos;
-                ImVec2 card_size = ImVec2(list_size.x - padding_x * 2, SCALE(100));
+                // Высота карточки: 18 (status) + 8 (отступ) + 24 (title высота) + 36 (отступ) + 18 (info строка 1) + 24 (отступ) + 18 (info строка 2) + 24 (нижний отступ) = 170px
+                // Увеличиваем до 180px для комфорта
+                ImVec2 card_size = ImVec2(list_size.x - padding_x * 2, SCALE(180));
                 
-                cur_pos.x += padding_x; 
-                ImRect card_rect(cur_pos, cur_pos + card_size);
+                // Позиция карточки с учетом отступа слева
+                ImVec2 card_pos = ImVec2(cur_pos.x + padding_x, cur_pos.y);
+                ImRect card_rect(card_pos, card_pos + card_size);
                 
-                // Optimized Shadow (16 segments, reduced size)
+                bool card_hovered = card_rect.Contains(gui->mouse_pos());
+                
+                // Modern Shadow
                 draw->shadow_rect(list_window->DrawList, card_rect.Min, card_rect.Max, 
-                    draw->get_clr(ImGui::ColorConvertU32ToFloat4(IM_COL32(0,0,0,50))), SCALE(30), ImVec2(0, SCALE(5)), 0, 16);
-                draw->rect_filled(list_window->DrawList, card_rect.Min, card_rect.Max, 
-                    draw->get_clr(clr->messages.background), SCALE(16));
+                    draw->get_clr(ImVec4(0,0,0,0.4f)), SCALE(40), ImVec2(0, SCALE(8)), 0, SCALE(20));
+                
+                // Градиентный фон карточки
+                ImVec4 card_bg_1 = clr->messages.background.Value;
+                ImVec4 card_bg_2 = clr->window.background.Value;
+                if (card_hovered) {
+                    card_bg_1 = ImLerp(card_bg_1, clr->main.hover.Value, 0.3f);
+                    card_bg_2 = ImLerp(card_bg_2, clr->main.hover.Value, 0.3f);
+                }
+                ImU32 card_col_1 = draw->get_clr(card_bg_1);
+                ImU32 card_col_2 = draw->get_clr(card_bg_2);
+                draw->rect_filled_multi_color(list_window->DrawList, card_rect.Min, card_rect.Max,
+                    card_col_1, card_col_2, card_col_2, card_col_1, SCALE(20));
+                
+                // Border
+                draw->rect(list_window->DrawList, card_rect.Min, card_rect.Max, 
+                    draw->get_clr(clr->main.outline, 0.3f), SCALE(20), 0, SCALE(1));
                     
-                // Status
-                ImU32 status_col = IM_COL32(100, 100, 100, 255);
+                // Status Badge (верхний левый угол)
+                ImU32 status_col = IM_COL32(150, 150, 150, 255);
                 std::string status_txt = "Scheduled";
                 if (conf.status == ConferenceStatus::Active) {
                     status_col = draw->get_clr(clr->conference.recording);
                     status_txt = "LIVE";
                 } else if (conf.status == ConferenceStatus::Ended) {
                     status_txt = "Ended";
+                    status_col = IM_COL32(120, 120, 120, 255);
                 }
                 
-                ImVec2 status_pos = card_rect.Min + SCALE(25, 25);
-                ImVec2 ts = ImGui::CalcTextSize(status_txt.c_str());
-                ImRect status_pill(status_pos, status_pos + ts + SCALE(16, 8));
+                ImVec2 status_pos = card_rect.Min + SCALE(20, 18);
+                ImVec2 status_text_size = gui->text_size(font->get(inter_bold_data, 11), status_txt.c_str());
+                ImRect status_pill(status_pos, status_pos + status_text_size + SCALE(14, 8));
                 
-                draw->rect_filled(list_window->DrawList, status_pill.Min, status_pill.Max, draw->get_clr(ImGui::ColorConvertU32ToFloat4(status_col), 0.15f), SCALE(20));
-                draw->rect(list_window->DrawList, status_pill.Min, status_pill.Max, draw->get_clr(ImGui::ColorConvertU32ToFloat4(status_col), 0.5f), SCALE(20));
+                draw->rect_filled(list_window->DrawList, status_pill.Min, status_pill.Max, 
+                    draw->get_clr(ImGui::ColorConvertU32ToFloat4(status_col), 0.2f), SCALE(12));
+                draw->rect(list_window->DrawList, status_pill.Min, status_pill.Max, 
+                    draw->get_clr(ImGui::ColorConvertU32ToFloat4(status_col), 0.6f), SCALE(12), 0, SCALE(1));
                 draw->text_clipped(list_window->DrawList, font->get(inter_bold_data, 11),
                     status_pill.Min, status_pill.Max, status_col, status_txt.c_str(), nullptr, nullptr, ImVec2(0.5f, 0.5f));
 
-                // Title
-                draw->text(list_window->DrawList, font->get(inter_bold_data, 18), 0, 
-                    card_rect.Min + SCALE(25, 60), draw->get_clr(clr->main.text), conf.settings.title.c_str());
+                // Title (крупный, жирный) - если пустое, показываем понятное название
+                std::string display_title = conf.settings.title;
+                if (display_title.empty()) {
+                    display_title = "Conference #" + std::to_string(conf.id);
+                }
+                ImVec2 title_pos = card_rect.Min + SCALE(20, 50);
+                // Используем text_clipped чтобы текст не выходил за пределы карточки
+                // Оставляем место для кнопки справа (120px кнопка + 20px отступ = 140px)
+                float title_max_width = card_size.x - SCALE(160);
+                draw->text_clipped(list_window->DrawList, font->get(inter_bold_data, 20),
+                    title_pos, title_pos + ImVec2(title_max_width, SCALE(30)),
+                    draw->get_clr(clr->main.text), display_title.c_str(), nullptr, nullptr, ImVec2(0.0f, 0.0f));
 
-                // Join Button
+                // Информационная секция (дата, время, длительность, участники)
+                // Отступ от названия: 36px
+                // Убеждаемся, что информация помещается внутри карточки
+                float title_height = SCALE(24); // Примерная высота текста title
+                float info_start_y = title_pos.y + title_height + SCALE(12); // Отступ после title
+                float info_x_offset = SCALE(20); // Отступ от левого края карточки
+                float info_row_spacing = SCALE(22); // Расстояние между строками информации
+                float info_col_spacing = SCALE(200); // Расстояние между колонками (время/длительность, участники/доступ)
+                
+                // Проверяем, что информация не выходит за пределы карточки
+                float max_info_y = card_rect.Max.y - SCALE(24); // Минимальный отступ снизу
+                float info_y = info_start_y;
+                // Убеждаемся, что информация помещается
+                if (info_y + info_row_spacing * 2 + SCALE(18) > max_info_y) {
+                    info_y = max_info_y - info_row_spacing * 2 - SCALE(18);
+                }
+                
+                // Правая граница для информации (оставляем место для кнопки)
+                float info_right_bound = card_rect.Max.x - SCALE(140); // 120px кнопка + 20px отступ
+                
+                // Первая строка: Дата/время и Длительность
+                // Дата и время начала
+                std::string time_display = "No time set";
+                if (conf.settings.start_time > 0) {
+                    struct tm timeinfo;
+                    localtime_s(&timeinfo, &conf.settings.start_time);
+                    char time_str[64];
+                    strftime(time_str, sizeof(time_str), "%d %b, %H:%M", &timeinfo);
+                    time_display = time_str;
+                } else if (conf.created_at > 0) {
+                    // Если start_time не установлен, показываем дату создания
+                    struct tm timeinfo;
+                    localtime_s(&timeinfo, &conf.created_at);
+                    char time_str[64];
+                    strftime(time_str, sizeof(time_str), "Created: %d %b", &timeinfo);
+                    time_display = time_str;
+                }
+                
+                // Дата/время (слева)
+                ImVec2 time_pos = card_rect.Min + ImVec2(info_x_offset, info_y);
+                ImVec2 time_max = ImVec2(ImMin(card_rect.Min.x + info_x_offset + info_col_spacing - SCALE(10), info_right_bound), info_y + SCALE(18));
+                draw->text_clipped(list_window->DrawList, font->get(inter_medium_data, 13),
+                    time_pos, time_max,
+                    draw->get_clr(clr->main.text_secondary), time_display.c_str(), nullptr, nullptr, ImVec2(0.0f, 0.0f));
+                
+                // Длительность (справа от времени)
+                std::string duration_str;
+                if (conf.settings.duration_minutes == 0) {
+                    duration_str = "Unlimited";
+                } else if (conf.settings.duration_minutes < 60) {
+                    duration_str = std::to_string(conf.settings.duration_minutes) + " min";
+                } else {
+                    int hours = conf.settings.duration_minutes / 60;
+                    int mins = conf.settings.duration_minutes % 60;
+                    duration_str = std::to_string(hours) + "h";
+                    if (mins > 0) duration_str += " " + std::to_string(mins) + "m";
+                }
+                
+                ImVec2 duration_pos = card_rect.Min + ImVec2(info_x_offset + info_col_spacing, info_y);
+                ImVec2 duration_max = ImVec2(info_right_bound, info_y + SCALE(18));
+                draw->text_clipped(list_window->DrawList, font->get(inter_medium_data, 13),
+                    duration_pos, duration_max,
+                    draw->get_clr(clr->main.text_secondary), duration_str.c_str(), nullptr, nullptr, ImVec2(0.0f, 0.0f));
+                
+                // Вторая строка: Участники и Тип доступа
+                // Количество участников
+                int participant_count = conf.participants.size();
+                std::string participants_str = std::to_string(participant_count) + " participant" + (participant_count != 1 ? "s" : "");
+                ImVec2 participants_pos = card_rect.Min + ImVec2(info_x_offset, info_y + info_row_spacing);
+                ImVec2 participants_max = ImVec2(ImMin(card_rect.Min.x + info_x_offset + info_col_spacing - SCALE(10), info_right_bound), info_y + info_row_spacing + SCALE(16));
+                draw->text_clipped(list_window->DrawList, font->get(inter_medium_data, 12),
+                    participants_pos, participants_max,
+                    draw->get_clr(clr->main.text_inactive), participants_str.c_str(), nullptr, nullptr, ImVec2(0.0f, 0.0f));
+                
+                // Тип доступа (справа от участников)
+                std::string access_str;
+                switch (conf.settings.access) {
+                    case ConferenceAccess::Open:
+                        access_str = "Public";
+                        break;
+                    case ConferenceAccess::InviteOnly:
+                        access_str = "Invite Only";
+                        break;
+                    case ConferenceAccess::ApprovalRequired:
+                        access_str = "Approval Required";
+                        break;
+                }
+                ImVec2 access_pos = card_rect.Min + ImVec2(info_x_offset + info_col_spacing, info_y + info_row_spacing);
+                ImVec2 access_max = ImVec2(info_right_bound, info_y + info_row_spacing + SCALE(16));
+                draw->text_clipped(list_window->DrawList, font->get(inter_medium_data, 12),
+                    access_pos, access_max,
+                    draw->get_clr(clr->main.text_inactive), access_str.c_str(), nullptr, nullptr, ImVec2(0.0f, 0.0f));
+
+                // Join Button (справа, по центру вертикально) с анимацией
+                // Убеждаемся, что кнопка не перекрывает информацию
                 if (conf.status != ConferenceStatus::Ended) {
-                    ImVec2 j_size = SCALE(110, 36);
-                    ImVec2 j_pos = card_rect.Max - j_size - SCALE(25, 0);
-                    j_pos.y = card_rect.Min.y + (card_size.y - j_size.y) / 2;
+                    struct join_btn_state
+                    {
+                        float glow_animation{ 0.0f };
+                    };
                     
-                    gui->set_screen_pos(j_pos, pos_all);
+                    const ImGuiID join_btn_id = list_window->GetID(("join_btn_" + std::to_string(conf.id)).c_str());
+                    join_btn_state* join_state = gui->anim_container<join_btn_state>(join_btn_id);
                     
-                    gui->push_id(conf.id);
-                    if (button_text("Join Call", j_size, draw->get_clr(clr->conference.primary), draw->get_clr(clr->conference.speaker_glow), false)) {
+                    ImVec2 j_size = SCALE(120, 42);
+                    // Кнопка справа с отступом, по центру вертикально
+                    // Учитываем, что информация заканчивается на info_y + info_row_spacing + 20 (примерно 82 + 24 + 20 = 126px)
+                    // Кнопка должна быть ниже информации или справа от неё
+                    float button_right_margin = SCALE(20);
+                    float button_left_margin = SCALE(420); // Минимальное расстояние от левого края, чтобы не перекрывать информацию
+                    float available_width = card_size.x - button_left_margin - button_right_margin;
+                    
+                    // Если места достаточно, размещаем справа, иначе под информацией
+                    ImVec2 j_pos;
+                    if (available_width >= j_size.x) {
+                        // Справа от информации
+                        j_pos = ImVec2(card_rect.Max.x - j_size.x - button_right_margin, 
+                                     card_rect.Min.y + (card_size.y - j_size.y) / 2);
+                    } else {
+                        // Под информацией, справа
+                        j_pos = ImVec2(card_rect.Max.x - j_size.x - button_right_margin,
+                                     info_y + info_row_spacing + SCALE(8));
+                    }
+                    ImRect join_rect(j_pos, j_pos + j_size);
+                    bool join_hovered = join_rect.Contains(gui->mouse_pos());
+                    
+                    // Анимация подсветки
+                    float join_target_glow = join_hovered ? 1.0f : 0.0f;
+                    gui->easing(join_state->glow_animation, join_target_glow, 15.f, dynamic_easing);
+                    
+                    // Градиентные цвета
+                    ImVec4 join_grad_1 = clr->conference.primary.Value;
+                    ImVec4 join_grad_2 = clr->main.accent.Value;
+                    if (join_hovered) {
+                        join_grad_1 = ImLerp(join_grad_1, ImVec4(join_grad_1.x * 1.2f, join_grad_1.y * 1.2f, join_grad_1.z * 1.2f, join_grad_1.w), join_state->glow_animation);
+                        join_grad_2 = ImLerp(join_grad_2, ImVec4(join_grad_2.x * 1.2f, join_grad_2.y * 1.2f, join_grad_2.z * 1.2f, join_grad_2.w), join_state->glow_animation);
+                    }
+                    ImU32 join_col_1 = draw->get_clr(join_grad_1);
+                    ImU32 join_col_2 = draw->get_clr(join_grad_2);
+                    
+                    if (join_hovered) {
+                        draw->shadow_rect(list_window->DrawList, join_rect.Min, join_rect.Max,
+                            draw->get_clr(ImVec4(0, 0, 0, 0.2f)), SCALE(12), ImVec2(0, SCALE(3)),
+                            0, SCALE(10));
+                    }
+                    
+                    // Градиентная кнопка
+                    draw->rect_filled_multi_color(list_window->DrawList, join_rect.Min, join_rect.Max,
+                        join_col_1, join_col_2, join_col_2, join_col_1, SCALE(10));
+                    
+                    // Анимированная подсветка
+                    if (join_state->glow_animation > 0.01f) {
+                        float time = ImGui::GetTime();
+                        float glow_intensity = sinf(time * 2.0f) * 0.3f + 0.7f;
+                        ImVec4 glow_color_1 = ImVec4(1.0f, 1.0f, 1.0f, 0.15f * join_state->glow_animation * glow_intensity);
+                        ImVec4 glow_color_2 = ImVec4(1.0f, 1.0f, 1.0f, 0.05f * join_state->glow_animation * glow_intensity);
+                        ImU32 glow_col_1 = draw->get_clr(glow_color_1);
+                        ImU32 glow_col_2 = draw->get_clr(glow_color_2);
+                        draw->rect_filled_multi_color(list_window->DrawList, join_rect.Min, join_rect.Max,
+                            glow_col_1, glow_col_2, glow_col_2, glow_col_1, SCALE(10));
+                    }
+                    
+                    draw->text_clipped(list_window->DrawList, font->get(inter_bold_data, 14),
+                        join_rect.Min, join_rect.Max,
+                        draw->get_clr(clr->button.text), "Join Call", nullptr, nullptr, ImVec2(0.5f, 0.5f));
+                    
+                    if (join_hovered && gui->mouse_clicked(mouse_button_left)) {
                         if (conference_manager->JoinConference(conf.id)) {
                              ui_state = ConferenceUIState::ActiveConference;
                         }
                     }
-                    gui->pop_id();
+                    
+                    gui->item_size(join_rect);
                 }
 
-                // FIX: Reduced item spacing (120 -> 108)
-                gui->dummy(ImVec2(list_size.x, SCALE(108))); 
+                // ВАЖНО: Регистрируем размер всей карточки, чтобы курсор правильно обновился
+                // Это гарантирует, что следующая карточка будет ниже этой
+                gui->item_size(card_rect);
+                
+                // Обновляем курсор вручную, чтобы следующий элемент был после карточки
+                list_window->DC.CursorPos = ImVec2(cur_pos.x, card_rect.Max.y + SCALE(32)); 
             }
         }
         gui->end_content();
@@ -308,26 +603,49 @@ void c_conference_widgets::render_conference_list(bool interactable) {
 }
 
 void c_conference_widgets::render_conference_creation_modal() {
+    struct modal_anim_state
+    {
+        float scale_animation{ 0.0f };
+        float slide_animation{ 0.0f };
+        float cancel_glow{ 0.0f };
+    };
+
     ImGuiWindow* window = gui->get_window();
     ImVec2 screen_size = SCALE(var->window.size);
 
-    gui->easing(create_modal_alpha, show_create_modal ? 1.0f : 0.0f, gui->fixed_speed(160.0f), static_easing);
+    const ImGuiID modal_id = window->GetID("conference_creation_modal");
+    modal_anim_state* anim_state = gui->anim_container<modal_anim_state>(modal_id);
+
+    // Плавная анимация альфа-канала
+    gui->easing(create_modal_alpha, show_create_modal ? 1.0f : 0.0f, 12.f, dynamic_easing);
+    
+    // Анимация масштаба с easing
+    gui->easing(anim_state->scale_animation, show_create_modal ? 1.0f : 0.0f, 14.f, dynamic_easing);
+    
+    // Анимация слайда (появление сверху)
+    gui->easing(anim_state->slide_animation, show_create_modal ? 1.0f : 0.0f, 16.f, dynamic_easing);
     
     if (create_modal_alpha < 0.001f && !show_create_modal) {
         ui_state = ConferenceUIState::ListView;
         return;
     }
 
-    // Modern Backdrop
+    // Modern Backdrop с плавным fade
     draw->rect_filled(window->DrawList, ImVec2(0,0), screen_size, 
-        draw->get_clr(ImVec4(0,0,0,0.7f), create_modal_alpha), 0);
+        draw->get_clr(ImVec4(0,0,0,0.75f), create_modal_alpha), 0);
         
     ImVec2 modal_size = SCALE(400, 520);
     ImVec2 center = screen_size * 0.5f;
-    float anim_scale = 0.95f + (0.05f * create_modal_alpha); 
     
-    ImVec2 cur_size = modal_size * anim_scale;
-    ImVec2 modal_pos = center - (cur_size * 0.5f);
+    // Улучшенная анимация масштаба с easing
+    float scale = 0.88f + (0.12f * anim_state->scale_animation);
+    
+    // Анимация слайда (появление сверху с небольшим отскоком)
+    float slide_offset = (1.0f - anim_state->slide_animation) * SCALE(50.0f);
+    float bounce = sinf(anim_state->slide_animation * 3.14159f) * SCALE(10.0f) * (1.0f - anim_state->slide_animation);
+    
+    ImVec2 cur_size = modal_size * scale;
+    ImVec2 modal_pos = center - (cur_size * 0.5f) - ImVec2(0, slide_offset - bounce);
     ImVec2 modal_end = modal_pos + cur_size;
     
     // Modern Card Design
@@ -423,14 +741,56 @@ void c_conference_widgets::render_conference_creation_modal() {
         create_duration_idx = 1;
     }
     
-    // Cancel Button
+    // Cancel Button с улучшенной анимацией
     ImVec2 cancel_pos = modal_pos + ImVec2(x_pad, btn_area_y);
     ImVec2 cancel_size = SCALE(100, 44);
-    gui->set_pos(cancel_pos, pos_all);
+    ImRect cancel_rect(cancel_pos, cancel_pos + cancel_size);
+    bool cancel_hovered = cancel_rect.Contains(gui->mouse_pos());
+    bool cancel_clicked = cancel_hovered && gui->mouse_clicked(mouse_button_left);
     
-    if (button_text("Cancel", cancel_size, IM_COL32(0,0,0,0), draw->get_clr(clr->main.text_inactive, 0.1f), false)) {
+    if (cancel_clicked) {
          show_create_modal = false;
     }
+    
+    // Анимация подсветки для Cancel
+    float cancel_target_glow = cancel_hovered ? 1.0f : 0.0f;
+    gui->easing(anim_state->cancel_glow, cancel_target_glow, 15.f, dynamic_easing);
+    
+    // Градиентные цвета для Cancel
+    ImVec4 cancel_grad_1 = ImVec4(0.15f, 0.15f, 0.15f, 1.0f);
+    ImVec4 cancel_grad_2 = ImVec4(0.25f, 0.25f, 0.25f, 1.0f);
+    
+    if (cancel_hovered)
+    {
+        cancel_grad_1 = ImLerp(cancel_grad_1, ImVec4(0.25f, 0.25f, 0.25f, 1.0f), anim_state->cancel_glow);
+        cancel_grad_2 = ImLerp(cancel_grad_2, ImVec4(0.35f, 0.35f, 0.35f, 1.0f), anim_state->cancel_glow);
+    }
+    
+    ImU32 cancel_col_1 = draw->get_clr(cancel_grad_1, create_modal_alpha);
+    ImU32 cancel_col_2 = draw->get_clr(cancel_grad_2, create_modal_alpha);
+    
+    // Градиентная кнопка Cancel
+    draw->rect_filled_multi_color(window->DrawList, cancel_rect.Min, cancel_rect.Max,
+        cancel_col_1, cancel_col_2, cancel_col_2, cancel_col_1, SCALE(8));
+    
+    // Анимированная подсветка
+    if (anim_state->cancel_glow > 0.01f)
+    {
+        float time = ImGui::GetTime();
+        float glow_intensity = sinf(time * 2.0f) * 0.2f + 0.8f;
+        ImVec4 glow_color = ImVec4(1.0f, 1.0f, 1.0f, 0.06f * anim_state->cancel_glow * glow_intensity * create_modal_alpha);
+        ImU32 glow_col = draw->get_clr(glow_color);
+        draw->rect_filled_multi_color(window->DrawList, cancel_rect.Min, cancel_rect.Max,
+            glow_col, IM_COL32(255, 255, 255, 0), IM_COL32(255, 255, 255, 0), glow_col, SCALE(8));
+    }
+    
+    // Текст кнопки Cancel
+    ImU32 cancel_text_color = draw->get_clr(cancel_hovered ? clr->main.text : clr->main.text_inactive, create_modal_alpha);
+    draw->text_clipped(window->DrawList, font->get(inter_bold_data, 14),
+        cancel_rect.Min, cancel_rect.Max,
+        cancel_text_color, "Cancel", nullptr, nullptr, ImVec2(0.5f, 0.5f));
+    
+    gui->item_size(cancel_rect);
 }
 
 void c_conference_widgets::render_active_conference() {
@@ -590,7 +950,7 @@ void c_conference_widgets::render_control_panel(Conference* conf, const ImVec2& 
     draw->rect(window->DrawList, center_pos, center_pos + dock_size, IM_COL32(255,255,255,30), SCALE(35), 0, 1.0f);
     
     // OPTIMIZATION: Static arrays to eliminate vector allocation
-    static const char* icons[] = {"M", "C", "S", "R", "E", "T", "X"}; 
+    static const char* icons[] = {"W", "K", "S", "R", "J", "T", "X"}; // W=Microphone, K=Camera, S=Share, R=Record, J=Reactions, T=Chat, X=Leave 
     
     const int btn_count = 7;
     float btn_dim = SCALE(46);
@@ -608,13 +968,13 @@ void c_conference_widgets::render_control_panel(Conference* conf, const ImVec2& 
         
         // Fast switch instead of repeated string comparisons
         switch(i) {
-            case 0: active = !conf->participants[conference_manager->current_user_id].microphone_enabled; break; // M
-            case 1: active = !conf->participants[conference_manager->current_user_id].camera_enabled; break; // C
-            case 2: break; // S (Share, TODO)
-            case 3: active = conf->is_recording; danger = active; break; // R
-            case 4: active = show_reaction_popup; break; // E (Reaction)
-            case 5: active = show_chat_panel; break; // T (Chat)
-            case 6: danger = true; break; // X (Leave)
+            case 0: active = !conf->participants[conference_manager->current_user_id].microphone_enabled; break; // W=Microphone
+            case 1: active = !conf->participants[conference_manager->current_user_id].camera_enabled; break; // K=Camera
+            case 2: break; // S=Share (TODO)
+            case 3: active = conf->is_recording; danger = active; break; // R=Record
+            case 4: active = show_reaction_popup; break; // J=Reactions
+            case 5: active = show_chat_panel; break; // T=Chat
+            case 6: danger = true; break; // X=Leave
         }
         
         ImU32 col_active = draw->get_clr(clr->conference.primary);

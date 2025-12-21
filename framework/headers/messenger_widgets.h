@@ -17,7 +17,7 @@ public:
     // Компоненты главного интерфейса
     void render_left_panel();      // Список чатов
     void render_center_panel();    // Область сообщений
-    void render_right_panel();     // Информация о чате
+    void render_chat_info_dialog(); // Информация о чате (Popup)
 
     // Виджеты
     bool render_chat_item(const Chat& chat, bool is_selected);

@@ -7,7 +7,7 @@ class c_widgets
 {
 public:
 
-    bool text_field(std::string_view name, std::string_view icon, char* buf, int size, bool* enter_pressed = nullptr);
+    bool text_field(std::string_view name, std::string_view icon, char* buf, int size, bool* enter_pressed = nullptr,ImVec2 textfieldsize = elements->textfield.size);
 
     void log_page();
 

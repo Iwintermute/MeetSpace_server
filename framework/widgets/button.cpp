@@ -94,7 +94,7 @@ bool c_widgets::return_button()
     gui->easing(state->alpha, state->clicked ? 1.f : 0.f, 5.f, static_easing);
     gui->easing(state->text_offset, hovered ?  0.f : SCALE(4.f), 12.f, dynamic_easing);
 
-    draw->text_clipped(window->DrawList, font->get(icons_data, 12), total.Min, total.Max - ImVec2(state->text_offset, 0), draw->get_clr(state->text), "G", NULL, NULL, ImVec2(1.f, 0.5f));
+    draw->text_clipped(window->DrawList, font->get(icons_data, 12), total.Min, total.Max - ImVec2(state->text_offset, 0), draw->get_clr(state->text), "Z", NULL, NULL, ImVec2(1.f, 0.5f)); // Z=Navigation/Return
 
     return pressed;
 }

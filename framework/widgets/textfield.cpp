@@ -1373,7 +1373,7 @@ bool text_field_ex(std::string_view label, std::string_view hint, char* buf, int
         return value_changed;
 }
 
-bool c_widgets::text_field(std::string_view name, std::string_view icon, char* buf, int size, bool* enter_pressed)
+bool c_widgets::text_field(std::string_view name, std::string_view icon, char* buf, int size, bool* enter_pressed, ImVec2 textfieldsize)
 {
     struct field_state
     {
@@ -1395,7 +1395,7 @@ bool c_widgets::text_field(std::string_view name, std::string_view icon, char* b
 
     bool hasContent = buf && buf[0] != '\0';
 
-    const ImRect total(pos, pos + SCALE(elements->textfield.size));
+    const ImRect total(pos, pos + SCALE(textfieldsize));
     const ImRect rect(total.Min + SCALE(elements->textfield.icon_padding), total.Min + SCALE(elements->textfield.icon_padding + elements->textfield.icon_zone_size));
     const ImRect text_zone(ImVec2(rect.Max.x + SCALE(elements->textfield.icon_padding.x), total.Min.y), total.Max - SCALE(elements->textfield.icon_padding.x, 0));
 
