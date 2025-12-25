@@ -17,8 +17,19 @@ int main() {
 
     // WebSocket сервер
     cNetWebSocketServer wsServer(ioCtx.fnIo(), 9000);
-    wsServer.fnSetOnMessage([](const std::string& msg, void* session) {
-        std::cout << "[WS] message: " << msg << std::endl;
+    wsServer.fnSetOnConnected([](void* session) {
+        std::cout << "[WS] client connected: " << session << std::endl;
+        });
+    wsServer.fnSetOnDisconnected([](void* session) {
+        std::cout << "[WS] client disconnected: " << session << std::endl;
+        });
+    wsServer.fnSetOnMessage([&wsServer](const std::string& msg, void* session) {
+        std::cout << "[WS] text message from " << session << ": " << msg << std::endl;
+        wsServer.fnBroadcastText(msg, session);
+        });
+    wsServer.fnSetOnBinary([&wsServer](const std::vector<uint8_t>& data, void* session) {
+        // Broadcast raw audio frames from one client to everyone else
+        wsServer.fnBroadcastBinary(data, session);
         });
     wsServer.fnStart();
 
@@ -29,22 +40,9 @@ int main() {
         });
     rtcMgr.fnInit();
 
-    // Аудио устройство
-    cMediaAudioDevice mic;
-    cMediaOpusEncoder opusEnc(48000, 1);
-
-    mic.fnSetCallback([&](const std::vector<int16_t>& samples) {
-        auto encoded = opusEnc.fnEncode(samples);
-        std::cout << "[Audio] Captured " << samples.size() * sizeof(int16_t)
-            << " bytes, encoded to " << encoded.size() << " bytes\n";
-        });
-
-    mic.fnStartCapture();
-
     std::cout << "Server running... Press Enter to quit.\n";
     std::cin.get();
 
-    mic.fnStopCapture();
     ioCtx.fnStop();
     httpServer.fnStop();
     wsServer.fnStop();
