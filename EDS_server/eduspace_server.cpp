@@ -1,5 +1,5 @@
 #include "includes.h"
-#include <nlohmann/json.hpp>
+#include "../networkEDS/include/nlohmann/json.hpp"
 #include <unordered_map>
 #include <unordered_set>
 #include <mutex>

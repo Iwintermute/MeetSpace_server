@@ -5,7 +5,7 @@
 #include <boost/beast/websocket.hpp>
 #include "../networkEDS/include/nlohmann/json.hpp"
 #include <rtc/rtc.hpp>
-#include <portaudio.h>
+#include "include/portaudio/portaudio.h"
 #include <opus.h>
 #include <thread>
 #include <mutex>
