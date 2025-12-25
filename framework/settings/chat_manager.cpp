@@ -2,14 +2,112 @@
 #include <sstream>
 #include <iomanip>
 #include <algorithm>
+#include <fstream>
+#include <filesystem>
+#include <cstring>
+#include <iostream>
+#include "../../networkEDS/include/nlohmann/json.hpp"
 
 ChatManager::ChatManager()
     : next_message_id(1000)
 {
+    auth_state_path = std::filesystem::path("framework") / "data" / "auth_state.json";
+
+    network_manager = NetworkEDS::CreateNetworkManager();
+    if (network_manager)
+    {
+        network_manager->Initialize();
+    }
+
+    LoadAuthState();
 }
 
 ChatManager::~ChatManager()
 {
+    if (network_manager)
+    {
+        network_manager->Shutdown();
+    }
+}
+
+bool ChatManager::EnsureConnected()
+{
+    if (!network_manager)
+        return false;
+
+    if (network_manager->IsConnected())
+        return true;
+
+    return network_manager->ConnectToServer(server_host, server_port);
+}
+
+std::string ChatManager::BuildAuthToken(const std::string& phone, const std::string& password) const
+{
+    // Простая деривация токена: телефон + хеш пароля. На сервере проверка только на наличие токена.
+    std::hash<std::string> hasher;
+    return phone + "-" + std::to_string(hasher(password));
+}
+
+void ChatManager::LoadAuthState()
+{
+    if (!std::filesystem::exists(auth_state_path))
+        return;
+
+    try
+    {
+        std::ifstream in(auth_state_path);
+        nlohmann::json data;
+        in >> data;
+
+        auto phone = data.value("phone", std::string());
+        auto password = data.value("password", std::string());
+        auto token = data.value("token", std::string());
+
+        if (!phone.empty())
+        {
+            strncpy(app_state->login_phone, phone.c_str(), sizeof(app_state->login_phone) - 1);
+            app_state->login_phone[sizeof(app_state->login_phone) - 1] = '\0';
+        }
+
+        if (!password.empty())
+        {
+            strncpy(app_state->login_password, password.c_str(), sizeof(app_state->login_password) - 1);
+            app_state->login_password[sizeof(app_state->login_password) - 1] = '\0';
+        }
+
+        if (network_manager && !token.empty())
+        {
+            network_manager->SetAuthToken(token);
+            if (EnsureConnected())
+            {
+                network_manager->AuthenticateWithToken(token);
+            }
+        }
+    }
+    catch (const std::exception& e)
+    {
+        // Если что-то пошло не так с json, просто игнорируем и продолжаем с чистым состоянием
+        std::cerr << "[ChatManager] Failed to load auth state: " << e.what() << std::endl;
+    }
+}
+
+void ChatManager::SaveAuthState(const std::string& phone, const std::string& password, const std::string& token)
+{
+    try
+    {
+        std::filesystem::create_directories(auth_state_path.parent_path());
+        nlohmann::json data;
+        data["phone"] = phone;
+        data["password"] = password;
+        data["token"] = token;
+
+        std::ofstream out(auth_state_path);
+        out << data.dump(2);
+    }
+    catch (const std::exception& e)
+    {
+        std::cerr << "[ChatManager] Failed to save auth state: " << e.what() << std::endl;
+    }
 }
 
 int ChatManager::CreateChat(const std::string& name, ChatType type, const std::vector<int>& participant_ids)
@@ -216,13 +314,22 @@ std::string ChatManager::GetLastMessagePreview(const Chat& chat)
 
 bool ChatManager::Login(const std::string& phone, const std::string& password)
 {
-    // Фейковая логика - любой пароль подходит
     if (phone.empty())
         return false;
 
+    const std::string token = BuildAuthToken(phone, password);
+
+    if (EnsureConnected() && network_manager)
+    {
+        network_manager->SetAuthToken(token);
+        network_manager->AuthenticateWithToken(token);
+    }
+
+    SaveAuthState(phone, password, token);
+
     app_state->current_user.phone = phone;
     app_state->is_authenticated = true;
-    
+
     // Запускаем анимацию плавного расширения окна под мессенджер
     app_state->auth_to_main_progress = 0.0f;
     app_state->auth_expanding = true;

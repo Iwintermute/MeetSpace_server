@@ -1,5 +1,7 @@
 #pragma once
 #include "app_state.h"
+#include "../../networkEDS/networkEDS.h"
+#include <filesystem>
 
 // Менеджер для работы с чатами и сообщениями
 class ChatManager
@@ -56,7 +58,19 @@ public:
     // Поиск чатов
     std::vector<int> SearchChats(const std::string& query);
 
+    // Доступ к сетевому менеджеру (мост к EDS_server)
+    NetworkEDS::INetworkManager* GetNetworkManager() { return network_manager.get(); }
+
 private:
+    std::unique_ptr<NetworkEDS::INetworkManager> network_manager;
+    std::string server_host = "127.0.0.1";
+    uint16_t server_port = 9000;
+    std::filesystem::path auth_state_path;
+
+    bool EnsureConnected();
+    void LoadAuthState();
+    void SaveAuthState(const std::string& phone, const std::string& password, const std::string& token);
+    std::string BuildAuthToken(const std::string& phone, const std::string& password) const;
     int next_message_id;
 };
 
