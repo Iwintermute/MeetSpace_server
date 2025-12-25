@@ -58,12 +58,14 @@ namespace NetworkEDS {
         OnConferenceJoinedCallback m_conferenceJoinedCallback;
         OnPeerJoinedCallback m_peerJoinedCallback;
         OnPeerLeftCallback m_peerLeftCallback;
+        OnAuthStateChangedCallback m_authStateChangedCallback;
 
         // ���������
         std::string m_peerId;
         std::string m_serverHost;
         uint16_t m_serverPort{ 0 };
         int m_currentConferenceId{ -1 };
+        std::atomic<bool> m_authenticated{ false };
         std::atomic<bool> m_microphoneEnabled{ true };
         std::atomic<bool> m_speakerEnabled{ true };
         std::string m_authToken;
@@ -137,12 +139,16 @@ namespace NetworkEDS {
         void SetConferenceJoinedCallback(OnConferenceJoinedCallback callback) override;
         void SetPeerJoinedCallback(OnPeerJoinedCallback callback) override;
         void SetPeerLeftCallback(OnPeerLeftCallback callback) override;
+        void SetAuthStateChangedCallback(OnAuthStateChangedCallback callback) override;
 
         bool IsConnected() const override;
         int GetCurrentConference() const override;
         std::string GetPeerId() const override;
         std::string GetStatus() const override;
+        bool IsAuthenticated() const override;
         void SetAuthToken(const std::string& token) override;
+        void AuthenticateWithToken(const std::string& token) override;
+        bool JoinConferenceByToken(const std::string& conferenceToken) override;
 
     private:
         // ����������� ��� Asio
