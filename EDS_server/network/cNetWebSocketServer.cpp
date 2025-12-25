@@ -62,15 +62,7 @@ void cNetWebSocketServer::sWsSession::fnDoRead()
 
             if (isBinary) {
                 std::vector<uint8_t> data(bytes);
-                auto buffers = self->m_buffer.data();
-                auto it = buffers.begin();
-                size_t copied = 0;
-                while (it != buffers.end() && copied < bytes) {
-                    auto b = *it++;
-                    auto size = std::min<std::size_t>(bytes - copied, b.size());
-                    std::memcpy(data.data() + copied, b.data(), size);
-                    copied += size;
-                }
+                boost::asio::buffer_copy(boost::asio::buffer(data), self->m_buffer.data(), bytes);
                 if (self->m_owner && self->m_owner->m_fnOnBinary)
                     self->m_owner->m_fnOnBinary(data, self.get());
             }
