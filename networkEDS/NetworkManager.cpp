@@ -928,7 +928,7 @@ namespace NetworkEDS {
     }
 
     // �������
-    std::unique_ptr<INetworkManager> CreateNetworkManager() {
+    NETWORKEDS_API std::unique_ptr<INetworkManager> CreateNetworkManager() {
         return std::make_unique<NetworkManagerImpl>();
     }
 
