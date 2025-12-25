@@ -294,7 +294,19 @@ namespace NetworkEDS {
     void NetworkManagerImpl::OnServerDisconnected() {
         std::cout << "[NetworkEDS] Server disconnected" << std::endl;
 
+        // Reset connection state so status reporting remains accurate and
+        // dependent services (audio capture/playback) stop cleanly when the
+        // server drops unexpectedly.
+        m_wsConnected = false;
         m_authenticated = false;
+        m_currentConferenceId = -1;
+
+        StopAudioCapture();
+        StopAudioPlayback();
+
+        if (m_authStateChangedCallback) {
+            m_authStateChangedCallback(false, "Disconnected from server");
+        }
 
         if (m_disconnectedCallback) {
             m_disconnectedCallback();
