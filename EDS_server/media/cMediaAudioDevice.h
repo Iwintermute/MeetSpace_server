@@ -2,7 +2,7 @@
 #include <functional>
 #include <vector>
 #include <cstdint>
-#include <portaudio.h>
+#include "../include/portaudio/portaudio.h"
 #include <mutex>
 
 namespace Sys {
@@ -19,7 +19,7 @@ namespace Sys {
             void fnStopCapture();
             void fnSetCallback(tOnAudioFrame cb) { m_fnOnAudioFrame = std::move(cb); }
 
-            // Для локального прослушивания
+            // Г„Г«Гї Г«Г®ГЄГ Г«ГјГ­Г®ГЈГ® ГЇГ°Г®Г±Г«ГіГёГЁГўГ Г­ГЁГї
             void fnStartPlayback();
             void fnStopPlayback();
             void fnPlay(const std::vector<int16_t>& samples);
