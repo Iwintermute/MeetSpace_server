@@ -3,7 +3,6 @@
 #include <cstdint>
 #include "../include/opus/opus.h"
 
-
 namespace Sys {
     namespace Media {
 
