@@ -3,15 +3,8 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 VisualStudioVersion = 18.0.11222.15
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "EduSpace", "thirdparty\imgui\EduSpace\EduSpace\EduSpace.vcxproj", "{355249A3-5AC7-478F-8BCC-B6D1C22ED60B}"
-	ProjectSection(ProjectDependencies) = postProject
-		{7204691F-C1B6-4EC5-A161-D05B2B79B78D} = {7204691F-C1B6-4EC5-A161-D05B2B79B78D}
-		{C34B47BA-2748-40A3-870C-0A82F7E035DC} = {C34B47BA-2748-40A3-870C-0A82F7E035DC}
-	EndProjectSection
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "networkEDS", "networkEDS\networkEDS.vcxproj", "{C34B47BA-2748-40A3-870C-0A82F7E035DC}"
-	ProjectSection(ProjectDependencies) = postProject
-		{7204691F-C1B6-4EC5-A161-D05B2B79B78D} = {7204691F-C1B6-4EC5-A161-D05B2B79B78D}
-	EndProjectSection
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "EDS_server", "EDS_server\EDS_server.vcxproj", "{7204691F-C1B6-4EC5-A161-D05B2B79B78D}"
 EndProject

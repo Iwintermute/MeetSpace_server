@@ -41,7 +41,7 @@
     <Keyword>Win32Proj</Keyword>
     <ProjectGuid>{c34b47ba-2748-40a3-870c-0a82f7e035dc}</ProjectGuid>
     <RootNamespace>networkEDS</RootNamespace>
-    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+    <WindowsTargetPlatformVersion>10.0.26100.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
@@ -89,8 +89,8 @@
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <IncludePath>C:\Users\Пользователь\Desktop\libsrtp-2.7.0\srtp;C:\Users\Пользователь\Desktop\opus-main\include;C:\Users\Пользователь\Desktop\openssl-openssl-3.6.0;C:\local\boost_1_89_0;C:\Users\Пользователь\Desktop\libsrtp-2.7.0\crypto;C:\Users\Пользователь\Desktop\libsrtp-2.7.0\include;C:\Users\Пользователь\Desktop\portaudio-19.7.0\include;$(IncludePath)</IncludePath>
-    <LibraryPath>$(SolutionDir)include/srtp/;$(SolutionDir)include/opus/;$(SolutionDir)include/portaudio/;C:\local\boost_1_89_0\libs;$(LibraryPath)</LibraryPath>
+    <IncludePath>C:\local\boost_1_89_0;C:\Users\Пользователь\Desktop\libsrtp-2.7.0\srtp;C:\Users\Пользователь\Desktop\opus-main\include;C:\Users\Пользователь\Desktop\openssl-openssl-3.6.0;C:\Users\Пользователь\Desktop\libsrtp-2.7.0\crypto;C:\Users\Пользователь\Desktop\libsrtp-2.7.0\include;C:\Users\Пользователь\Desktop\portaudio-19.7.0\include;$(IncludePath)</IncludePath>
+    <LibraryPath>C:\local\boost_1_89_0\libs;$(SolutionDir)include/srtp/;$(SolutionDir)include/opus/;$(SolutionDir)include/portaudio/;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
