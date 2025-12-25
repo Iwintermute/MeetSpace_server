@@ -1,7 +1,7 @@
 #include "../headers/functions.h"
 #include "../headers/widgets.h"
 
-void c_notify::add_notify(std::string_view text,  notify_type type)
+void c_notify::add_notify(std::string_view text, notify_type type)
 {
     notifications.push_back({ notify_count++, text, type });
 }

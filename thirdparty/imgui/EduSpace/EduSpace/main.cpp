@@ -37,11 +37,11 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 {
     // Create application window
     //ImGui_ImplWin32_EnableDpiAwareness();
-    WNDCLASSEXW wc = { sizeof(wc), CS_CLASSDC, WndProc, 0L, 0L, GetModuleHandle(nullptr), nullptr, nullptr, nullptr, nullptr, L"ImGui Example", nullptr };
+    WNDCLASSEXW wc = { sizeof(wc), CS_CLASSDC, WndProc, 0L, 0L, GetModuleHandle(nullptr), nullptr, nullptr, nullptr, nullptr, L"Eduspace", nullptr };
     ::RegisterClassExW(&wc);
     int screen_width = GetSystemMetrics(SM_CXSCREEN);
     int screen_height = GetSystemMetrics(SM_CYSCREEN);
-    var->winapi.hwnd = ::CreateWindowW(wc.lpszClassName, L"Loader", WS_POPUP, (GetSystemMetrics(SM_CXSCREEN) / 2) - (SCALE(var->window.size.x) / 2), (GetSystemMetrics(SM_CYSCREEN) / 2) - (SCALE(var->window.size.y) / 2), SCALE(var->window.size.x), SCALE(var->window.size.y), NULL, NULL, wc.hInstance, NULL);
+    var->winapi.hwnd = ::CreateWindowW(wc.lpszClassName, L"App", WS_POPUP, (GetSystemMetrics(SM_CXSCREEN) / 2) - (SCALE(var->window.size.x) / 2), (GetSystemMetrics(SM_CYSCREEN) / 2) - (SCALE(var->window.size.y) / 2), SCALE(var->window.size.x), SCALE(var->window.size.y), NULL, NULL, wc.hInstance, NULL);
 
     SetLayeredWindowAttributes(var->winapi.hwnd, RGB(0, 0, 0), 255, LWA_ALPHA);
 
