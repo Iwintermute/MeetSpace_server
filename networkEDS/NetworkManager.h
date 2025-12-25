@@ -6,7 +6,7 @@
 #include "../networkEDS/include/nlohmann/json.hpp"
 #include <rtc/rtc.hpp>
 #include "include/portaudio/portaudio.h"
-#include <opus.h>
+#include "include/opus/opus.h"
 #include <thread>
 #include <mutex>
 #include <atomic>

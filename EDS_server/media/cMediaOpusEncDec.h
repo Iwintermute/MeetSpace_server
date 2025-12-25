@@ -1,7 +1,7 @@
 #pragma once
 #include <vector>
 #include <cstdint>
-#include <opus.h>
+#include "../include/opus/opus.h"
 
 
 namespace Sys {
