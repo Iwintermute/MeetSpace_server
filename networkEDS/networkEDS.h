@@ -12,7 +12,7 @@
 
 namespace NetworkEDS {
 
-    // Типы колбэков
+    // пїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ
     using OnMessageCallback = std::function<void(const std::string& message)>;
     using OnConnectedCallback = std::function<void()>;
     using OnDisconnectedCallback = std::function<void()>;
@@ -22,7 +22,7 @@ namespace NetworkEDS {
     using OnPeerJoinedCallback = std::function<void(const std::string& peerId)>;
     using OnPeerLeftCallback = std::function<void(const std::string& peerId)>;
 
-    // Интерфейс для управления сетевым соединением
+    // пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ
     class INetworkManager {
     public:
         virtual ~INetworkManager() = default;
@@ -49,7 +49,7 @@ namespace NetworkEDS {
         virtual void SendChatMessage(const std::string& message) = 0;
         virtual void SendReaction(const std::string& emoji) = 0;
 
-        // Колбэки
+        // пїЅпїЅпїЅпїЅпїЅпїЅпїЅ
         virtual void SetMessageCallback(OnMessageCallback callback) = 0;
         virtual void SetConnectedCallback(OnConnectedCallback callback) = 0;
         virtual void SetDisconnectedCallback(OnDisconnectedCallback callback) = 0;
@@ -59,17 +59,20 @@ namespace NetworkEDS {
         virtual void SetPeerJoinedCallback(OnPeerJoinedCallback callback) = 0;
         virtual void SetPeerLeftCallback(OnPeerLeftCallback callback) = 0;
 
-        // Получение состояния
+        // пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ
         virtual bool IsConnected() const = 0;
         virtual int GetCurrentConference() const = 0;
         virtual std::string GetPeerId() const = 0;
         virtual std::string GetStatus() const = 0;
+
+        // Authentication
+        virtual void SetAuthToken(const std::string& token) = 0;
     };
 
-    // Фабрика для создания экземпляра
+    // пїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ
     NETWORKEDS_API std::unique_ptr<INetworkManager> CreateNetworkManager();
 
-    // C-совместимый интерфейс
+    // C-пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ
     extern "C" {
         NETWORKEDS_API void* CreateNetworkManagerInstance();
         NETWORKEDS_API void DestroyNetworkManagerInstance(void* manager);
@@ -91,6 +94,8 @@ namespace NetworkEDS {
         NETWORKEDS_API void NetworkManager_ToggleSpeaker(void* manager, bool enabled);
 
         NETWORKEDS_API void NetworkManager_SendChatMessage(void* manager, const char* message);
+
+        NETWORKEDS_API void NetworkManager_SetAuthToken(void* manager, const char* token);
 
         NETWORKEDS_API bool NetworkManager_IsConnected(void* manager);
         NETWORKEDS_API int NetworkManager_GetCurrentConference(void* manager);

@@ -11,7 +11,7 @@ namespace NetworkEDS {
     NetworkManagerImpl::NetworkManagerImpl()
         : m_wsStream(nullptr) {
 
-        // Генерация случайного peer ID
+        // пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ peer ID
         std::random_device rd;
         std::mt19937 gen(rd());
         std::uniform_int_distribution<> dis(0, 15);
@@ -28,14 +28,14 @@ namespace NetworkEDS {
 
     bool NetworkManagerImpl::Initialize() {
         try {
-            // Инициализация PortAudio
+            // пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ PortAudio
             PaError err = Pa_Initialize();
             if (err != paNoError) {
                 std::cerr << "[NetworkEDS] PortAudio initialization failed: " << Pa_GetErrorText(err) << std::endl;
                 return false;
             }
 
-            // Инициализация Opus кодека
+            // пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ Opus пїЅпїЅпїЅпїЅпїЅпїЅ
             int opusErr = 0;
             m_opusEncoder = opus_encoder_create(48000, 1, OPUS_APPLICATION_VOIP, &opusErr);
             if (opusErr != OPUS_OK) {
@@ -49,7 +49,7 @@ namespace NetworkEDS {
                 return false;
             }
 
-            // Настройка параметров кодера
+            // пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ
             opus_encoder_ctl(m_opusEncoder, OPUS_SET_BITRATE(64000));
             opus_encoder_ctl(m_opusEncoder, OPUS_SET_COMPLEXITY(8));
 
@@ -66,28 +66,28 @@ namespace NetworkEDS {
     void NetworkManagerImpl::Shutdown() {
         m_running = false;
 
-        // Отключение от сервера
+        // пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅ
         Disconnect();
 
-        // Остановка аудио
+        // пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅ
         StopAudioCapture();
         StopAudioPlayback();
 
-        // Остановка IO контекста
+        // пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ IO пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ
         if (m_ioThread.joinable()) {
             m_ioContext.stop();
             m_ioThread.join();
         }
 
-        // Очистка WebSocket
+        // пїЅпїЅпїЅпїЅпїЅпїЅпїЅ WebSocket
         if (m_wsStream) {
             m_wsStream.reset();
         }
 
-        // Очистка аудио ресурсов
+        // пїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ
         CleanupAudio();
 
-        // Очистка Opus
+        // пїЅпїЅпїЅпїЅпїЅпїЅпїЅ Opus
         if (m_opusEncoder) {
             opus_encoder_destroy(m_opusEncoder);
             m_opusEncoder = nullptr;
@@ -98,7 +98,7 @@ namespace NetworkEDS {
             m_opusDecoder = nullptr;
         }
 
-        // Завершение PortAudio
+        // пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ PortAudio
         Pa_Terminate();
 
         std::cout << "[NetworkEDS] Shutdown completed" << std::endl;
@@ -114,15 +114,15 @@ namespace NetworkEDS {
             m_serverHost = serverIp;
             m_serverPort = port;
 
-            // Создание WebSocket соединения
+            // пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ WebSocket пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ
             m_wsStream = std::make_unique<websocket::stream<tcp::socket>>(m_ioContext);
 
-            // Запуск IO контекста в отдельном потоке
+            // пїЅпїЅпїЅпїЅпїЅпїЅ IO пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ
             m_ioThread = std::thread([this]() {
                 RunIOContext();
                 });
 
-            // Разрешение имени хоста
+            // пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅ
             m_resolver = std::make_unique<tcp::resolver>(m_ioContext);
 
             std::cout << "[NetworkEDS] Resolving " << m_serverHost << ":" << m_serverPort << std::endl;
@@ -157,7 +157,7 @@ namespace NetworkEDS {
 
         std::cout << "[NetworkEDS] Connecting to server..." << std::endl;
 
-        // Установка TCP соединения
+        // пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ TCP пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ
         asio::async_connect(m_wsStream->next_layer(), results,
             [this](beast::error_code ec, tcp::resolver::results_type::endpoint_type ep) {
                 OnConnect(ec, ep);
@@ -172,7 +172,7 @@ namespace NetworkEDS {
 
         std::cout << "[NetworkEDS] TCP connected to " << ep.address().to_string() << std::endl;
 
-        // Установка WebSocket соединения
+        // пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ WebSocket пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ
         m_wsStream->async_handshake(m_serverHost + ":" + std::to_string(m_serverPort), "/",
             [this](beast::error_code ec) {
                 OnWebSocketConnect(ec);
@@ -190,13 +190,16 @@ namespace NetworkEDS {
         m_wsConnected = true;
         OnServerConnected();
 
-        // Регистрация на сервере
+        // пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅ
         nlohmann::json registerMsg;
         registerMsg["type"] = "register";
         registerMsg["peer_id"] = m_peerId;
+        if (!m_authToken.empty()) {
+            registerMsg["auth_token"] = m_authToken;
+        }
         SendWebSocketMessage(registerMsg.dump());
 
-        // Начало чтения сообщений
+        // пїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ
         StartWebSocketRead();
     }
 
@@ -224,13 +227,13 @@ namespace NetworkEDS {
             return;
         }
 
-        // Обработка полученного сообщения
+        // пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ
         std::string message = beast::buffers_to_string(m_readBuffer.data());
         m_readBuffer.consume(bytesRead);
 
         HandleServerMessage(message);
 
-        // Продолжение чтения
+        // пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ
         StartWebSocketRead();
     }
 
@@ -251,7 +254,7 @@ namespace NetworkEDS {
     void NetworkManagerImpl::Disconnect() {
         if (m_wsConnected && m_wsStream) {
             try {
-                // Отправка сообщения о выходе
+                // пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅ пїЅпїЅпїЅпїЅпїЅпїЅ
                 if (m_currentConferenceId != -1) {
                     nlohmann::json leaveMsg;
                     leaveMsg["type"] = "leave_conference";
@@ -260,7 +263,7 @@ namespace NetworkEDS {
                     SendWebSocketMessage(leaveMsg.dump());
                 }
 
-                // Закрытие WebSocket
+                // пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ WebSocket
                 beast::error_code ec;
                 m_wsStream->close(websocket::close_code::normal, ec);
 
@@ -333,7 +336,7 @@ namespace NetworkEDS {
 
             std::cout << "[NetworkEDS] Joined conference: " << conferenceId << std::endl;
 
-            // Запускаем аудио при успешном присоединении
+            // пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ
             StartAudioCapture();
             StartAudioPlayback();
 
@@ -360,14 +363,14 @@ namespace NetworkEDS {
             }
         }
         else if (type == "audio_frame") {
-            // Обработка аудио фрейма
+            // пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ
             if (jsonMsg.contains("data") && m_speakerEnabled) {
                 try {
                     std::vector<uint8_t> encodedData = jsonMsg["data"];
                     std::string fromPeer = jsonMsg.value("peer_id", "");
 
-                    // Декодирование Opus
-                    std::vector<int16_t> decoded(960); // 20ms при 48kHz
+                    // пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ Opus
+                    std::vector<int16_t> decoded(960); // 20ms пїЅпїЅпїЅ 48kHz
                     int decodedSamples = opus_decode(m_opusDecoder,
                         encodedData.data(),
                         static_cast<opus_int32>(encodedData.size()),
@@ -378,7 +381,7 @@ namespace NetworkEDS {
                     if (decodedSamples > 0) {
                         decoded.resize(decodedSamples);
 
-                        // Добавление в очередь воспроизведения
+                        // пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ
                         std::lock_guard<std::mutex> lock(m_audioMutex);
                         m_audioPlaybackQueue.push(std::move(decoded));
                     }
@@ -414,10 +417,13 @@ namespace NetworkEDS {
         if (!password.empty()) {
             createMsg["password"] = password;
         }
+        if (!m_authToken.empty()) {
+            createMsg["auth_token"] = m_authToken;
+        }
 
         SendWebSocketMessage(createMsg.dump());
 
-        // Возвращаем временный ID, реальный придет в ответе сервера
+        // пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ ID, пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ пїЅ пїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅ
         static int tempId = 1000;
         return tempId++;
     }
@@ -436,6 +442,9 @@ namespace NetworkEDS {
         if (!password.empty()) {
             joinMsg["password"] = password;
         }
+        if (!m_authToken.empty()) {
+            joinMsg["auth_token"] = m_authToken;
+        }
 
         SendWebSocketMessage(joinMsg.dump());
         return true;
@@ -447,6 +456,9 @@ namespace NetworkEDS {
             leaveMsg["type"] = "leave_conference";
             leaveMsg["conference_id"] = m_currentConferenceId;
             leaveMsg["peer_id"] = m_peerId;
+            if (!m_authToken.empty()) {
+                leaveMsg["auth_token"] = m_authToken;
+            }
 
             SendWebSocketMessage(leaveMsg.dump());
 
@@ -465,6 +477,9 @@ namespace NetworkEDS {
         inviteMsg["type"] = "invite_to_conference";
         inviteMsg["conference_id"] = conferenceId;
         inviteMsg["peer_id"] = peerId;
+        if (!m_authToken.empty()) {
+            inviteMsg["auth_token"] = m_authToken;
+        }
 
         SendWebSocketMessage(inviteMsg.dump());
         return true;
@@ -489,7 +504,7 @@ namespace NetworkEDS {
             if (err == paNoError) {
                 m_capturingAudio = true;
 
-                // Запуск потока обработки аудио
+                // пїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅ
                 m_audioThread = std::thread([this]() {
                     ProcessAudioCapture();
                     });
@@ -507,14 +522,14 @@ namespace NetworkEDS {
         if (m_capturingAudio && m_captureStream) {
             m_capturingAudio = false;
 
-            // Уведомляем поток обработки
+            // пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ
             m_audioCV.notify_all();
 
             Pa_StopStream(m_captureStream);
             Pa_CloseStream(m_captureStream);
             m_captureStream = nullptr;
 
-            // Ожидание завершения потока обработки
+            // пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ
             if (m_audioThread.joinable()) {
                 m_audioThread.join();
             }
@@ -558,7 +573,7 @@ namespace NetworkEDS {
             Pa_CloseStream(m_playbackStream);
             m_playbackStream = nullptr;
 
-            // Очистка очереди воспроизведения
+            // пїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ
             std::lock_guard<std::mutex> lock(m_audioMutex);
             while (!m_audioPlaybackQueue.empty()) {
                 m_audioPlaybackQueue.pop();
@@ -582,7 +597,7 @@ namespace NetworkEDS {
         const int16_t* samples = static_cast<const int16_t*>(inputBuffer);
         std::vector<int16_t> audioFrame(samples, samples + framesPerBuffer);
 
-        // Добавление в очередь обработки
+        // пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ
         std::lock_guard<std::mutex> lock(manager->m_audioMutex);
         manager->m_audioCaptureQueue.push(std::move(audioFrame));
         manager->m_audioCV.notify_one();
@@ -607,20 +622,20 @@ namespace NetworkEDS {
             std::copy(audioFrame.begin(), audioFrame.begin() + samplesToCopy, output);
 
             if (audioFrame.size() > framesPerBuffer) {
-                // Удаляем использованные сэмплы
+                // пїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ
                 audioFrame.erase(audioFrame.begin(), audioFrame.begin() + framesPerBuffer);
             }
             else {
                 manager->m_audioPlaybackQueue.pop();
             }
 
-            // Заполняем остаток нулями
+            // пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ
             if (samplesToCopy < framesPerBuffer) {
                 std::fill(output + samplesToCopy, output + framesPerBuffer, 0);
             }
         }
         else {
-            // Если нет данных, заполняем нулями
+            // пїЅпїЅпїЅпїЅ пїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ, пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ
             std::fill(output, output + framesPerBuffer, 0);
         }
 
@@ -648,7 +663,7 @@ namespace NetworkEDS {
             }
 
             if (!audioFrame.empty() && m_microphoneEnabled) {
-                // Кодирование в Opus
+                // пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅ Opus
                 std::vector<uint8_t> encoded(4000);
                 int encodedSize = opus_encode(m_opusEncoder,
                     audioFrame.data(),
@@ -659,7 +674,7 @@ namespace NetworkEDS {
                 if (encodedSize > 0) {
                     encoded.resize(encodedSize);
 
-                    // Отправка на сервер
+                    // пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ
                     if (m_currentConferenceId != -1 && m_wsConnected) {
                         nlohmann::json audioMsg;
                         audioMsg["type"] = "audio_frame";
@@ -673,7 +688,7 @@ namespace NetworkEDS {
                     }
                 }
 
-                // Колбэк для локальной обработки
+                // пїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ
                 if (m_audioFrameCallback) {
                     m_audioFrameCallback(audioFrame.data(), static_cast<int>(audioFrame.size()));
                 }
@@ -682,11 +697,11 @@ namespace NetworkEDS {
     }
 
     void NetworkManagerImpl::InitializeAudio() {
-        // Уже реализовано в Initialize()
+        // пїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅ Initialize()
     }
 
     void NetworkManagerImpl::CleanupAudio() {
-        // Очистка очередей
+        // пїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ
         {
             std::lock_guard<std::mutex> lock(m_audioMutex);
             while (!m_audioCaptureQueue.empty()) {
@@ -701,7 +716,7 @@ namespace NetworkEDS {
     void NetworkManagerImpl::ToggleMicrophone(bool enabled) {
         m_microphoneEnabled = enabled;
         if (!enabled) {
-            // Если микрофон выключен, очищаем очередь захвата
+            // пїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ, пїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅ
             std::lock_guard<std::mutex> lock(m_audioMutex);
             while (!m_audioCaptureQueue.empty()) {
                 m_audioCaptureQueue.pop();
@@ -712,7 +727,7 @@ namespace NetworkEDS {
     void NetworkManagerImpl::ToggleSpeaker(bool enabled) {
         m_speakerEnabled = enabled;
         if (!enabled) {
-            // Если динамик выключен, очищаем очередь воспроизведения
+            // пїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ, пїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ
             std::lock_guard<std::mutex> lock(m_audioMutex);
             while (!m_audioPlaybackQueue.empty()) {
                 m_audioPlaybackQueue.pop();
@@ -819,12 +834,16 @@ namespace NetworkEDS {
         return status;
     }
 
-    // Фабрика
+    void NetworkManagerImpl::SetAuthToken(const std::string& token) {
+        m_authToken = token;
+    }
+
+    // пїЅпїЅпїЅпїЅпїЅпїЅпїЅ
     std::unique_ptr<INetworkManager> CreateNetworkManager() {
         return std::make_unique<NetworkManagerImpl>();
     }
 
-    // C-совместимые функции
+    // C-пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅ
     extern "C" {
 
         NETWORKEDS_API void* CreateNetworkManagerInstance() {
@@ -918,6 +937,12 @@ namespace NetworkEDS {
         NETWORKEDS_API void NetworkManager_SendChatMessage(void* manager, const char* message) {
             if (manager && message) {
                 static_cast<NetworkManagerImpl*>(manager)->SendChatMessage(message);
+            }
+        }
+
+        NETWORKEDS_API void NetworkManager_SetAuthToken(void* manager, const char* token) {
+            if (manager && token) {
+                static_cast<NetworkManagerImpl*>(manager)->SetAuthToken(token);
             }
         }
 
