@@ -32,24 +32,24 @@ namespace NetworkEDS {
         std::atomic<bool> m_running{ false };
         std::atomic<bool> m_wsConnected{ false };
 
-        // Аудио
+        // пїЅпїЅпїЅпїЅпїЅ
         PaStream* m_captureStream{ nullptr };
         PaStream* m_playbackStream{ nullptr };
         std::atomic<bool> m_capturingAudio{ false };
         std::atomic<bool> m_playingAudio{ false };
         std::thread m_audioThread;
 
-        // Opus кодек
+        // Opus пїЅпїЅпїЅпїЅпїЅ
         OpusEncoder* m_opusEncoder{ nullptr };
         OpusDecoder* m_opusDecoder{ nullptr };
 
-        // Очереди и буферы
+        // пїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅ пїЅпїЅпїЅпїЅпїЅпїЅ
         std::queue<std::vector<int16_t>> m_audioCaptureQueue;
         std::queue<std::vector<int16_t>> m_audioPlaybackQueue;
         std::mutex m_audioMutex;
         std::condition_variable m_audioCV;
 
-        // Колбэки
+        // пїЅпїЅпїЅпїЅпїЅпїЅпїЅ
         OnMessageCallback m_messageCallback;
         OnConnectedCallback m_connectedCallback;
         OnDisconnectedCallback m_disconnectedCallback;
@@ -59,15 +59,16 @@ namespace NetworkEDS {
         OnPeerJoinedCallback m_peerJoinedCallback;
         OnPeerLeftCallback m_peerLeftCallback;
 
-        // Состояние
+        // пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ
         std::string m_peerId;
         std::string m_serverHost;
         uint16_t m_serverPort{ 0 };
         int m_currentConferenceId{ -1 };
         std::atomic<bool> m_microphoneEnabled{ true };
         std::atomic<bool> m_speakerEnabled{ true };
+        std::string m_authToken;
 
-        // Статические колбэки для PortAudio
+        // пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅ PortAudio
         static int AudioCaptureCallback(const void* inputBuffer, void* outputBuffer,
             unsigned long framesPerBuffer,
             const PaStreamCallbackTimeInfo* timeInfo,
@@ -80,7 +81,7 @@ namespace NetworkEDS {
             PaStreamCallbackFlags statusFlags,
             void* userData);
 
-        // Внутренние методы
+        // пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅ
         void InitializeAudio();
         void CleanupAudio();
 
@@ -105,7 +106,7 @@ namespace NetworkEDS {
         NetworkManagerImpl();
         virtual ~NetworkManagerImpl();
 
-        // Реализация INetworkManager
+        // пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ INetworkManager
         bool Initialize() override;
         void Shutdown() override;
 
@@ -141,9 +142,10 @@ namespace NetworkEDS {
         int GetCurrentConference() const override;
         std::string GetPeerId() const override;
         std::string GetStatus() const override;
+        void SetAuthToken(const std::string& token) override;
 
     private:
-        // Обработчики для Asio
+        // пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅ Asio
         void OnResolve(beast::error_code ec, tcp::resolver::results_type results);
         void OnConnect(beast::error_code ec, tcp::resolver::results_type::endpoint_type ep);
 
