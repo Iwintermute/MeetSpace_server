@@ -190,14 +190,15 @@ namespace NetworkEDS {
         m_wsConnected = true;
         OnServerConnected();
 
-        // ����������� �� �������
-        nlohmann::json registerMsg;
-        registerMsg["type"] = "register";
-        registerMsg["peer_id"] = m_peerId;
         if (!m_authToken.empty()) {
-            registerMsg["auth_token"] = m_authToken;
+            AuthenticateWithToken(m_authToken);
         }
-        SendWebSocketMessage(registerMsg.dump());
+        else {
+            nlohmann::json registerMsg;
+            registerMsg["type"] = "register";
+            registerMsg["peer_id"] = m_peerId;
+            SendWebSocketMessage(registerMsg.dump());
+        }
 
         // ������ ������ ���������
         StartWebSocketRead();
@@ -293,6 +294,20 @@ namespace NetworkEDS {
     void NetworkManagerImpl::OnServerDisconnected() {
         std::cout << "[NetworkEDS] Server disconnected" << std::endl;
 
+        // Reset connection state so status reporting remains accurate and
+        // dependent services (audio capture/playback) stop cleanly when the
+        // server drops unexpectedly.
+        m_wsConnected = false;
+        m_authenticated = false;
+        m_currentConferenceId = -1;
+
+        StopAudioCapture();
+        StopAudioPlayback();
+
+        if (m_authStateChangedCallback) {
+            m_authStateChangedCallback(false, "Disconnected from server");
+        }
+
         if (m_disconnectedCallback) {
             m_disconnectedCallback();
         }
@@ -360,6 +375,30 @@ namespace NetworkEDS {
 
             if (m_peerLeftCallback) {
                 m_peerLeftCallback(peerId);
+            }
+        }
+        else if (type == "auth_ok") {
+            m_authenticated = true;
+
+            std::cout << "[NetworkEDS] Authentication succeeded" << std::endl;
+
+            if (m_authStateChangedCallback) {
+                m_authStateChangedCallback(true, jsonMsg.value("message", ""));
+            }
+
+            nlohmann::json registerMsg;
+            registerMsg["type"] = "register";
+            registerMsg["peer_id"] = m_peerId;
+            SendWebSocketMessage(registerMsg.dump());
+        }
+        else if (type == "auth_error") {
+            m_authenticated = false;
+
+            std::string errorMsg = jsonMsg.value("message", "Authentication failed");
+            std::cerr << "[NetworkEDS] Authentication failed: " << errorMsg << std::endl;
+
+            if (m_authStateChangedCallback) {
+                m_authStateChangedCallback(false, errorMsg);
             }
         }
         else if (type == "audio_frame") {
@@ -798,6 +837,10 @@ namespace NetworkEDS {
         m_peerLeftCallback = callback;
     }
 
+    void NetworkManagerImpl::SetAuthStateChangedCallback(OnAuthStateChangedCallback callback) {
+        m_authStateChangedCallback = callback;
+    }
+
     bool NetworkManagerImpl::IsConnected() const {
         return m_wsConnected;
     }
@@ -815,6 +858,9 @@ namespace NetworkEDS {
 
         if (m_wsConnected) {
             status += "Connected to server";
+            if (m_authenticated) {
+                status += " (authenticated)";
+            }
             if (m_currentConferenceId != -1) {
                 status += ", in conference #" + std::to_string(m_currentConferenceId);
             }
@@ -834,8 +880,51 @@ namespace NetworkEDS {
         return status;
     }
 
+    bool NetworkManagerImpl::IsAuthenticated() const {
+        return m_authenticated;
+    }
+
     void NetworkManagerImpl::SetAuthToken(const std::string& token) {
         m_authToken = token;
+    }
+
+    void NetworkManagerImpl::AuthenticateWithToken(const std::string& token) {
+        m_authToken = token;
+
+        if (!m_wsConnected) {
+            std::cerr << "[NetworkEDS] Cannot authenticate without WebSocket connection" << std::endl;
+            return;
+        }
+
+        nlohmann::json authMsg;
+        authMsg["type"] = "authenticate";
+        authMsg["auth_token"] = token;
+        authMsg["peer_id"] = m_peerId;
+
+        SendWebSocketMessage(authMsg.dump());
+    }
+
+    bool NetworkManagerImpl::JoinConferenceByToken(const std::string& conferenceToken) {
+        if (!m_wsConnected) {
+            std::cerr << "[NetworkEDS] Not connected to server" << std::endl;
+            return false;
+        }
+
+        if (conferenceToken.empty()) {
+            std::cerr << "[NetworkEDS] Conference token is empty" << std::endl;
+            return false;
+        }
+
+        nlohmann::json joinMsg;
+        joinMsg["type"] = "join_conference_by_token";
+        joinMsg["conference_token"] = conferenceToken;
+        joinMsg["peer_id"] = m_peerId;
+        if (!m_authToken.empty()) {
+            joinMsg["auth_token"] = m_authToken;
+        }
+
+        SendWebSocketMessage(joinMsg.dump());
+        return true;
     }
 
     // �������
@@ -946,9 +1035,29 @@ namespace NetworkEDS {
             }
         }
 
+        NETWORKEDS_API void NetworkManager_AuthenticateWithToken(void* manager, const char* token) {
+            if (manager && token) {
+                static_cast<NetworkManagerImpl*>(manager)->AuthenticateWithToken(token);
+            }
+        }
+
+        NETWORKEDS_API bool NetworkManager_JoinConferenceByToken(void* manager, const char* conferenceToken) {
+            if (manager && conferenceToken) {
+                return static_cast<NetworkManagerImpl*>(manager)->JoinConferenceByToken(conferenceToken);
+            }
+            return false;
+        }
+
         NETWORKEDS_API bool NetworkManager_IsConnected(void* manager) {
             if (manager) {
                 return static_cast<NetworkManagerImpl*>(manager)->IsConnected();
+            }
+            return false;
+        }
+
+        NETWORKEDS_API bool NetworkManager_IsAuthenticated(void* manager) {
+            if (manager) {
+                return static_cast<NetworkManagerImpl*>(manager)->IsAuthenticated();
             }
             return false;
         }
