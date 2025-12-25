@@ -21,6 +21,7 @@ namespace NetworkEDS {
     using OnConferenceJoinedCallback = std::function<void(int conferenceId, const std::string& peerId)>;
     using OnPeerJoinedCallback = std::function<void(const std::string& peerId)>;
     using OnPeerLeftCallback = std::function<void(const std::string& peerId)>;
+    using OnAuthStateChangedCallback = std::function<void(bool authenticated, const std::string& message)>;
 
     // ��������� ��� ���������� ������� �����������
     class INetworkManager {
@@ -58,15 +59,19 @@ namespace NetworkEDS {
         virtual void SetConferenceJoinedCallback(OnConferenceJoinedCallback callback) = 0;
         virtual void SetPeerJoinedCallback(OnPeerJoinedCallback callback) = 0;
         virtual void SetPeerLeftCallback(OnPeerLeftCallback callback) = 0;
+        virtual void SetAuthStateChangedCallback(OnAuthStateChangedCallback callback) = 0;
 
         // ��������� ���������
         virtual bool IsConnected() const = 0;
         virtual int GetCurrentConference() const = 0;
         virtual std::string GetPeerId() const = 0;
         virtual std::string GetStatus() const = 0;
+        virtual bool IsAuthenticated() const = 0;
 
         // Authentication
         virtual void SetAuthToken(const std::string& token) = 0;
+        virtual void AuthenticateWithToken(const std::string& token) = 0;
+        virtual bool JoinConferenceByToken(const std::string& conferenceToken) = 0;
     };
 
     // ������� ��� �������� ����������
@@ -96,8 +101,11 @@ namespace NetworkEDS {
         NETWORKEDS_API void NetworkManager_SendChatMessage(void* manager, const char* message);
 
         NETWORKEDS_API void NetworkManager_SetAuthToken(void* manager, const char* token);
+        NETWORKEDS_API void NetworkManager_AuthenticateWithToken(void* manager, const char* token);
+        NETWORKEDS_API bool NetworkManager_JoinConferenceByToken(void* manager, const char* conferenceToken);
 
         NETWORKEDS_API bool NetworkManager_IsConnected(void* manager);
+        NETWORKEDS_API bool NetworkManager_IsAuthenticated(void* manager);
         NETWORKEDS_API int NetworkManager_GetCurrentConference(void* manager);
         NETWORKEDS_API const char* NetworkManager_GetPeerId(void* manager);
     }
