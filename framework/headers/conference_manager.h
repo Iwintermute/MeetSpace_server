@@ -13,6 +13,7 @@ public:
     int CreateConference(const ConferenceSettings& settings);
     bool JoinConference(int conference_id, const std::string& password = "");
     bool LeaveConference(int conference_id);
+    bool JoinConferenceByCode(const std::string& invite_code);
     bool EndConference(int conference_id);
     
     // Управление участниками
@@ -48,9 +49,11 @@ public:
 
 private:
     std::map<int, Conference> conferences;
+    std::map<std::string, int> invite_index;
     std::map<int, FakeVideoStream> fake_streams;
     int next_conference_id = 1;
-    
+
+    std::string GenerateInviteCode(int conference_id);
     void GenerateFakeParticipants(Conference& conference, int count);
 };
 

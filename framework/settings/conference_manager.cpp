@@ -2,6 +2,8 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
+#include <random>
+#include "../headers/chat_manager.h"
 
 ConferenceManager* conference_manager = new ConferenceManager();
 
@@ -31,6 +33,7 @@ int ConferenceManager::CreateConference(const ConferenceSettings& settings) {
     conf.creator_id = current_user_id;
     conf.created_at = time(nullptr);
     conf.status = ConferenceStatus::Scheduled;
+    conf.invite_code = GenerateInviteCode(conf.id);
     
     // Auto-add creator
     ConferenceParticipant creator;
@@ -69,6 +72,17 @@ int ConferenceManager::CreateConference(const ConferenceSettings& settings) {
     }
     
     conferences[conf.id] = conf;
+
+    if (chat_manager && chat_manager->GetNetworkManager())
+    {
+        auto* net = chat_manager->GetNetworkManager();
+        if (net->IsConnected())
+        {
+            net->CreateConference(settings.title, settings.password);
+        }
+    }
+
+    invite_index[conf.invite_code] = conf.id;
     return conf.id;
 }
 
@@ -86,6 +100,15 @@ bool ConferenceManager::JoinConference(int conference_id, const std::string& pas
     // Validate password (basic check)
     if (conf.settings.access == ConferenceAccess::InviteOnly && !conf.settings.password.empty()) {
         if (conf.settings.password != password) return false;
+    }
+
+    if (chat_manager && chat_manager->GetNetworkManager())
+    {
+        auto* net = chat_manager->GetNetworkManager();
+        if (net->IsConnected())
+        {
+            net->JoinConference(conference_id, password);
+        }
     }
     
     ConferenceParticipant p;
@@ -121,7 +144,25 @@ bool ConferenceManager::LeaveConference(int conference_id) {
         Conference& conf = conferences[conference_id];
         conf.participants.erase(current_user_id);
     }
+
+    if (chat_manager && chat_manager->GetNetworkManager())
+    {
+        auto* net = chat_manager->GetNetworkManager();
+        if (net->IsConnected())
+        {
+            net->LeaveConference();
+        }
+    }
     return true;
+}
+
+bool ConferenceManager::JoinConferenceByCode(const std::string& invite_code)
+{
+    auto it = invite_index.find(invite_code);
+    if (it == invite_index.end())
+        return false;
+
+    return JoinConference(it->second, "");
 }
 
 bool ConferenceManager::EndConference(int conference_id) {
@@ -133,6 +174,20 @@ bool ConferenceManager::EndConference(int conference_id) {
         return true;
     }
     return false;
+}
+
+std::string ConferenceManager::GenerateInviteCode(int conference_id)
+{
+    static const char alphabet[] = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    std::mt19937 rng(static_cast<uint32_t>(std::time(nullptr)) + conference_id);
+    std::uniform_int_distribution<> dist(0, static_cast<int>(sizeof(alphabet) - 2));
+
+    std::string code = "CONF-" + std::to_string(conference_id) + "-";
+    for (int i = 0; i < 6; ++i)
+    {
+        code += alphabet[dist(rng)];
+    }
+    return code;
 }
 
 bool ConferenceManager::ToggleMicrophone(int conference_id) {
