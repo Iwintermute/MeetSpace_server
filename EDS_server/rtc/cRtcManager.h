@@ -5,7 +5,7 @@
 #include <memory>
 #include <mutex>
 #include <functional>
-#include <nlohmann/json.hpp>
+#include "../../networkEDS/include/nlohmann/json.hpp"
 
 namespace Sys {
     namespace Rtc {
