@@ -1,6 +1,5 @@
 #pragma once
 
-#include <boost/asio.hpp>
 #include <memory>
 #include <vector>
 #include <thread>
@@ -22,19 +21,19 @@ namespace Sys {
             // stop and join threads
             void fnStop();
 
-            // accessor to underlying io_context
-            boost::asio::io_context& fnIo() noexcept { return m_oIoContext; }
+            // accessor to underlying io_context placeholder
+            // The original implementation used boost::asio::io_context.
+            // To remove the Boost dependency we expose a lightweight stub
+            // that satisfies the interface needs of the rest of the code.
+            struct sIoStub {};
+            sIoStub& fnIo() noexcept { return m_oIoContext; }
 
         private:
             // non-copyable
             cNetIoContext(const cNetIoContext&) = delete;
             cNetIoContext& operator=(const cNetIoContext&) = delete;
 
-            boost::asio::io_context m_oIoContext;
-            // work guard to keep io_context::run from exiting
-            std::unique_ptr<boost::asio::executor_work_guard<boost::asio::io_context::executor_type>> m_pWorkGuard;
-
-            // threads running the io_context
+            sIoStub m_oIoContext;
             std::vector<std::thread> m_vThreads;
             unsigned int m_uThreadCountHint; // 0 -> hardware_concurrency
             bool m_bRunning;

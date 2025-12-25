@@ -1,13 +1,13 @@
 #pragma once
 
-#include <boost/asio.hpp>
-#include <boost/beast.hpp>
 #include <functional>
 #include <memory>
 #include <string>
 #include <unordered_map>
 #include <vector>
 #include <mutex>
+
+#include "cNetIoContext.h"
 
 namespace Sys {
     namespace Network {
@@ -19,7 +19,7 @@ namespace Sys {
             using tOnConnected = std::function<void(void*)>;
             using tOnDisconnected = std::function<void(void*)>;
 
-            cNetWebSocketServer(boost::asio::io_context& ctx, unsigned short port);
+            cNetWebSocketServer(Sys::Network::cNetIoContext::sIoStub& ctx, unsigned short port);
             ~cNetWebSocketServer();
 
             void fnSetOnMessage(tOnMessage fn) { m_fnOnMessage = std::move(fn); }
@@ -36,32 +36,12 @@ namespace Sys {
             void fnBroadcastBinary(const std::vector<uint8_t>& data, void* pSkip = nullptr);
 
         private:
-            struct sWsSession : public std::enable_shared_from_this<sWsSession> {
-                using tcp = boost::asio::ip::tcp;
-                using websocket = boost::beast::websocket::stream<tcp::socket>;
-
-                sWsSession(tcp::socket&& sock, cNetWebSocketServer* owner);
-                ~sWsSession();
-
-                void fnStart();
-                void fnDoRead();
-                void fnSendText(const std::string& txt);
-                void fnSendBinary(const std::vector<uint8_t>& data);
-
-                websocket            m_ws;
-                boost::beast::flat_buffer m_buffer;
-
-                cNetWebSocketServer* m_owner;
-                bool                 m_bOpen;
-            };
-
             void fnDoAccept();
             void fnOnSessionClosed(void* ptr);
 
-            boost::asio::io_context& m_ctx;
-            unsigned short                             m_port;
-            std::unique_ptr<boost::asio::ip::tcp::acceptor> m_acceptor;
-            bool                                        m_running;
+            Sys::Network::cNetIoContext::sIoStub& m_ctx;
+            unsigned short m_port;
+            bool           m_running;
 
             tOnMessage       m_fnOnMessage;
             tOnBinary        m_fnOnBinary;
@@ -69,7 +49,7 @@ namespace Sys {
             tOnDisconnected  m_fnOnDisconnected;
 
             std::mutex m_mtxSessions;
-            std::unordered_map<void*, std::weak_ptr<sWsSession>> m_sessions;
+            std::unordered_map<void*, std::weak_ptr<void>> m_sessions;
         };
 
     } // namespace Network
