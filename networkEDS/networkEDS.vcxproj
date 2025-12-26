@@ -24,6 +24,7 @@
     <ClInclude Include="NetworkManager.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="NetworkManager.cpp" />
     <ClCompile Include="client_demo.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -42,6 +43,15 @@
     <ProjectGuid>{c34b47ba-2748-40a3-870c-0a82f7e035dc}</ProjectGuid>
     <RootNamespace>networkEDS</RootNamespace>
     <WindowsTargetPlatformVersion>10.0.26100.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <PropertyGroup Label="Boost">
+    <BoostRoot Condition="'$(BoostRoot)' == '' and '$(BOOST_ROOT)' != ''">$(BOOST_ROOT)</BoostRoot>
+    <BoostRoot Condition="'$(BoostRoot)' == ''">C:\local\boost_1_89_0</BoostRoot>
+    <BoostIncludeDir Condition="'$(BoostIncludeDir)' == '' and '$(BOOST_INCLUDEDIR)' != ''">$(BOOST_INCLUDEDIR)</BoostIncludeDir>
+    <BoostIncludeDir Condition="'$(BoostIncludeDir)' == '' and Exists('$(BoostRoot)\\include')">$(BoostRoot)\include</BoostIncludeDir>
+    <BoostIncludeDir Condition="'$(BoostIncludeDir)' == ''">$(BoostRoot)</BoostIncludeDir>
+    <BoostLibDir Condition="'$(BoostLibDir)' == '' and '$(BOOST_LIBRARYDIR)' != ''">$(BOOST_LIBRARYDIR)</BoostLibDir>
+    <BoostLibDir Condition="'$(BoostLibDir)' == ''">$(BoostRoot)\lib</BoostLibDir>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
@@ -89,8 +99,12 @@
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <IncludePath>C:\local\boost_1_89_0;C:\Users\Пользователь\Desktop\libsrtp-2.7.0\srtp;C:\Users\Пользователь\Desktop\opus-main\include;C:\Users\Пользователь\Desktop\openssl-openssl-3.6.0;C:\Users\Пользователь\Desktop\libsrtp-2.7.0\crypto;C:\Users\Пользователь\Desktop\libsrtp-2.7.0\include;C:\Users\Пользователь\Desktop\portaudio-19.7.0\include;$(IncludePath)</IncludePath>
-    <LibraryPath>C:\local\boost_1_89_0\libs;$(SolutionDir)include/srtp/;$(SolutionDir)include/opus/;$(SolutionDir)include/portaudio/;$(LibraryPath)</LibraryPath>
+    <IncludePath>$(SolutionDir)networkEDS\include;$(SolutionDir)networkEDS\include\portaudio;$(SolutionDir)networkEDS\include\opus;$(SolutionDir)networkEDS\include\srtp;$(IncludePath)</IncludePath>
+    <LibraryPath>$(SolutionDir)networkEDS\include\srtp;$(SolutionDir)networkEDS\include\opus;$(SolutionDir)networkEDS\include\portaudio;$(LibraryPath)</LibraryPath>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <IncludePath>$(SolutionDir)networkEDS\include;$(SolutionDir)networkEDS\include\portaudio;$(SolutionDir)networkEDS\include\opus;$(SolutionDir)networkEDS\include\srtp;$(IncludePath)</IncludePath>
+    <LibraryPath>$(SolutionDir)networkEDS\include\srtp;$(SolutionDir)networkEDS\include\opus;$(SolutionDir)networkEDS\include\portaudio;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
@@ -132,11 +146,14 @@
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <AdditionalIncludeDirectories>$(SolutionDir)networkEDS\include;$(SolutionDir)networkEDS\include\portaudio;$(SolutionDir)networkEDS\include\opus;$(SolutionDir)networkEDS\include\srtp;$(BoostIncludeDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <EnableUAC>false</EnableUAC>
+      <AdditionalDependencies>portaudio_static_x64.lib;opus.lib;srtp3.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(SolutionDir)networkEDS\include\portaudio;$(SolutionDir)networkEDS\include\opus;$(SolutionDir)networkEDS\include\srtp;$(BoostLibDir);$(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -149,11 +166,14 @@
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <AdditionalIncludeDirectories>$(SolutionDir)networkEDS\include;$(SolutionDir)networkEDS\include\portaudio;$(SolutionDir)networkEDS\include\opus;$(SolutionDir)networkEDS\include\srtp;$(BoostIncludeDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <EnableUAC>false</EnableUAC>
+      <AdditionalDependencies>portaudio_static_x64.lib;opus.lib;srtp3.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(SolutionDir)networkEDS\include\portaudio;$(SolutionDir)networkEDS\include\opus;$(SolutionDir)networkEDS\include\srtp;$(BoostLibDir);$(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
