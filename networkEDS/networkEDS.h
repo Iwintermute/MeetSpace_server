@@ -7,7 +7,8 @@
 #ifdef NETWORKEDS_EXPORTS
 #define NETWORKEDS_API __declspec(dllexport)
 #else
-#define NETWORKEDS_API __declspec(dllimport)
+// Build as part of the same executable/static library: avoid dllimport
+#define NETWORKEDS_API
 #endif
 
 namespace NetworkEDS {
@@ -111,3 +112,109 @@ namespace NetworkEDS {
     }
 
 } // namespace NetworkEDS
+
+// If we're building/using this code in the same binary (not as DLL), provide inline wrappers
+#ifndef NETWORKEDS_EXPORTS
+#include "NetworkManager.h"
+
+namespace NetworkEDS {
+    inline std::unique_ptr<INetworkManager> CreateNetworkManager() {
+        return std::make_unique<NetworkManagerImpl>();
+    }
+}
+
+extern "C" {
+    inline void* CreateNetworkManagerInstance() {
+        return static_cast<void*>(new NetworkEDS::NetworkManagerImpl());
+    }
+    inline void DestroyNetworkManagerInstance(void* manager) {
+        delete static_cast<NetworkEDS::NetworkManagerImpl*>(manager);
+    }
+
+    inline bool NetworkManager_Initialize(void* manager) {
+        if (!manager) return false;
+        return static_cast<NetworkEDS::NetworkManagerImpl*>(manager)->Initialize();
+    }
+    inline void NetworkManager_Shutdown(void* manager) {
+        if (!manager) return;
+        static_cast<NetworkEDS::NetworkManagerImpl*>(manager)->Shutdown();
+    }
+
+    inline bool NetworkManager_ConnectToServer(void* manager, const char* serverIp, uint16_t port) {
+        if (!manager || !serverIp) return false;
+        return static_cast<NetworkEDS::NetworkManagerImpl*>(manager)->ConnectToServer(serverIp, port);
+    }
+    inline void NetworkManager_Disconnect(void* manager) {
+        if (!manager) return;
+        static_cast<NetworkEDS::NetworkManagerImpl*>(manager)->Disconnect();
+    }
+
+    inline int NetworkManager_CreateConference(void* manager, const char* title, const char* password) {
+        if (!manager || !title) return -1;
+        return static_cast<NetworkEDS::NetworkManagerImpl*>(manager)->CreateConference(title, password ? password : "");
+    }
+    inline bool NetworkManager_JoinConference(void* manager, int conferenceId, const char* password) {
+        if (!manager) return false;
+        return static_cast<NetworkEDS::NetworkManagerImpl*>(manager)->JoinConference(conferenceId, password ? password : "");
+    }
+    inline void NetworkManager_LeaveConference(void* manager) {
+        if (!manager) return;
+        static_cast<NetworkEDS::NetworkManagerImpl*>(manager)->LeaveConference();
+    }
+
+    inline void NetworkManager_StartAudioCapture(void* manager) {
+        if (!manager) return;
+        static_cast<NetworkEDS::NetworkManagerImpl*>(manager)->StartAudioCapture();
+    }
+    inline void NetworkManager_StopAudioCapture(void* manager) {
+        if (!manager) return;
+        static_cast<NetworkEDS::NetworkManagerImpl*>(manager)->StopAudioCapture();
+    }
+
+    inline void NetworkManager_ToggleMicrophone(void* manager, bool enabled) {
+        if (!manager) return;
+        static_cast<NetworkEDS::NetworkManagerImpl*>(manager)->ToggleMicrophone(enabled);
+    }
+    inline void NetworkManager_ToggleSpeaker(void* manager, bool enabled) {
+        if (!manager) return;
+        static_cast<NetworkEDS::NetworkManagerImpl*>(manager)->ToggleSpeaker(enabled);
+    }
+
+    inline void NetworkManager_SendChatMessage(void* manager, const char* message) {
+        if (!manager || !message) return;
+        static_cast<NetworkEDS::NetworkManagerImpl*>(manager)->SendChatMessage(message);
+    }
+
+    inline void NetworkManager_SetAuthToken(void* manager, const char* token) {
+        if (!manager || !token) return;
+        static_cast<NetworkEDS::NetworkManagerImpl*>(manager)->SetAuthToken(token);
+    }
+    inline void NetworkManager_AuthenticateWithToken(void* manager, const char* token) {
+        if (!manager || !token) return;
+        static_cast<NetworkEDS::NetworkManagerImpl*>(manager)->AuthenticateWithToken(token);
+    }
+    inline bool NetworkManager_JoinConferenceByToken(void* manager, const char* conferenceToken) {
+        if (!manager || !conferenceToken) return false;
+        return static_cast<NetworkEDS::NetworkManagerImpl*>(manager)->JoinConferenceByToken(conferenceToken);
+    }
+
+    inline bool NetworkManager_IsConnected(void* manager) {
+        if (!manager) return false;
+        return static_cast<NetworkEDS::NetworkManagerImpl*>(manager)->IsConnected();
+    }
+    inline bool NetworkManager_IsAuthenticated(void* manager) {
+        if (!manager) return false;
+        return static_cast<NetworkEDS::NetworkManagerImpl*>(manager)->IsAuthenticated();
+    }
+    inline int NetworkManager_GetCurrentConference(void* manager) {
+        if (!manager) return -1;
+        return static_cast<NetworkEDS::NetworkManagerImpl*>(manager)->GetCurrentConference();
+    }
+    inline const char* NetworkManager_GetPeerId(void* manager) {
+        if (!manager) return nullptr;
+        static std::string peerId;
+        peerId = static_cast<NetworkEDS::NetworkManagerImpl*>(manager)->GetPeerId();
+        return peerId.c_str();
+    }
+}
+#endif

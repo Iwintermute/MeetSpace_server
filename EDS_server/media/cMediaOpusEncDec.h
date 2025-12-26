@@ -1,7 +1,7 @@
 #pragma once
 #include <vector>
 #include <cstdint>
-#include "../include/opus/opus.h"
+#include <opus.h>
 
 namespace Sys {
     namespace Media {

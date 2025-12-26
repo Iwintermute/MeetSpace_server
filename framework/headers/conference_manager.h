@@ -3,7 +3,6 @@
 #include <vector>
 #include <string>
 #include <map>
-#include <unordered_map>
 
 class ConferenceManager {
 public:
@@ -14,7 +13,6 @@ public:
     int CreateConference(const ConferenceSettings& settings);
     bool JoinConference(int conference_id, const std::string& password = "");
     bool LeaveConference(int conference_id);
-    bool JoinConferenceByCode(const std::string& invite_code);
     bool EndConference(int conference_id);
     
     // Управление участниками
@@ -50,20 +48,10 @@ public:
 
 private:
     std::map<int, Conference> conferences;
-    std::map<std::string, int> invite_index;
     std::map<int, FakeVideoStream> fake_streams;
-    std::unordered_map<std::string, int> peer_user_ids;
-    int next_peer_user_id = 10000;
-    int pending_conference_local_id = -1;
-    bool network_callbacks_registered = false;
     int next_conference_id = 1;
-
-    std::string GenerateInviteCode(int conference_id);
+    
     void GenerateFakeParticipants(Conference& conference, int count);
-    int ResolvePeerUserId(const std::string& peer_id);
-    void RegisterNetworkCallbacks();
-    void SyncConferenceIdFromServer(int server_id);
-    void EnsureNetworkReady();
 };
 
 extern ConferenceManager* conference_manager;

@@ -23,7 +23,7 @@ public:
 
 	struct
 	{
-		ImVec2 size{ 1280, 720 };
+		ImVec2 size{ 900, 530 };
 		float rounding{ 12 };
 		window_flags flags{ window_flags_no_saved_settings | window_flags_no_nav | window_flags_no_decoration | window_flags_no_scrollbar | window_flags_no_scroll_with_mouse | window_flags_no_background };
 		ImVec2 padding{ 0, 0 };

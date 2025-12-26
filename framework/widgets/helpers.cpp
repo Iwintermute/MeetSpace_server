@@ -1284,7 +1284,7 @@ void c_gui::log_notify(int type)
         const ImRect total(gui->window_pos(), gui->window_pos() + gui->window_size());
         const ImRect top_bar(total.Min, ImVec2(total.Max.x, total.Min.y + SCALE(elements->log_notify.top_height)));
         const ImRect content(ImVec2(total.Min.x + SCALE(elements->window.padding.x), top_bar.Max.y), total.Max - SCALE(elements->window.padding));
-
+        
         draw->rect_filled(drawlist, total.Min, total.Max, draw->get_clr(clr->window.background), SCALE(elements->log_notify.window_rounding));
         draw->rect_filled(drawlist, content.Min, content.Max, draw->get_clr(clr->top_bar.col_end), SCALE(elements->log_notify.message_rounding));
 
@@ -1293,11 +1293,11 @@ void c_gui::log_notify(int type)
 
         draw->rect_filled_multi_color(drawlist, ImVec2(top_bar.GetCenter().x - gui->text_size(font->get(icons_data, 40.f), "A").x / 2 - SCALE(elements->top_bar.product_line_padding), top_bar.Min.y + SCALE(elements->log_notify.top_padding + elements->log_notify.logo_height / 2 - 0.5)),
             ImVec2(top_bar.GetCenter().x - gui->text_size(font->get(icons_data, 40.f), "A").x / 2 - SCALE(elements->top_bar.product_line_padding + elements->top_bar.product_line_def_width), top_bar.Min.y + SCALE(elements->log_notify.top_padding + elements->log_notify.logo_height / 2 + 0.5)),
-            draw->get_clr(clr->top_bar.product_line_col_1, 0.5), draw->get_clr(clr->window.background, 0), draw->get_clr(clr->window.background, 0), draw->get_clr(clr->top_bar.product_line_col_1, 0.5));
+            draw->get_clr(clr->top_bar.product_line_col_1, 0.5), draw->get_clr(clr->window.background, 0), draw->get_clr(clr->window.background, 0), draw->get_clr(clr->top_bar.product_line_col_1, 0.5), 0, draw_flags_round_corners_all);
 
         draw->rect_filled_multi_color(drawlist, ImVec2(top_bar.GetCenter().x + gui->text_size(font->get(icons_data, 40.f), "A").x / 2 + SCALE(elements->top_bar.product_line_padding), top_bar.Min.y + SCALE(elements->log_notify.top_padding + elements->log_notify.logo_height / 2 - 0.5)),
             ImVec2(top_bar.GetCenter().x + gui->text_size(font->get(icons_data, 40.f), "A").x / 2 + SCALE(elements->top_bar.product_line_padding + elements->top_bar.product_line_def_width), top_bar.Min.y + SCALE(elements->log_notify.top_padding + elements->log_notify.logo_height / 2 + 0.5)),
-            draw->get_clr(clr->top_bar.product_line_col_1, 0.5), draw->get_clr(clr->window.background, 0), draw->get_clr(clr->window.background, 0), draw->get_clr(clr->top_bar.product_line_col_1, 0.5));
+            draw->get_clr(clr->top_bar.product_line_col_1, 0.5), draw->get_clr(clr->window.background, 0), draw->get_clr(clr->window.background, 0), draw->get_clr(clr->top_bar.product_line_col_1, 0.5), 0, draw_flags_round_corners_all);
 
         std::vector<std::string> lines = wrap_text(font->get(inter_medium_data, 13), SCALE(elements->log_notify.text_width), type == 1 ? "Your login or password is incorrect. If you receive this error, please contact support." : "If this is your first time encountering this error, you should contact support to resolve the issue.");
 
@@ -1316,7 +1316,9 @@ void c_gui::log_notify(int type)
         if (fabs(state->pulse_size - target_size) < 0.1f)
             state->pulse_direction = !state->pulse_direction;
 
-        draw->text_animed(drawlist, font->get(icons_data, 20), SCALE(state->pulse_size), content.Min - ImVec2(0, SCALE(elements->log_notify.text_spacing - 2) + gui->text_size(font->get(inter_medium_data, 13), "A").y * lines.size()) / 2, content.Max - ImVec2(0, SCALE(elements->log_notify.text_spacing - 2) + gui->text_size(font->get(inter_medium_data, 13), "A").y * lines.size()) / 2, draw->get_clr(clr->main.red), "E", NULL, NULL, ImVec2(0.5f, 0.5f));
+        ImVec2 icon_pos_min = content.Min - ImVec2(0, SCALE(elements->log_notify.text_spacing - 2) + gui->text_size(font->get(inter_medium_data, 13), "A").y * lines.size()) / 2;
+        ImVec2 icon_pos_max = content.Max - ImVec2(0, SCALE(elements->log_notify.text_spacing - 2) + gui->text_size(font->get(inter_medium_data, 13), "A").y * lines.size()) / 2;
+        draw->text_animed(drawlist, font->get(icons_data, 20), SCALE(state->pulse_size), icon_pos_min, icon_pos_max, draw->get_clr(clr->main.red), "E", NULL, NULL, ImVec2(0.5f, 0.5f));
         ImVec2 desc_pos = content.Min + SCALE(0, elements->log_notify.text_padding);
         for (const auto& line : lines)
         {
@@ -1329,6 +1331,7 @@ void c_gui::log_notify(int type)
     }
     gui->end_content();
 }
+
 void c_gui::loading()
 {
     struct loading_state

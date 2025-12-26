@@ -69,12 +69,6 @@ void cRtcManager::fnOnSignalingMessage(void* pSession, const json& jMsg) {
             json jAnswer{ {"type","answer"}, {"peer",peerId}, {"sdp",sAnswer} };
             fnSendJsonToSession(pSession, jAnswer);
         }
-        else if (type == "answer") {
-            auto itPeer = m_mPeers.find(peerId);
-            if (itPeer != m_mPeers.end()) {
-                itPeer->second.pPeer->fnSetRemoteDescription(jMsg.at("sdp"), "answer");
-            }
-        }
         else if (type == "ice") { fnCreatePeer(peerId, pSession)->fnAddRemoteIce(jMsg.value("sdpMid", ""), jMsg.at("candidate")); }
         else if (type == "leave") fnDestroyPeer(peerId);
     }

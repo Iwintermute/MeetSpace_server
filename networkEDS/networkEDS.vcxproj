@@ -24,7 +24,6 @@
     <ClInclude Include="NetworkManager.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="NetworkManager.cpp" />
     <ClCompile Include="client_demo.cpp" />
   </ItemGroup>
   <ItemGroup>

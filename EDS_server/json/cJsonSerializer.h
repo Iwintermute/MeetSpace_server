@@ -1,6 +1,6 @@
 #pragma once
 #include <string>
-#include "../../networkEDS/include/nlohmann/json.hpp"
+#include <nlohmann/json.hpp>
 
 namespace Sys {
 

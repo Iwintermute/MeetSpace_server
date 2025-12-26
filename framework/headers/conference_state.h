@@ -25,7 +25,7 @@ enum class ConferenceStatus {
 
 struct ConferenceSettings {
     std::string title;
-    ConferenceAccess access = ConferenceAccess::InviteOnly; // default to invite-only
+    ConferenceAccess access = ConferenceAccess::Open;
     int duration_minutes = 60; // 0 = unlimited
     std::string password;
     bool auto_mute_on_join = false;
@@ -33,7 +33,6 @@ struct ConferenceSettings {
     bool auto_record = false;
     time_t start_time = 0;
     std::vector<int> invited_user_ids;
-    int max_participants = 5; // limit participants per conference
 };
 
 struct ConferenceParticipant {
@@ -81,7 +80,6 @@ struct Conference {
     int screen_sharing_user_id = -1;
     time_t created_at = 0;
     ConferenceStatus status = ConferenceStatus::Scheduled;
-    std::string invite_code; // generated invite code for joining
 };
 
 // UI States

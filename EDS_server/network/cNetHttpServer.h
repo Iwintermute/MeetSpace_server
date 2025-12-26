@@ -1,9 +1,9 @@
 #pragma once
+#include <boost/asio.hpp>
+#include <boost/beast.hpp>
 #include <functional>
 #include <memory>
 #include <string>
-
-#include "cNetIoContext.h"
 
 namespace Sys {
     namespace Network {
@@ -13,7 +13,7 @@ namespace Sys {
             using tHealthFn = std::function<std::string()>;
             using tMetricsFn = std::function<std::string()>;
 
-            cNetHttpServer(Sys::Network::cNetIoContext::sIoStub& ioCtx, unsigned short port);
+            cNetHttpServer(boost::asio::io_context& ioCtx, unsigned short port);
             ~cNetHttpServer();
 
             void fnSetHealthFn(tHealthFn fn) { m_fnHealth = std::move(fn); }
@@ -26,8 +26,9 @@ namespace Sys {
             void fnDoAccept();
 
         private:
-            Sys::Network::cNetIoContext::sIoStub& m_rIoCtx;
+            boost::asio::io_context& m_rIoCtx;
             unsigned short m_uPort;
+            std::unique_ptr<boost::asio::ip::tcp::acceptor> m_pAcceptor;
             bool m_bRunning;
 
             tHealthFn m_fnHealth;

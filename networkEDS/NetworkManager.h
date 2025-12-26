@@ -1,8 +1,28 @@
 #pragma once
 #include "networkEDS.h"
-#include <boost/asio.hpp>
-#include <boost/beast.hpp>
-#include <boost/beast/websocket.hpp>
+
+#if defined(__has_include)
+#  if __has_include(<boost/asio.hpp>)
+#    include <boost/asio.hpp>
+#    include <boost/beast.hpp>
+#    include <boost/beast/websocket.hpp>
+#  elif __has_include("../local/boost_1_89_0/boost/asio.hpp")
+#    include "../local/boost_1_89_0/boost/asio.hpp"
+#    include "../local/boost_1_89_0/boost/beast.hpp"
+#    include "../local/boost_1_89_0/boost/beast/websocket.hpp"
+#  elif __has_include("../../local/boost_1_89_0/boost/asio.hpp")
+#    include "../../local/boost_1_89_0/boost/asio.hpp"
+#    include "../../local/boost_1_89_0/boost/beast.hpp"
+#    include "../../local/boost_1_89_0/boost/beast/websocket.hpp"
+#  else
+#    error "boost headers not found. Please ensure Boost is available in include paths or local folder."
+#  endif
+#else
+#  include <boost/asio.hpp>
+#  include <boost/beast.hpp>
+#  include <boost/beast/websocket.hpp>
+#endif
+
 #include "../networkEDS/include/nlohmann/json.hpp"
 #include <rtc/rtc.hpp>
 #include "include/portaudio/portaudio.h"

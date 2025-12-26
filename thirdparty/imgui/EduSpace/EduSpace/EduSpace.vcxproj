@@ -138,8 +138,8 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <OutDir>$(ProjectDir)$(Configuration)\</OutDir>
     <IntDir>$(ProjectDir)$(Configuration)\</IntDir>
-    <IncludePath>C:\Users\Пользователь\Desktop\Новая папка\thirdparty\freetype\include;C:\Users\Пользователь\Desktop\MENTALITY V2\SDK\Include;$(IncludePath)</IncludePath>
-    <LibraryPath>C:\Users\Пользователь\Desktop\Новая папка\thirdparty\freetype\win64;C:\Users\Пользователь\Desktop\MENTALITY V2\SDK\Lib\x64;$(LibraryPath)</LibraryPath>
+    <IncludePath>C:\Qt\qtprojects\eduspace\thirdparty\freetype\include;C:\Users\Пользователь\Desktop\MENTALITY V2\SDK\Include;$(IncludePath)</IncludePath>
+    <LibraryPath>C:\Qt\qtprojects\eduspace\thirdparty\freetype\win64;C:\Users\Пользователь\Desktop\MENTALITY V2\SDK\Lib\x64;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <OutDir>$(ProjectDir)$(Configuration)\</OutDir>
