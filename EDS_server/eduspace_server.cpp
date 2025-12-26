@@ -1,5 +1,5 @@
 #include "includes.h"
-#include "../networkEDS/include/nlohmann/json.hpp"
+#include "include/nlohmann/json.hpp"
 #include <unordered_map>
 #include <unordered_set>
 #include <mutex>
@@ -163,6 +163,23 @@ int main() {
             return;
         }
 
+        auto forwardRtcSignal = [&](const std::string& signalType) {
+            if (!ensureAuthorized()) return;
+
+            json jSignal = incoming;
+            jSignal["type"] = signalType;
+            if (!jSignal.contains("peer") && jSignal.contains("peer_id")) {
+                jSignal["peer"] = jSignal["peer_id"];
+            }
+            rtcMgr.fnOnSignalingMessage(session, jSignal);
+        };
+
+        if (type == "rtc_join") { forwardRtcSignal("join"); return; }
+        if (type == "rtc_offer") { forwardRtcSignal("offer"); return; }
+        if (type == "rtc_answer") { forwardRtcSignal("answer"); return; }
+        if (type == "rtc_ice") { forwardRtcSignal("ice"); return; }
+        if (type == "rtc_leave") { forwardRtcSignal("leave"); return; }
+
         if (type == "create_conference") {
             if (!ensureAuthorized()) return;
 
@@ -288,9 +305,11 @@ int main() {
     wsServer.fnStart();
 
     // RTC Manager
-    cRtcManager rtcMgr([&wsServer](void* session, const std::string& sMsg) {
-        // Отправляем клиенту через WS
-        // std::cout << "[RTC->WS] " << sMsg << std::endl;
+    cRtcManager rtcMgr([&wsServer](void* pSession, const std::string& sMsg) {
+        if (!pSession) {
+            return;
+        }
+        wsServer.fnSendText(pSession, sMsg);
         });
     rtcMgr.fnInit();
 

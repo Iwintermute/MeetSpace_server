@@ -88,10 +88,14 @@
   </ImportGroup>
   
   <PropertyGroup Label="UserMacros" />
-  
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <IncludePath>C:\Users\Пользователь\Desktop\portaudio-19.7.0\include;C:\Users\Пользователь\Desktop\opus-main\include;C:\Users\Пользователь\Desktop\libsrtp-2.7.0\srtp;C:\Users\Пользователь\Desktop\libsrtp-2.7.0\crypto;C:\Users\Пользователь\Desktop\libsrtp-2.7.0\include;C:\Users\Пользователь\Desktop\openssl-openssl-3.6.0;C:\local\boost_1_89_0;$(IncludePath)</IncludePath>
-    <LibraryPath>$(SolutionDir)include/portaudio/;$(SolutionDir)include/opus/;$(SolutionDir)include/srtp/;C:\local\boost_1_89_0\libs;$(LibraryPath)</LibraryPath>
+    <IncludePath>$(SolutionDir)networkEDS\include;$(SolutionDir)networkEDS\include\portaudio;$(SolutionDir)networkEDS\include\opus;$(SolutionDir)networkEDS\include\srtp;$(BoostIncludeDir);$(IncludePath)</IncludePath>
+    <LibraryPath>$(SolutionDir)networkEDS\include\portaudio;$(SolutionDir)networkEDS\include\opus;$(SolutionDir)networkEDS\include\srtp;$(BoostLibDir);$(LibraryPath)</LibraryPath>
+    <ExternalIncludePath>$(ExternalIncludePath)</ExternalIncludePath>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <IncludePath>$(SolutionDir)networkEDS\include;$(SolutionDir)networkEDS\include\portaudio;$(SolutionDir)networkEDS\include\opus;$(SolutionDir)networkEDS\include\srtp;$(BoostIncludeDir);$(IncludePath)</IncludePath>
+    <LibraryPath>$(SolutionDir)networkEDS\include\portaudio;$(SolutionDir)networkEDS\include\opus;$(SolutionDir)networkEDS\include\srtp;$(BoostLibDir);$(LibraryPath)</LibraryPath>
     <ExternalIncludePath>$(ExternalIncludePath)</ExternalIncludePath>
   </PropertyGroup>
   
@@ -102,7 +106,7 @@
       <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
-      <AdditionalIncludeDirectories>$(BoostIncludeDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)include;$(BoostIncludeDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -120,7 +124,7 @@
       <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
-      <AdditionalIncludeDirectories>$(BoostIncludeDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)include;$(BoostIncludeDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -137,13 +141,13 @@
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <LanguageStandard_C>stdc17</LanguageStandard_C>
-      <AdditionalIncludeDirectories>$(BoostIncludeDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)include;$(BoostIncludeDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>%(AdditionalDependencies)</AdditionalDependencies>
-      <AdditionalLibraryDirectories>$(BoostLibDir);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>portaudio_static_x64.lib;opus.lib;srtp3.lib;libssl.lib;libcrypto.lib;ws2_32.lib;secur32.lib;crypt32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(BoostLibDir);$(SolutionDir)networkEDS\include\portaudio;$(SolutionDir)networkEDS\include\opus;$(SolutionDir)networkEDS\include\srtp;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
   
@@ -156,13 +160,13 @@
       <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
-      <AdditionalIncludeDirectories>$(BoostIncludeDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)include;$(BoostIncludeDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>%(AdditionalDependencies)</AdditionalDependencies>
-      <AdditionalLibraryDirectories>$(BoostLibDir);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>portaudio_static_x64.lib;opus.lib;srtp3.lib;libssl.lib;libcrypto.lib;ws2_32.lib;secur32.lib;crypt32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(BoostLibDir);$(SolutionDir)networkEDS\include\portaudio;$(SolutionDir)networkEDS\include\opus;$(SolutionDir)networkEDS\include\srtp;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
   
