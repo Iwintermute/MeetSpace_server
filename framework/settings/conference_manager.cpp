@@ -8,6 +8,8 @@
 ConferenceManager* conference_manager = new ConferenceManager();
 
 ConferenceManager::ConferenceManager() {
+    EnsureNetworkReady();
+
     // Create an initial fake conference for demo
     ConferenceSettings s;
     s.title = "Direct Board Meeting";
@@ -26,7 +28,144 @@ ConferenceManager::ConferenceManager() {
 ConferenceManager::~ConferenceManager() {
 }
 
+int ConferenceManager::ResolvePeerUserId(const std::string& peer_id)
+{
+    auto it = peer_user_ids.find(peer_id);
+    if (it != peer_user_ids.end())
+        return it->second;
+
+    int new_id = next_peer_user_id++;
+    peer_user_ids[peer_id] = new_id;
+    return new_id;
+}
+
+void ConferenceManager::SyncConferenceIdFromServer(int server_id)
+{
+    if (pending_conference_local_id == -1)
+    {
+        if (conferences.find(server_id) == conferences.end())
+        {
+            Conference placeholder;
+            placeholder.id = server_id;
+            placeholder.creator_id = current_user_id;
+            placeholder.settings.title = "Server conference " + std::to_string(server_id);
+            placeholder.invite_code = GenerateInviteCode(server_id);
+            conferences[server_id] = placeholder;
+            invite_index[placeholder.invite_code] = server_id;
+        }
+        current_conference_id = server_id;
+        next_conference_id = std::max(next_conference_id, server_id + 1);
+        return;
+    }
+
+    auto it = conferences.find(pending_conference_local_id);
+    if (it == conferences.end())
+        return;
+
+    Conference conf = std::move(it->second);
+    conferences.erase(it);
+
+    conf.id = server_id;
+    conf.invite_code = GenerateInviteCode(server_id);
+    conferences[server_id] = conf;
+    invite_index[conf.invite_code] = server_id;
+    current_conference_id = server_id;
+    next_conference_id = std::max(next_conference_id, server_id + 1);
+    pending_conference_local_id = -1;
+}
+
+void ConferenceManager::RegisterNetworkCallbacks()
+{
+    if (network_callbacks_registered || !chat_manager)
+        return;
+
+    auto* net = chat_manager->GetNetworkManager();
+    if (!net)
+        return;
+
+    network_callbacks_registered = true;
+
+    net->SetConferenceCreatedCallback([this](int server_id)
+        {
+            SyncConferenceIdFromServer(server_id);
+        });
+
+    net->SetConferenceJoinedCallback([this](int server_id, const std::string& peer)
+        {
+            SyncConferenceIdFromServer(server_id);
+
+            auto& conf = conferences[server_id];
+            conf.status = ConferenceStatus::Active;
+
+            int uid = ResolvePeerUserId(peer);
+            if (conf.participants.find(uid) == conf.participants.end())
+            {
+                ConferenceParticipant self_participant;
+                self_participant.user_id = uid;
+                self_participant.role = UserRole::Participant;
+                self_participant.joined_at = time(nullptr);
+                conf.participants[uid] = self_participant;
+            }
+        });
+
+    net->SetPeerJoinedCallback([this](const std::string& peer)
+        {
+            if (current_conference_id == -1)
+                return;
+
+            auto it = conferences.find(current_conference_id);
+            if (it == conferences.end())
+                return;
+
+            int uid = ResolvePeerUserId(peer);
+            ConferenceParticipant participant;
+            participant.user_id = uid;
+            participant.role = UserRole::Participant;
+            participant.joined_at = time(nullptr);
+            participant.microphone_enabled = true;
+            participant.camera_enabled = false;
+            it->second.participants[uid] = participant;
+        });
+
+    net->SetPeerLeftCallback([this](const std::string& peer)
+        {
+            if (current_conference_id == -1)
+                return;
+
+            auto conf_it = conferences.find(current_conference_id);
+            if (conf_it == conferences.end())
+                return;
+
+            int uid = ResolvePeerUserId(peer);
+            conf_it->second.participants.erase(uid);
+        });
+
+    net->SetDisconnectedCallback([this]()
+        {
+            current_conference_id = -1;
+        });
+}
+
+void ConferenceManager::EnsureNetworkReady()
+{
+    if (!chat_manager)
+        return;
+
+    auto* net = chat_manager->GetNetworkManager();
+    if (!net)
+        return;
+
+    if (!net->IsConnected())
+    {
+        chat_manager->EnsureConnected();
+    }
+
+    RegisterNetworkCallbacks();
+}
+
 int ConferenceManager::CreateConference(const ConferenceSettings& settings) {
+    EnsureNetworkReady();
+
     Conference conf;
     conf.id = next_conference_id++;
     conf.settings = settings;
@@ -78,6 +217,7 @@ int ConferenceManager::CreateConference(const ConferenceSettings& settings) {
         auto* net = chat_manager->GetNetworkManager();
         if (net->IsConnected())
         {
+            pending_conference_local_id = conf.id;
             net->CreateConference(settings.title, settings.password);
         }
     }
@@ -87,8 +227,19 @@ int ConferenceManager::CreateConference(const ConferenceSettings& settings) {
 }
 
 bool ConferenceManager::JoinConference(int conference_id, const std::string& password) {
-    if (conferences.find(conference_id) == conferences.end()) return false;
-    
+    EnsureNetworkReady();
+
+    if (conferences.find(conference_id) == conferences.end()) {
+        // Если конференции нет локально, создаем заглушку, чтобы не ломать UI
+        Conference placeholder;
+        placeholder.id = conference_id;
+        placeholder.creator_id = -1;
+        placeholder.settings.title = "Conference " + std::to_string(conference_id);
+        placeholder.invite_code = GenerateInviteCode(conference_id);
+        conferences[conference_id] = placeholder;
+        invite_index[placeholder.invite_code] = conference_id;
+    }
+
     Conference& conf = conferences[conference_id];
     
     // Already joined?
@@ -158,6 +309,17 @@ bool ConferenceManager::LeaveConference(int conference_id) {
 
 bool ConferenceManager::JoinConferenceByCode(const std::string& invite_code)
 {
+    EnsureNetworkReady();
+
+    if (chat_manager && chat_manager->GetNetworkManager())
+    {
+        auto* net = chat_manager->GetNetworkManager();
+        if (net->IsConnected() && net->JoinConferenceByToken(invite_code))
+        {
+            return true;
+        }
+    }
+
     auto it = invite_index.find(invite_code);
     if (it == invite_index.end())
         return false;
@@ -194,6 +356,15 @@ bool ConferenceManager::ToggleMicrophone(int conference_id) {
     if (conferences.find(conference_id) != conferences.end()) {
         auto& p = conferences[conference_id].participants[current_user_id];
         p.microphone_enabled = !p.microphone_enabled;
+
+        if (chat_manager && chat_manager->GetNetworkManager())
+        {
+            auto* net = chat_manager->GetNetworkManager();
+            if (net->IsConnected())
+            {
+                net->ToggleMicrophone(p.microphone_enabled);
+            }
+        }
         return p.microphone_enabled;
     }
     return false;
@@ -276,6 +447,14 @@ void ConferenceManager::SendReaction(int conference_id, const std::string& emoji
     if (conferences.find(conference_id) != conferences.end()) {
         auto& p = conferences[conference_id].participants[current_user_id];
         p.active_reactions.push_back(emoji);
+        if (chat_manager && chat_manager->GetNetworkManager())
+        {
+            auto* net = chat_manager->GetNetworkManager();
+            if (net->IsConnected())
+            {
+                net->SendReaction(emoji);
+            }
+        }
         // Logic to remove old reactions would be needed in update loop
     }
 }
@@ -296,8 +475,17 @@ void ConferenceManager::SendChatMessage(int conference_id, const std::string& te
     msg.sender_id = current_user_id;
     msg.text = text;
     msg.timestamp = time(nullptr);
-    
+
     it->second.messages.push_back(msg);
+
+    if (chat_manager && chat_manager->GetNetworkManager())
+    {
+        auto* net = chat_manager->GetNetworkManager();
+        if (net->IsConnected())
+        {
+            net->SendChatMessage(text);
+        }
+    }
 }
 void ConferenceManager::UpdateFakeData(float delta_time) {
     if (current_conference_id == -1) return;
