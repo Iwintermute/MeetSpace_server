@@ -19,12 +19,19 @@ namespace Sys {
         }
 
         void cMediaPipeline::fnBroadcastAudioFrame(const std::vector<int16_t>& frame) {
-            auto encoded = m_encoder.fnEncode(frame);
+            if (!m_rtcMgr) return;
+
+            auto encoded = m_encoder.fnEncode(frame); // vector<uint8_t>
+            if (encoded.empty()) return;
+
             for (auto& [peerId, decoder] : m_peerDecoders) {
-                auto peer = m_rtcMgr->fnCreatePeer(peerId, nullptr);
-                if (peer) peer->fnSend(std::string(encoded.begin(), encoded.end()));
+                (void)decoder;
+
+                auto peer = m_rtcMgr->fnGetPeer(peerId);   // <-- НЕ создаём новый peer
+                if (peer) peer->fnSendBinary(encoded);     // <-- бинарь, не string
             }
         }
+
 
 
     } // namespace Media

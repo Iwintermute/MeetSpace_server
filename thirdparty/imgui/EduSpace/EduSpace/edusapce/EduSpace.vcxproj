@@ -1,0 +1,250 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="14.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|Win32">
+      <Configuration>Debug</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|Win32">
+      <Configuration>Release</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\..\..\..\..\..\..\Users\Пользователь\Desktop\Новая папка (2)\cAudioIO.cpp" />
+    <ClCompile Include="..\..\..\..\..\..\..\Users\Пользователь\Desktop\Новая папка (2)\cConferenceNet.cpp" />
+    <ClCompile Include="..\..\..\..\..\..\..\Users\Пользователь\Desktop\Новая папка (2)\cOpusCodec.cpp" />
+    <ClCompile Include="..\..\..\..\..\..\..\Users\Пользователь\Desktop\Новая папка (2)\cRtcClientPeer.cpp" />
+    <ClCompile Include="..\..\..\..\..\..\..\Users\Пользователь\Desktop\Новая папка (2)\cWsClient.cpp" />
+    <ClCompile Include="..\..\..\..\framework\gui.cpp" />
+    <ClCompile Include="..\..\..\..\framework\helpers\blur.cpp" />
+    <ClCompile Include="..\..\..\..\framework\helpers\config.cpp" />
+    <ClCompile Include="..\..\..\..\framework\helpers\draw.cpp" />
+    <ClCompile Include="..\..\..\..\framework\helpers\fonts.cpp" />
+    <ClCompile Include="..\..\..\..\framework\messenger_gui.cpp" />
+    <ClCompile Include="..\..\..\..\framework\settings\app_state.cpp" />
+    <ClCompile Include="..\..\..\..\framework\settings\chat_manager.cpp" />
+    <ClCompile Include="..\..\..\..\framework\widgets\button.cpp" />
+    <ClCompile Include="..\..\..\..\framework\widgets\cards.cpp" />
+    <ClCompile Include="..\..\..\..\framework\widgets\helpers.cpp" />
+    <ClCompile Include="..\..\..\..\framework\widgets\messenger_widgets.cpp" />
+    <ClCompile Include="..\..\..\..\framework\conference_gui.cpp" />
+    <ClCompile Include="..\..\..\..\framework\settings\conference_manager.cpp" />
+    <ClCompile Include="..\..\..\..\framework\widgets\conference_widgets.cpp" />
+    <ClCompile Include="..\..\..\..\framework\widgets\pages.cpp" />
+    <ClCompile Include="..\..\..\..\framework\widgets\notify.cpp" />
+    <ClCompile Include="..\..\..\..\framework\widgets\textfield.cpp" />
+    <ClCompile Include="..\..\..\..\framework\widgets\window.cpp" />
+    <ClCompile Include="..\..\backends\imgui_impl_dx10.cpp" />
+    <ClCompile Include="..\..\backends\imgui_impl_dx11.cpp" />
+    <ClCompile Include="..\..\backends\imgui_impl_dx12.cpp" />
+    <ClCompile Include="..\..\backends\imgui_impl_dx9.cpp" />
+    <ClCompile Include="..\..\backends\imgui_impl_win32.cpp" />
+    <ClCompile Include="..\..\imgui.cpp" />
+    <ClCompile Include="..\..\imgui_draw.cpp" />
+    <ClCompile Include="..\..\imgui_freetype.cpp" />
+    <ClCompile Include="..\..\imgui_tables.cpp" />
+    <ClCompile Include="..\..\imgui_widgets.cpp" />
+    <ClCompile Include="main.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <Library Include="..\..\..\freetype\win64\freetype.lib" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\..\..\..\..\..\..\Users\Пользователь\Desktop\Новая папка (2)\cAudioIO.h" />
+    <ClInclude Include="..\..\..\..\..\..\..\Users\Пользователь\Desktop\Новая папка (2)\cConferenceNet.h" />
+    <ClInclude Include="..\..\..\..\..\..\..\Users\Пользователь\Desktop\Новая папка (2)\cOpusCodec.h" />
+    <ClInclude Include="..\..\..\..\..\..\..\Users\Пользователь\Desktop\Новая папка (2)\cRtcClientPeer.h" />
+    <ClInclude Include="..\..\..\..\..\..\..\Users\Пользователь\Desktop\Новая папка (2)\cWsClient.h" />
+    <ClInclude Include="..\..\..\..\framework\data\fonts.h" />
+    <ClInclude Include="..\..\..\..\framework\data\images.h" />
+    <ClInclude Include="..\..\..\..\framework\headers\app_state.h" />
+    <ClInclude Include="..\..\..\..\framework\headers\blur.h" />
+    <ClInclude Include="..\..\..\..\framework\headers\chat_manager.h" />
+    <ClInclude Include="..\..\..\..\framework\headers\config.h" />
+    <ClInclude Include="..\..\..\..\framework\headers\draw.h" />
+    <ClInclude Include="..\..\..\..\framework\headers\flags.h" />
+    <ClInclude Include="..\..\..\..\framework\headers\fonts.h" />
+    <ClInclude Include="..\..\..\..\framework\headers\functions.h" />
+    <ClInclude Include="..\..\..\..\framework\headers\includes.h" />
+    <ClInclude Include="..\..\..\..\framework\headers\messenger_widgets.h" />
+    <ClInclude Include="..\..\..\..\framework\headers\conference_state.h" />
+    <ClInclude Include="..\..\..\..\framework\headers\conference_manager.h" />
+    <ClInclude Include="..\..\..\..\framework\headers\conference_widgets.h" />
+    <ClInclude Include="..\..\..\..\framework\headers\widgets.h" />
+    <ClInclude Include="..\..\..\..\framework\settings\colors.h" />
+    <ClInclude Include="..\..\..\..\framework\settings\elements.h" />
+    <ClInclude Include="..\..\..\..\framework\settings\variables.h" />
+    <ClInclude Include="..\..\backends\imgui_impl_dx10.h" />
+    <ClInclude Include="..\..\backends\imgui_impl_dx11.h" />
+    <ClInclude Include="..\..\backends\imgui_impl_dx12.h" />
+    <ClInclude Include="..\..\backends\imgui_impl_dx9.h" />
+    <ClInclude Include="..\..\backends\imgui_impl_win32.h" />
+    <ClInclude Include="..\..\imconfig.h" />
+    <ClInclude Include="..\..\imgui.h" />
+    <ClInclude Include="..\..\imgui_freetype.h" />
+    <ClInclude Include="..\..\imgui_internal.h" />
+    <ClInclude Include="winfirst.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="packages.config" />
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{355249A3-5AC7-478F-8BCC-B6D1C22ED60B}</ProjectGuid>
+    <RootNamespace>EduSpace</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0.22621.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <CharacterSet>Unicode</CharacterSet>
+    <PlatformToolset>v143</PlatformToolset>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <CharacterSet>Unicode</CharacterSet>
+    <PlatformToolset>v145</PlatformToolset>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+    <PlatformToolset>v143</PlatformToolset>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+    <PlatformToolset>v145</PlatformToolset>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <OutDir>$(ProjectDir)$(Configuration)\</OutDir>
+    <IntDir>$(ProjectDir)$(Configuration)\</IntDir>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <OutDir>$(ProjectDir)$(Configuration)\</OutDir>
+    <IntDir>$(ProjectDir)$(Configuration)\</IntDir>
+    <IncludePath>C:\Qt\qtprojects\eduspace\EDS_server\include\nlohmann;C:\Users\Пользователь\Desktop\portaudio-19.7.0\include;C:\Users\Пользователь\Desktop\opus-main\include;C:\Users\Пользователь\Desktop\libsrtp-2.7.0\include;C:\local\boost_1_89_0;C:\Qt\qtprojects\eduspace\thirdparty\freetype\include;C:\Users\Пользователь\Desktop\MENTALITY V2\SDK\Include;$(IncludePath)</IncludePath>
+    <LibraryPath>C:\local\boost_1_89_0\libs;C:\Qt\qtprojects\eduspace\EDS_server\include\opus;C:\Qt\qtprojects\eduspace\EDS_server\include\portaudio;C:\Qt\qtprojects\eduspace\EDS_server\include\srtp;C:\Qt\qtprojects\eduspace\thirdparty\freetype\win64;C:\Users\Пользователь\Desktop\MENTALITY V2\SDK\Lib\x64;$(LibraryPath)</LibraryPath>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <OutDir>$(ProjectDir)$(Configuration)\</OutDir>
+    <IntDir>$(ProjectDir)$(Configuration)\</IntDir>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <OutDir>$(ProjectDir)$(Configuration)\</OutDir>
+    <IntDir>$(ProjectDir)$(Configuration)\</IntDir>
+    <IncludePath>$(SolutionDir)\thirdparty\imgui;$(SolutionDir)\thirdparty\dxsdk\Include;$(SolutionDir)\thirdparty\freetype\include;$(IncludePath)</IncludePath>
+    <LibraryPath>$(SolutionDir)\thirdparty\dxsdk\Lib\x64;$(SolutionDir)\thirdparty\freetype\win64;$(LibraryPath)</LibraryPath>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <ClCompile>
+      <WarningLevel>Level4</WarningLevel>
+      <Optimization>Disabled</Optimization>
+      <AdditionalIncludeDirectories>..\..;..\..\backends;%(AdditionalIncludeDirectories);</AdditionalIncludeDirectories>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
+    </ClCompile>
+    <Link>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalDependencies>d3d11.lib;d3dcompiler.lib;dxgi.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(DXSDK_DIR)/Lib/x86;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <SubSystem>Windows</SubSystem>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <WarningLevel>Level4</WarningLevel>
+      <Optimization>Disabled</Optimization>
+      <AdditionalIncludeDirectories>..\..;..\..\backends;%(AdditionalIncludeDirectories);</AdditionalIncludeDirectories>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <ForcedIncludeFiles>$(ProjectDir)winfirst.h;%(ForcedIncludeFiles)</ForcedIncludeFiles>
+    </ClCompile>
+    <Link>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalDependencies>d3d11.lib;d3dcompiler.lib;dxgi.lib;portaudio_static_x64.lib;opus.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(DXSDK_DIR)/Lib/x64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <SubSystem>Windows</SubSystem>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <ClCompile>
+      <WarningLevel>Level4</WarningLevel>
+      <Optimization>MaxSpeed</Optimization>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <AdditionalIncludeDirectories>..\..;..\..\backends;%(AdditionalIncludeDirectories);</AdditionalIncludeDirectories>
+      <BufferSecurityCheck>false</BufferSecurityCheck>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
+    </ClCompile>
+    <Link>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+      <AdditionalDependencies>d3d11.lib;d3dcompiler.lib;dxgi.lib;portaudio.lib;opus.lib;
+winmm.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(DXSDK_DIR)/Lib/x86;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <SubSystem>Windows</SubSystem>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <WarningLevel>Level4</WarningLevel>
+      <Optimization>MaxSpeed</Optimization>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <AdditionalIncludeDirectories>..\..;..\..\backends;%(AdditionalIncludeDirectories);</AdditionalIncludeDirectories>
+      <BufferSecurityCheck>false</BufferSecurityCheck>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+    </ClCompile>
+    <Link>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+      <AdditionalDependencies>d3d11.lib;d3dcompiler.lib;dxgi.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(DXSDK_DIR)/Lib/x64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <SubSystem>Windows</SubSystem>
+    </Link>
+  </ItemDefinitionGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+    <Import Project="..\..\..\..\packages\libdatachannel.0.22.6\build\native\libdatachannel.targets" Condition="Exists('..\..\..\..\packages\libdatachannel.0.22.6\build\native\libdatachannel.targets')" />
+  </ImportGroup>
+  <Target Name="EnsureNuGetPackageBuildImports" BeforeTargets="PrepareForBuild">
+    <PropertyGroup>
+      <ErrorText>Данный проект ссылается на пакеты NuGet, отсутствующие на этом компьютере. Используйте восстановление пакетов NuGet, чтобы скачать их.  Дополнительную информацию см. по адресу: http://go.microsoft.com/fwlink/?LinkID=322105. Отсутствует следующий файл: {0}.</ErrorText>
+    </PropertyGroup>
+    <Error Condition="!Exists('..\..\..\..\packages\libdatachannel.0.22.6\build\native\libdatachannel.targets')" Text="$([System.String]::Format('$(ErrorText)', '..\..\..\..\packages\libdatachannel.0.22.6\build\native\libdatachannel.targets'))" />
+  </Target>
+</Project>

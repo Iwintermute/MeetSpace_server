@@ -1,87 +1,133 @@
 #include "cRtcPeer.h"
-#include <iostream>
+#include "../util/cLogger.h"
+#include <cstring>
 
 using namespace Sys::Rtc;
 
 cRtcPeer::cRtcPeer() {
-    rtc::InitLogger(rtc::LogLevel::Info);
+    static std::once_flag once;
+    std::call_once(once, []() {
+        rtc::InitLogger(rtc::LogLevel::Info);
+        });
 
     rtc::Configuration cfg;
     cfg.iceServers.emplace_back("stun:stun.l.google.com:19302");
 
-    m_pPc = std::make_shared<rtc::PeerConnection>(cfg);
+    m_pc = std::make_shared<rtc::PeerConnection>(cfg);
 
-    // peer callbacks
-    m_pPc->onStateChange([this](rtc::PeerConnection::State eState) {
-        if (m_fnOnStateChanged) m_fnOnStateChanged(eState);
+    m_pc->onStateChange([this](rtc::PeerConnection::State s) {
+        if (m_onState) m_onState(s);
         });
 
-    m_pPc->onLocalDescription([this](rtc::Description const& desc) {
-        if (!m_fnOnLocalDescription) return;
-        nlohmann::json j;
-        j["type"] = desc.typeString();
-        j["sdp"] = std::string(desc);
-        m_fnOnLocalDescription(j.dump());
+    m_pc->onLocalDescription([this](rtc::Description const& desc) {
+        // Это главный путь: сюда прилетает ANSWER после setLocalDescription()
+        if (m_onLocalDesc) m_onLocalDesc(desc);
         });
 
-    m_pPc->onLocalCandidate([this](rtc::Candidate const& cand) {
-        if (!m_fnOnLocalCandidate) return;
-        m_fnOnLocalCandidate(cand.mid(), cand.candidate());
+    m_pc->onLocalCandidate([this](rtc::Candidate const& cand) {
+        if (m_onLocalCand) m_onLocalCand(cand);
         });
 
-    // data channel
-    m_pPc->onDataChannel([this](std::shared_ptr<rtc::DataChannel> dc) {
-        m_pDc = dc;
-        dc->onOpen([this]() { std::cout << "[RTC] DataChannel open\n"; });
-        dc->onClosed([this]() { std::cout << "[RTC] DataChannel closed\n"; });
-        dc->onMessage([this](rtc::message_variant msg) {
-            if (!m_fnOnMessage) return;
-            if (std::holds_alternative<std::string>(msg))
-                m_fnOnMessage(std::get<std::string>(msg));
-            });
+    // Если клиент создаёт DC первым — принимаем
+    m_pc->onDataChannel([this](std::shared_ptr<rtc::DataChannel> dc) {
+        fnBindDataChannel(std::move(dc));
         });
 
-    m_pDc = m_pPc->createDataChannel("data");
-    m_pDc->onOpen([] { std::cout << "[RTC] local datachannel open\n"; });
-    m_pDc->onMessage([this](auto msg) {
-        if (!m_fnOnMessage) return;
-        if (std::holds_alternative<std::string>(msg))
-            m_fnOnMessage(std::get<std::string>(msg));
-        });
+    // Сервер может создать DC тоже, но делаем это не всегда сразу,
+    // чтобы не получить дубликаты — "ensure once"
+    fnEnsureDataChannel();
 }
 
-cRtcPeer::~cRtcPeer() { fnClose(); }
-
-void cRtcPeer::fnCreateOffer() { m_pPc->setLocalDescription(); }
-void cRtcPeer::fnSetRemoteDescription(const std::string& sSdp, const std::string& sType) {
-    rtc::Description desc(sSdp, sType);
-    m_pPc->setRemoteDescription(desc);
-}
-void cRtcPeer::fnAddRemoteCandidate(const std::string& sMid, const std::string& sCandidate) {
-    rtc::Candidate cand(sCandidate, sMid);
-    m_pPc->addRemoteCandidate(cand);
-}
-void cRtcPeer::fnSend(const std::string& sMsg) {
-    if (m_pDc && m_pDc->isOpen()) m_pDc->send(sMsg);
+cRtcPeer::~cRtcPeer() {
+    fnClose();
 }
 
-bool cRtcPeer::fnInit() { return m_pPc != nullptr; }
+void cRtcPeer::fnEnsureDataChannel() {
+    std::lock_guard<std::mutex> lg(m_mtx);
+    if (m_closed || m_dcEnsured) return;
+    m_dcEnsured = true;
 
-bool cRtcPeer::fnHandleOffer(const std::string& sOffer, std::string& sAnswer) {
-    fnSetRemoteDescription(sOffer, "offer");
-    m_pPc->setLocalDescription();
-    if (m_pPc->localDescription()) {
-        sAnswer = std::string(*m_pPc->localDescription());
-        return true;
+    try {
+        auto dc = m_pc->createDataChannel("audio");
+        fnBindDataChannel(std::move(dc));
     }
-    return false;
+    catch (...) {
+        // не критично — если клиент создаст, мы его примем
+    }
 }
 
-void cRtcPeer::fnAddRemoteIce(const std::string& sMid, const std::string& sCandidate) {
-    fnAddRemoteCandidate(sMid, sCandidate);
+void cRtcPeer::fnBindDataChannel(std::shared_ptr<rtc::DataChannel> dc) {
+    std::lock_guard<std::mutex> lg(m_mtx);
+    if (m_closed) return;
+
+    // если уже есть открытый/назначенный — оставим первый
+    if (m_dc) return;
+    m_dc = std::move(dc);
+
+    m_dc->onMessage([this](rtc::message_variant msg) {
+        if (!m_onBinary) return;
+        if (std::holds_alternative<rtc::binary>(msg)) {
+            const auto& b = std::get<rtc::binary>(msg);
+            std::vector<uint8_t> out;
+            out.resize(b.size());
+            if (!out.empty()) std::memcpy(out.data(), b.data(), b.size());
+            m_onBinary(out);
+        }
+        // текст на сервере не нужен — игнор
+        });
+}
+
+void cRtcPeer::fnApplyRemoteOffer(const std::string& sdpOffer) {
+    std::lock_guard<std::mutex> lg(m_mtx);
+    if (m_closed || !m_pc) return;
+
+    // Remote offer
+    rtc::Description remoteDesc(sdpOffer, "offer");
+    m_pc->setRemoteDescription(remoteDesc);
+
+    // Async: libdatachannel сгенерит answer и дернет onLocalDescription
+    m_pc->setLocalDescription();
+}
+
+void cRtcPeer::fnApplyRemoteIce(const std::string& mid, const std::string& cand) {
+    std::lock_guard<std::mutex> lg(m_mtx);
+    if (m_closed || !m_pc) return;
+
+    rtc::Candidate c(cand, mid);
+    m_pc->addRemoteCandidate(c);
+}
+
+void cRtcPeer::fnSendBinary(const std::vector<uint8_t>& data) {
+    if (data.empty()) return;
+
+    std::shared_ptr<rtc::DataChannel> dc;
+    {
+        std::lock_guard<std::mutex> lg(m_mtx);
+        if (m_closed || !m_dc || !m_dc->isOpen()) return;
+        dc = m_dc;
+    }
+
+    rtc::binary b;
+    b.resize(data.size());
+    std::memcpy(b.data(), data.data(), data.size());
+    dc->send(b);
+}
+
+bool cRtcPeer::fnIsReady() const {
+    std::lock_guard<std::mutex> lg(m_mtx);
+    return !m_closed && m_dc && m_dc->isOpen();
 }
 
 void cRtcPeer::fnClose() {
-    if (m_pDc) m_pDc->close();
-    if (m_pPc) m_pPc->close();
+    std::lock_guard<std::mutex> lg(m_mtx);
+    if (m_closed) return;
+    m_closed = true;
+
+    try { if (m_dc) m_dc->close(); }
+    catch (...) {}
+    try { if (m_pc) m_pc->close(); }
+    catch (...) {}
+
+    m_dc.reset();
+    m_pc.reset();
 }

@@ -19,6 +19,11 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="..\..\..\..\..\..\..\Users\Пользователь\Desktop\Новая папка (2)\cAudioIO.cpp" />
+    <ClCompile Include="..\..\..\..\..\..\..\Users\Пользователь\Desktop\Новая папка (2)\cConferenceNet.cpp" />
+    <ClCompile Include="..\..\..\..\..\..\..\Users\Пользователь\Desktop\Новая папка (2)\cOpusCodec.cpp" />
+    <ClCompile Include="..\..\..\..\..\..\..\Users\Пользователь\Desktop\Новая папка (2)\cRtcClientPeer.cpp" />
+    <ClCompile Include="..\..\..\..\..\..\..\Users\Пользователь\Desktop\Новая папка (2)\cWsClient.cpp" />
     <ClCompile Include="..\..\..\..\framework\gui.cpp" />
     <ClCompile Include="..\..\..\..\framework\helpers\blur.cpp" />
     <ClCompile Include="..\..\..\..\framework\helpers\config.cpp" />
@@ -54,6 +59,11 @@
     <Library Include="..\..\..\freetype\win64\freetype.lib" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="..\..\..\..\..\..\..\Users\Пользователь\Desktop\Новая папка (2)\cAudioIO.h" />
+    <ClInclude Include="..\..\..\..\..\..\..\Users\Пользователь\Desktop\Новая папка (2)\cConferenceNet.h" />
+    <ClInclude Include="..\..\..\..\..\..\..\Users\Пользователь\Desktop\Новая папка (2)\cOpusCodec.h" />
+    <ClInclude Include="..\..\..\..\..\..\..\Users\Пользователь\Desktop\Новая папка (2)\cRtcClientPeer.h" />
+    <ClInclude Include="..\..\..\..\..\..\..\Users\Пользователь\Desktop\Новая папка (2)\cWsClient.h" />
     <ClInclude Include="..\..\..\..\framework\data\fonts.h" />
     <ClInclude Include="..\..\..\..\framework\data\images.h" />
     <ClInclude Include="..\..\..\..\framework\headers\app_state.h" />
@@ -82,6 +92,11 @@
     <ClInclude Include="..\..\imgui.h" />
     <ClInclude Include="..\..\imgui_freetype.h" />
     <ClInclude Include="..\..\imgui_internal.h" />
+    <ClInclude Include="net_log.h" />
+    <ClInclude Include="winfirst.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="packages.config" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <ProjectGuid>{355249A3-5AC7-478F-8BCC-B6D1C22ED60B}</ProjectGuid>
@@ -138,8 +153,8 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <OutDir>$(ProjectDir)$(Configuration)\</OutDir>
     <IntDir>$(ProjectDir)$(Configuration)\</IntDir>
-    <IncludePath>C:\Qt\qtprojects\eduspace\thirdparty\freetype\include;C:\Users\Пользователь\Desktop\MENTALITY V2\SDK\Include;$(IncludePath)</IncludePath>
-    <LibraryPath>C:\Qt\qtprojects\eduspace\thirdparty\freetype\win64;C:\Users\Пользователь\Desktop\MENTALITY V2\SDK\Lib\x64;$(LibraryPath)</LibraryPath>
+    <IncludePath>C:\Qt\qtprojects\eduspace\EDS_server\include\nlohmann;C:\Users\Пользователь\Desktop\portaudio-19.7.0\include;C:\Users\Пользователь\Desktop\opus-main\include;C:\Users\Пользователь\Desktop\libsrtp-2.7.0\include;C:\local\boost_1_89_0;C:\Qt\qtprojects\eduspace\thirdparty\freetype\include;C:\Users\Пользователь\Desktop\MENTALITY V2\SDK\Include;$(IncludePath)</IncludePath>
+    <LibraryPath>C:\local\boost_1_89_0\libs;C:\Qt\qtprojects\eduspace\EDS_server\include\opus;C:\Qt\qtprojects\eduspace\EDS_server\include\portaudio;C:\Qt\qtprojects\eduspace\EDS_server\include\srtp;C:\Qt\qtprojects\eduspace\thirdparty\freetype\win64;C:\Users\Пользователь\Desktop\MENTALITY V2\SDK\Lib\x64;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <OutDir>$(ProjectDir)$(Configuration)\</OutDir>
@@ -170,13 +185,14 @@
       <WarningLevel>Level4</WarningLevel>
       <Optimization>Disabled</Optimization>
       <AdditionalIncludeDirectories>..\..;..\..\backends;%(AdditionalIncludeDirectories);</AdditionalIncludeDirectories>
-      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>/utf-8 /bigobj %(AdditionalOptions)</AdditionalOptions>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <LanguageStandard>stdcpp20</LanguageStandard>
+      <ForcedIncludeFiles>$(ProjectDir)winfirst.h;%(ForcedIncludeFiles)</ForcedIncludeFiles>
     </ClCompile>
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>d3d11.lib;d3dcompiler.lib;dxgi.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>d3d11.lib;d3dcompiler.lib;dxgi.lib;portaudio_static_x64.lib;opus.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>$(DXSDK_DIR)/Lib/x64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <SubSystem>Windows</SubSystem>
     </Link>
@@ -195,7 +211,8 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
-      <AdditionalDependencies>d3d11.lib;d3dcompiler.lib;dxgi.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>d3d11.lib;d3dcompiler.lib;dxgi.lib;portaudio.lib;opus.lib;
+winmm.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>$(DXSDK_DIR)/Lib/x86;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <SubSystem>Windows</SubSystem>
     </Link>
@@ -223,5 +240,12 @@
   </ItemDefinitionGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
+    <Import Project="..\..\..\..\packages\libdatachannel.0.22.6\build\native\libdatachannel.targets" Condition="Exists('..\..\..\..\packages\libdatachannel.0.22.6\build\native\libdatachannel.targets')" />
   </ImportGroup>
+  <Target Name="EnsureNuGetPackageBuildImports" BeforeTargets="PrepareForBuild">
+    <PropertyGroup>
+      <ErrorText>Данный проект ссылается на пакеты NuGet, отсутствующие на этом компьютере. Используйте восстановление пакетов NuGet, чтобы скачать их.  Дополнительную информацию см. по адресу: http://go.microsoft.com/fwlink/?LinkID=322105. Отсутствует следующий файл: {0}.</ErrorText>
+    </PropertyGroup>
+    <Error Condition="!Exists('..\..\..\..\packages\libdatachannel.0.22.6\build\native\libdatachannel.targets')" Text="$([System.String]::Format('$(ErrorText)', '..\..\..\..\packages\libdatachannel.0.22.6\build\native\libdatachannel.targets'))" />
+  </Target>
 </Project>

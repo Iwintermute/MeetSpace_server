@@ -1,7 +1,6 @@
-
 #include "cMediaAudioDevice.h"
-#include <iostream>
 #include <algorithm>
+#include <iostream>
 
 namespace Sys {
     namespace Media {
@@ -10,19 +9,21 @@ namespace Sys {
             const PaStreamCallbackTimeInfo*, PaStreamCallbackFlags, void* userData)
         {
             auto* device = static_cast<cMediaAudioDevice*>(userData);
-            if (device->m_fnOnAudioFrame && input) {
-                const int16_t* in = static_cast<const int16_t*>(input);
-                std::vector<int16_t> samples(in, in + frameCount);
+            if (!device || !input) return paContinue;
 
-                // Callback дл€ обработки/отправки
-                device->m_fnOnAudioFrame(samples);
+            const int16_t* in = static_cast<const int16_t*>(input);
+            const size_t samples = (size_t)frameCount * (size_t)device->m_ch;
 
-                // Ћокальный вывод (самослушание)
-                device->fnPlay(samples);
+            std::vector<int16_t> buf;
+            buf.assign(in, in + samples);
 
-                std::cout << "[Audio] Captured " << samples.size() * sizeof(int16_t)
-                    << " bytes" << std::endl;
+            if (device->m_fnOnAudioFrame) {
+                device->m_fnOnAudioFrame(buf, (int)frameCount, device->m_ch);
             }
+
+            // самопрослушивание если нужно
+            // device->fnPlaySamples(buf);
+
             return paContinue;
         }
 
@@ -32,21 +33,20 @@ namespace Sys {
             auto* device = static_cast<cMediaAudioDevice*>(userData);
             int16_t* out = static_cast<int16_t*>(outputBuffer);
 
+            const size_t needSamples = (size_t)frameCount * (size_t)device->m_ch;
+
             std::lock_guard<std::mutex> lg(device->m_playbackMutex);
-            size_t toCopy = std::min(static_cast<size_t>(frameCount), device->m_playbackBuffer.size());
-            std::copy(device->m_playbackBuffer.begin(), device->m_playbackBuffer.begin() + toCopy, out);
+            size_t n = std::min(needSamples, device->m_playbackBuffer.size());
 
-            // ќстальное заполн€ем нул€ми
-            std::fill(out + toCopy, out + frameCount, 0);
+            std::copy(device->m_playbackBuffer.begin(), device->m_playbackBuffer.begin() + n, out);
+            if (n < needSamples) std::fill(out + n, out + needSamples, 0);
 
-            if (toCopy > 0)
-                device->m_playbackBuffer.erase(device->m_playbackBuffer.begin(), device->m_playbackBuffer.begin() + toCopy);
-
+            device->m_playbackBuffer.erase(device->m_playbackBuffer.begin(), device->m_playbackBuffer.begin() + n);
             return paContinue;
         }
 
-        cMediaAudioDevice::cMediaAudioDevice()
-            : m_bCapturing(false), m_bPlaying(false), m_captureStream(nullptr), m_playbackStream(nullptr)
+        cMediaAudioDevice::cMediaAudioDevice(int sampleRate, int channels, int framesPerBuffer)
+            : m_sr(sampleRate), m_ch(channels), m_frames(framesPerBuffer)
         {
             Pa_Initialize();
         }
@@ -62,11 +62,12 @@ namespace Sys {
         {
             if (m_bCapturing) return;
 
-            // —тартуем поток воспроизведени€ дл€ самослушани€ (тест)
-            if (!m_bPlaying) fnStartPlayback();
+            if (Pa_OpenDefaultStream(&m_captureStream, m_ch, 0, paInt16, m_sr, m_frames, paCaptureCallback, this) != paNoError)
+                return;
 
-            Pa_OpenDefaultStream(&m_captureStream, 1, 0, paInt16, 48000, 480, paCaptureCallback, this);
-            Pa_StartStream(m_captureStream);
+            if (Pa_StartStream(m_captureStream) != paNoError)
+                return;
+
             m_bCapturing = true;
         }
 
@@ -82,8 +83,13 @@ namespace Sys {
         void cMediaAudioDevice::fnStartPlayback()
         {
             if (m_bPlaying) return;
-            Pa_OpenDefaultStream(&m_playbackStream, 0, 1, paInt16, 48000, 480, paPlaybackCallback, this);
-            Pa_StartStream(m_playbackStream);
+
+            if (Pa_OpenDefaultStream(&m_playbackStream, 0, m_ch, paInt16, m_sr, m_frames, paPlaybackCallback, this) != paNoError)
+                return;
+
+            if (Pa_StartStream(m_playbackStream) != paNoError)
+                return;
+
             m_bPlaying = true;
         }
 
@@ -96,11 +102,11 @@ namespace Sys {
             m_bPlaying = false;
         }
 
-        void cMediaAudioDevice::fnPlay(const std::vector<int16_t>& samples)
+        void cMediaAudioDevice::fnPlaySamples(const std::vector<int16_t>& interleavedSamples)
         {
             std::lock_guard<std::mutex> lg(m_playbackMutex);
-            m_playbackBuffer.insert(m_playbackBuffer.end(), samples.begin(), samples.end());
+            m_playbackBuffer.insert(m_playbackBuffer.end(), interleavedSamples.begin(), interleavedSamples.end());
         }
 
-    } // namespace Media
-} // namespace Sys
+    } // Media
+} // Sys

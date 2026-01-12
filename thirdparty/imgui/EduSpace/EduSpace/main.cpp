@@ -18,13 +18,15 @@
 #include <tchar.h>
 #include <d3dx11.h>
 #include <dwmapi.h>
+#include "../../framework/net/cConferenceNet.h"
+#include "../../framework/headers/conference_manager.h"
 #pragma comment(lib, "d3dx11.lib")
 
 // Data
 static bool                     g_SwapChainOccluded = false;
 static UINT                     g_ResizeWidth = 0, g_ResizeHeight = 0;
 static ID3D11RenderTargetView* g_mainRenderTargetView = nullptr;
-
+static cConferenceNet           g_confNet;
 // Forward declarations of helper functions
 bool CreateDeviceD3D(HWND hWnd);
 void CleanupDeviceD3D();
@@ -93,7 +95,22 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     for (int i = 0; i < IM_ARRAYSIZE(product_img); i++)
         D3DX11CreateShaderResourceViewFromMemory(var->winapi.device_dx11, product_img[i], sizeof(product_img[i]), &info, pump, &var->gui.product_img[i], 0);
 
-    D3DX11CreateShaderResourceViewFromMemory(var->winapi.device_dx11, product_img_2, sizeof(product_img_2), &info, pump, &var->gui.product_img_2, 0);
+    try {
+        if (g_confNet.start("127.0.0.1", 9000, "/")) {
+            if (conference_manager)
+                conference_manager->SetNet(&g_confNet);
+        }
+        else {
+            MessageBoxA(nullptr, "ConferenceNet start failed (WS/Audio/Opus)", "Error", MB_OK | MB_ICONERROR);
+        }
+    }
+    catch (const std::exception& e) {
+        MessageBoxA(nullptr, e.what(), "Exception", MB_OK | MB_ICONERROR);
+    }
+    catch (...) {
+        MessageBoxA(nullptr, "Unknown exception", "Exception", MB_OK | MB_ICONERROR);
+    }
+
 
     // Main loop
     bool done = false;
@@ -150,7 +167,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         //HRESULT hr = g_pSwapChain->Present(0, 0); // Present without vsync
         g_SwapChainOccluded = (hr == DXGI_STATUS_OCCLUDED);
     }
-
+    g_confNet.stop();
     release_blur_resources();
     // Cleanup
     ImGui_ImplDX11_Shutdown();
