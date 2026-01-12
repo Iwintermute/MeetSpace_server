@@ -1,53 +1,22 @@
-﻿#include "includes.h"
+﻿#include "core/cAppCore.h"
+#include <iostream>
 
-int main() {
-    using namespace Sys::Network;
-    using namespace Sys::Rtc;
-    using namespace Sys::Media;
+int main()
+{
+    Sys::cAppCore app;
 
-    // IoContext
-    cNetIoContext ioCtx;
-    ioCtx.fnInit();
-    ioCtx.fnStart();
+    const unsigned short wsPort = 9000;
+    const unsigned short httpPort = 8080;
 
-    //  HTTP сервер
-    cNetHttpServer httpServer(ioCtx.fnIo(), 8080);
-    httpServer.fnSetHealthFn([]() { return R"({"status":"ok"})"; });
-    httpServer.fnStart();
+    if (!app.fnInit(wsPort, httpPort)) {
+        std::cerr << "Failed to init server\n";
+        return 1;
+    }
 
-    // WebSocket сервер
-    cNetWebSocketServer wsServer(ioCtx.fnIo(), 9000);
-    wsServer.fnSetOnMessage([](const std::string& msg, void* session) {
-        std::cout << "[WS] message: " << msg << std::endl;
-        });
-    wsServer.fnStart();
+    std::cout << "Server running.\n";
+    std::cout << "WS:   ws://127.0.0.1:" << wsPort << "\n";
+    std::cout << "HTTP: http://127.0.0.1:" << httpPort << "/health\n";
 
-    // RTC Manager
-    cRtcManager rtcMgr([&wsServer](void* session, const std::string& sMsg) {
-        // Отправляем клиенту через WS
-        // std::cout << "[RTC->WS] " << sMsg << std::endl;
-        });
-    rtcMgr.fnInit();
-
-    // Аудио устройство
-    cMediaAudioDevice mic;
-    cMediaOpusEncoder opusEnc(48000, 1);
-
-    mic.fnSetCallback([&](const std::vector<int16_t>& samples) {
-        auto encoded = opusEnc.fnEncode(samples);
-        std::cout << "[Audio] Captured " << samples.size() * sizeof(int16_t)
-            << " bytes, encoded to " << encoded.size() << " bytes\n";
-        });
-
-    mic.fnStartCapture();
-
-    std::cout << "Server running... Press Enter to quit.\n";
-    std::cin.get();
-
-    mic.fnStopCapture();
-    ioCtx.fnStop();
-    httpServer.fnStop();
-    wsServer.fnStop();
-
+    app.fnRun();
     return 0;
 }

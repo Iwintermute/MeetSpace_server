@@ -76,7 +76,7 @@
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <IncludePath>$(SolutionDir)networkEDS\include;$(SolutionDir)networkEDS\include\portaudio;$(SolutionDir)networkEDS\include\opus;$(SolutionDir)networkEDS\include\srtp;C:\local\boost_1_89_0;$(IncludePath)</IncludePath>
+    <IncludePath>C:\Users\Пользователь\Desktop\opus-main\include;C:\Users\Пользователь\Desktop\portaudio-19.7.0\include;C:\Users\Пользователь\Desktop\openssl-openssl-3.6.0\include;C:\Users\Пользователь\Desktop\libsrtp-2.7.0\include;C:\local\boost_1_89_0;$(IncludePath)</IncludePath>
     <LibraryPath>$(SolutionDir)networkEDS\include\portaudio;$(SolutionDir)networkEDS\include\opus;$(SolutionDir)networkEDS\include\srtp;C:\local\boost_1_89_0\libs;$(BoostLibDir);$(LibraryPath)</LibraryPath>
     <ExternalIncludePath>$(ExternalIncludePath)</ExternalIncludePath>
   </PropertyGroup>
@@ -125,13 +125,13 @@
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <LanguageStandard_C>stdc17</LanguageStandard_C>
-      <AdditionalIncludeDirectories>$(ProjectDir)include;$(BoostIncludeDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>portaudio_static_x64.lib;opus.lib;srtp3.lib;libssl.lib;libcrypto.lib;ws2_32.lib;secur32.lib;crypt32.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <AdditionalLibraryDirectories>$(BoostLibDir);$(SolutionDir)networkEDS\include\portaudio;$(SolutionDir)networkEDS\include\opus;$(SolutionDir)networkEDS\include\srtp;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -153,6 +153,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="conference\cConferenceManager.cpp" />
     <ClCompile Include="core\cAppCore.cpp" />
     <ClCompile Include="crypto\cCryptoRtpProtector.cpp" />
     <ClCompile Include="eduspace_server.cpp" />
@@ -168,6 +169,7 @@
     <ClCompile Include="util\cLogger.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="conference\cConferenceManager.h" />
     <ClInclude Include="core\cAppCore.h" />
     <ClInclude Include="crypto\cCryptoRtpProtector.h" />
     <ClInclude Include="includes.h" />
@@ -188,8 +190,8 @@
     <None Include="packages.config" />
   </ItemGroup>
   <ItemGroup>
+    <Library Include="..\..\..\..\Users\Пользователь\Desktop\portaudio_static_x64.lib" />
     <Library Include="include\opus\opus.lib" />
-    <Library Include="include\portaudio\portaudio_static_x64.lib" />
     <Library Include="include\portaudio\portaudio_x64.lib" />
     <Library Include="include\srtp\srtp3.lib" />
   </ItemGroup>

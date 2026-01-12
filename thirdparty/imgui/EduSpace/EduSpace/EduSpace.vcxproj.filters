@@ -83,6 +83,21 @@
     <ClCompile Include="..\..\..\..\framework\conference_gui.cpp" />
     <ClCompile Include="..\..\..\..\framework\settings\conference_manager.cpp" />
     <ClCompile Include="..\..\..\..\framework\widgets\conference_widgets.cpp" />
+    <ClCompile Include="..\..\..\..\..\..\..\Users\Пользователь\Desktop\Новая папка (2)\cAudioIO.cpp">
+      <Filter>framework\media</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\..\..\..\..\Users\Пользователь\Desktop\Новая папка (2)\cConferenceNet.cpp">
+      <Filter>framework\net</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\..\..\..\..\Users\Пользователь\Desktop\Новая папка (2)\cRtcClientPeer.cpp">
+      <Filter>framework\rtc</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\..\..\..\..\Users\Пользователь\Desktop\Новая папка (2)\cWsClient.cpp">
+      <Filter>framework\net</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\..\..\..\..\Users\Пользователь\Desktop\Новая папка (2)\cOpusCodec.cpp">
+      <Filter>framework\media</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <Filter Include="thirdparty">
@@ -114,6 +129,15 @@
     </Filter>
     <Filter Include="framework\widgets">
       <UniqueIdentifier>{5dce1686-af54-4490-b0af-91f3d85e0a73}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="framework\net">
+      <UniqueIdentifier>{c139ba57-14bb-4334-a5a7-49c10c1789fa}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="framework\rtc">
+      <UniqueIdentifier>{2a911855-39c2-4c0a-99a6-494159a5700a}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="framework\media">
+      <UniqueIdentifier>{e3891817-70df-4b5c-82ab-b66a83eb672c}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
@@ -200,5 +224,25 @@
     <ClInclude Include="..\..\..\..\framework\headers\conference_state.h" />
     <ClInclude Include="..\..\..\..\framework\headers\conference_manager.h" />
     <ClInclude Include="..\..\..\..\framework\headers\conference_widgets.h" />
+    <ClInclude Include="..\..\..\..\..\..\..\Users\Пользователь\Desktop\Новая папка (2)\cAudioIO.h">
+      <Filter>framework\media</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\..\..\..\..\Users\Пользователь\Desktop\Новая папка (2)\cConferenceNet.h">
+      <Filter>framework\net</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\..\..\..\..\Users\Пользователь\Desktop\Новая папка (2)\cRtcClientPeer.h">
+      <Filter>framework\rtc</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\..\..\..\..\Users\Пользователь\Desktop\Новая папка (2)\cWsClient.h">
+      <Filter>framework\net</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\..\..\..\..\Users\Пользователь\Desktop\Новая папка (2)\cOpusCodec.h">
+      <Filter>framework\media</Filter>
+    </ClInclude>
+    <ClInclude Include="winfirst.h" />
+    <ClInclude Include="net_log.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="packages.config" />
   </ItemGroup>
 </Project>

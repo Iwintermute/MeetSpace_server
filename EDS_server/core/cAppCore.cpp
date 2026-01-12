@@ -1,58 +1,244 @@
 #include "cAppCore.h"
 #include "../util/cLogger.h"
 #include <iostream>
+#include <thread>
+#include "../rtc/cRtcPeer.h"
 
 namespace Sys {
 
     cAppCore::cAppCore() {}
     cAppCore::~cAppCore() { fnShutdown(); }
 
-    bool cAppCore::fnInit(unsigned short wsPort, unsigned short httpPort) {
+    bool cAppCore::fnInit(unsigned short wsPort, unsigned short httpPort)
+    {
         m_ioCtx.fnInit();
 
+        m_wsServer = std::make_unique<Network::cNetWebSocketServer>(m_ioCtx.fnIo(), wsPort);
+        m_httpServer = std::make_unique<Network::cNetHttpServer>(m_ioCtx.fnIo(), httpPort);
+
+        // RTC manager -> send signaling via WS
         m_rtcManager = std::make_shared<Rtc::cRtcManager>(
-            [this](void* session, const std::string& msg) {
-                if (m_wsServer) m_wsServer->fnSetOnMessage([msg](const std::string&, void*) {});
+            [this](void* session, const std::string& msg)
+            {
+                if (m_wsServer) m_wsServer->fnSendText(session, msg);
+            }
+        );
+        m_rtcManager->fnInit();
+
+        // RTC binary relay -> conference peers
+        m_rtcManager->fnSetOnPeerBinary([this](const std::string& fromPeer, const std::vector<uint8_t>& data)
+            {
+                auto peers = m_confMgr.fnGetPeersInSameConf(fromPeer);
+                for (const auto& peer : peers) {
+                    if (peer == fromPeer) continue;
+                    auto p = m_rtcManager->fnGetPeer(peer);
+                    if (p) p->fnSendBinary(data);
+                }
             });
 
-        m_wsServer = std::make_unique<Network::cNetWebSocketServer>(m_ioCtx.fnIo(), wsPort);
+        // WS callbacks
         m_wsServer->fnSetOnMessage([this](const std::string& msg, void* session) { fnOnWsMessage(msg, session); });
         m_wsServer->fnSetOnConnected([this](void* s) { fnOnWsConnected(s); });
         m_wsServer->fnSetOnDisconnected([this](void* s) { fnOnWsDisconnected(s); });
 
-        m_httpServer = std::make_unique<Network::cNetHttpServer>(m_ioCtx.fnIo(), httpPort);
+        // HTTP
         m_httpServer->fnSetHealthFn([]() { return R"({"status":"ok"})"; });
-        m_httpServer->fnSetMetricsFn([]() { return R"({"peers":20})"; });
-
-        m_mediaPipeline = std::make_unique<Media::cMediaPipeline>(m_rtcManager);
+        m_httpServer->fnSetMetricsFn([]() { return R"({"metrics":{"ok":1}})"; });
 
         return m_wsServer->fnStart() && m_httpServer->fnStart() && m_ioCtx.fnStart();
     }
 
-    void cAppCore::fnRun() {
+    void cAppCore::fnRun()
+    {
+        // тут можно сделать join потоков io_context, но у тебя loop — оставляю
         while (true) std::this_thread::sleep_for(std::chrono::seconds(1));
     }
 
-    void cAppCore::fnShutdown() {
-        if (m_wsServer) m_wsServer->fnStop();
+    void cAppCore::fnShutdown()
+    {
+        if (m_wsServer)   m_wsServer->fnStop();
         if (m_httpServer) m_httpServer->fnStop();
+        if (m_rtcManager) m_rtcManager->fnShutdown();
         m_ioCtx.fnStop();
     }
 
-    void cAppCore::fnOnWsMessage(const std::string& msg, void* session) {
+    void cAppCore::fnOnWsMessage(const std::string& msg, void* session)
+    {
         try {
             nlohmann::json j = nlohmann::json::parse(msg);
-            m_rtcManager->fnOnSignalingMessage(session, j);
+
+            const std::string type = j.value("type", "");
+            const std::string peerKey = j.value("peer", "");
+
+            // запомним peer->session чтобы можно было слать события другим
+            if (!peerKey.empty())
+                fnRememberPeerSession(peerKey, session);
+
+            // 1) conference команды
+            if (type == "conf_create" || type == "conf_join" || type == "conf_leave" || type == "conf_mic") {
+                fnHandleConferenceMsg(session, j);
+                return;
+            }
+
+            // 2) signaling команды
+            if (type.rfind("webrtc_", 0) == 0) {
+                if (m_rtcManager) m_rtcManager->fnOnSignalingMessage(session, j);
+                return;
+            }
+            std::cout << "[WS] <- " << msg << "\n";
+
+            // иначе игнор
         }
-        catch (...) {}
+        catch (...) {
+            // можно залогать msg если надо
+        }
     }
 
-    void cAppCore::fnOnWsConnected(void* session) {
+    void cAppCore::fnRememberPeerSession(const std::string& peerKey, void* session) {
+        std::lock_guard<std::mutex> lg(m_peerSessMtx);
+        m_peerSess[peerKey] = session;
+    }
+    void cAppCore::fnForgetPeerSession(const std::string& peerKey) {
+        std::lock_guard<std::mutex> lg(m_peerSessMtx);
+        m_peerSess.erase(peerKey);
+    }
+    void* cAppCore::fnGetSessionByPeer(const std::string& peerKey) {
+        std::lock_guard<std::mutex> lg(m_peerSessMtx);
+        auto it = m_peerSess.find(peerKey);
+        return it == m_peerSess.end() ? nullptr : it->second;
+    }
+    void cAppCore::fnHandleConferenceMsg(void* session, const nlohmann::json& j)
+    {
+        const std::string type = j.value("type", "");
+
+        if (type == "conf_create") {
+            const std::string title = j.value("title", "Conference");
+            const std::string peer = j.value("peer", "peer_unknown");
+
+            auto [confId, invite] = m_confMgr.fnCreateConference(title);
+
+            // создателя сразу добавляем
+            m_confMgr.fnJoinByInvite(invite, peer);
+
+            nlohmann::json resp{
+                {"type","conf_created"},
+                {"confId", confId},
+                {"invite", invite},
+                {"peer", peer}
+            };
+            if (m_wsServer) m_wsServer->fnSendText(session, resp.dump());
+            return;
+        }
+
+        if (type == "conf_join") {
+            const std::string invite = j.value("invite", "");
+            const std::string peer = j.value("peer", "peer_unknown");
+
+            auto confId = m_confMgr.fnJoinByInvite(invite, peer);
+
+            if (!confId) {
+                nlohmann::json resp = {
+                    {"type","conf_joined"},
+                    {"ok",false},
+                    {"reason","bad_invite"},
+                    {"peer",peer}
+                };
+                if (m_wsServer) m_wsServer->fnSendText(session, resp.dump());
+                return;
+            }
+
+            // peers list (включая joiner)
+            auto peers = m_confMgr.fnGetPeersInSameConf(peer);
+
+            // ACK joiner
+            nlohmann::json resp = {
+                {"type","conf_joined"},
+                {"ok",true},
+                {"confId",*confId},
+                {"peer",peer},
+                {"peers", peers}
+            };
+            if (m_wsServer) m_wsServer->fnSendText(session, resp.dump());
+
+            // notify others
+            nlohmann::json ev = {
+                {"type","conf_peer_joined"},
+                {"confId",*confId},
+                {"peer",peer}
+            };
+            for (const auto& p : peers) {
+                if (p == peer) continue;
+                if (auto s = fnGetSessionByPeer(p)) m_wsServer->fnSendText(s, ev.dump());
+            }
+            return;
+        }
+
+        if (type == "conf_leave") {
+            const std::string peer = j.value("peer", "");
+            if (peer.empty()) return;
+
+            auto peersBefore = m_confMgr.fnGetPeersInSameConf(peer);
+
+            m_confMgr.fnLeave(peer);
+            fnForgetPeerSession(peer);
+
+            nlohmann::json ev = { {"type","conf_peer_left"}, {"peer",peer} };
+            for (const auto& p : peersBefore) {
+                if (p == peer) continue;
+                if (auto s = fnGetSessionByPeer(p)) m_wsServer->fnSendText(s, ev.dump());
+            }
+            return;
+        }
+
+        if (type == "conf_mic") {
+            const std::string peer = j.value("peer", "");
+            const bool enabled = j.value("enabled", true);
+            if (peer.empty()) return;
+
+            auto peers = m_confMgr.fnGetPeersInSameConf(peer);
+
+            nlohmann::json ev = { {"type","conf_peer_mic"}, {"peer",peer}, {"enabled",enabled} };
+            for (const auto& p : peers) {
+                if (p == peer) continue;
+                if (auto s = fnGetSessionByPeer(p)) m_wsServer->fnSendText(s, ev.dump());
+            }
+            return;
+        }
+    }
+
+
+    void cAppCore::fnOnWsConnected(void*)
+    {
         Sys::cLogger::fnLog(Sys::cLogger::Level::Info, "WS Connected");
     }
 
-    void cAppCore::fnOnWsDisconnected(void* session) {
+    void cAppCore::fnOnWsDisconnected(void* session)
+    {
         Sys::cLogger::fnLog(Sys::cLogger::Level::Info, "WS Disconnected");
+
+       
+        Sys::cLogger::fnLog(Sys::cLogger::Level::Info, "WS Disconnected");
+
+        if (!m_rtcManager) return;
+
+        auto peerKeys = m_rtcManager->fnOnWsDisconnected(session);
+        for (const auto& pk : peerKeys)
+        {
+            auto peersBefore = m_confMgr.fnGetPeersInSameConf(pk);
+
+            // убираем из конфы
+            m_confMgr.fnLeave(pk);
+
+            // убираем связь peer->session
+            fnForgetPeerSession(pk);
+
+            // notify others
+            nlohmann::json ev = { {"type","conf_peer_left"}, {"peer",pk} };
+            for (const auto& p : peersBefore) {
+                if (p == pk) continue;
+                if (auto s = fnGetSessionByPeer(p)) m_wsServer->fnSendText(s, ev.dump());
+            }
+        }
     }
 
 } // namespace Sys

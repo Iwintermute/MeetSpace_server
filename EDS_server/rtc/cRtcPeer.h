@@ -1,50 +1,55 @@
 #pragma once
-
 #include <rtc/rtc.hpp>
 #include <memory>
 #include <string>
 #include <functional>
-#include <nlohmann/json.hpp>
+#include <vector>
+#include <mutex>
 
-namespace Sys {
-    namespace Rtc {
+namespace Sys::Rtc {
 
-        class cRtcPeer : public std::enable_shared_from_this<cRtcPeer>
-        {
-        public:
-            using tOnLocalDescription = std::function<void(const std::string&)>;
-            using tOnLocalCandidate = std::function<void(const std::string&, const std::string&)>;
-            using tOnMessage = std::function<void(const std::string&)>;
-            using tOnStateChanged = std::function<void(const rtc::PeerConnection::State)>;
+    class cRtcPeer : public std::enable_shared_from_this<cRtcPeer> {
+    public:
+        using tOnLocalDescription = std::function<void(const rtc::Description&)>;
+        using tOnLocalCandidate = std::function<void(const rtc::Candidate&)>;
+        using tOnBinary = std::function<void(const std::vector<uint8_t>&)>;
+        using tOnState = std::function<void(rtc::PeerConnection::State)>;
 
-            cRtcPeer();
-            ~cRtcPeer();
+        cRtcPeer();
+        ~cRtcPeer();
 
-            void fnSetOnLocalDescription(tOnLocalDescription fn) { m_fnOnLocalDescription = std::move(fn); }
-            void fnSetOnLocalCandidate(tOnLocalCandidate fn) { m_fnOnLocalCandidate = std::move(fn); }
-            void fnSetOnMessage(tOnMessage fn) { m_fnOnMessage = std::move(fn); }
-            void fnSetOnStateChanged(tOnStateChanged fn) { m_fnOnStateChanged = std::move(fn); }
+        void fnSetOnLocalDescription(tOnLocalDescription cb) { m_onLocalDesc = std::move(cb); }
+        void fnSetOnLocalCandidate(tOnLocalCandidate cb) { m_onLocalCand = std::move(cb); }
+        void fnSetOnBinary(tOnBinary cb) { m_onBinary = std::move(cb); }
+        void fnSetOnState(tOnState cb) { m_onState = std::move(cb); }
 
-            void fnCreateOffer();
-            void fnSetRemoteDescription(const std::string& sSdp, const std::string& sType);
-            void fnAddRemoteCandidate(const std::string& sMid, const std::string& sCandidate);
-            void fnSend(const std::string& sMsg);
+        // signaling
+        void fnApplyRemoteOffer(const std::string& sdpOffer);
+        void fnApplyRemoteIce(const std::string& mid, const std::string& cand);
 
-            // For cRtcManager compatibility
-            bool fnInit();
-            bool fnHandleOffer(const std::string& sOffer, std::string& sAnswer);
-            void fnAddRemoteIce(const std::string& sMid, const std::string& sCandidate);
-            void fnClose();
+        // data
+        void fnSendBinary(const std::vector<uint8_t>& data);
 
-        private:
-            std::shared_ptr<rtc::PeerConnection> m_pPc;
-            std::shared_ptr<rtc::DataChannel>    m_pDc;
+        // lifecycle
+        void fnClose();
+        bool fnIsReady() const;
 
-            tOnLocalDescription m_fnOnLocalDescription;
-            tOnLocalCandidate   m_fnOnLocalCandidate;
-            tOnMessage          m_fnOnMessage;
-            tOnStateChanged     m_fnOnStateChanged;
-        };
+    private:
+        void fnBindDataChannel(std::shared_ptr<rtc::DataChannel> dc);
+        void fnEnsureDataChannel(); // если клиент не создаст DC — создадим сами
 
-    } // namespace Rtc
-} // namespace Sys
+    private:
+        std::shared_ptr<rtc::PeerConnection> m_pc;
+        std::shared_ptr<rtc::DataChannel>    m_dc;
+
+        tOnLocalDescription m_onLocalDesc;
+        tOnLocalCandidate   m_onLocalCand;
+        tOnBinary           m_onBinary;
+        tOnState            m_onState;
+
+        mutable std::mutex m_mtx;
+        bool m_closed{ false };
+        bool m_dcEnsured{ false };
+    };
+
+} // namespace Sys::Rtc

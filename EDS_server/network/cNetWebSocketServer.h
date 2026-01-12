@@ -2,59 +2,77 @@
 
 #include <boost/asio.hpp>
 #include <boost/beast.hpp>
+
 #include <functional>
 #include <memory>
 #include <string>
+#include <unordered_map>
+#include <mutex>
+#include <deque>
 
-namespace Sys {
-    namespace Network {
+namespace Sys::Network {
 
-        class cNetWebSocketServer {
-        public:
-            using tOnMessage = std::function<void(const std::string&, void*)>;
-            using tOnConnected = std::function<void(void*)>;
-            using tOnDisconnected = std::function<void(void*)>;
+    class cNetWebSocketServer {
+    public:
+        using tOnMessage = std::function<void(const std::string&, void*)>;
+        using tOnConnected = std::function<void(void*)>;
+        using tOnDisconnected = std::function<void(void*)>;
 
-            cNetWebSocketServer(boost::asio::io_context& ctx, unsigned short port);
-            ~cNetWebSocketServer();
+        cNetWebSocketServer(boost::asio::io_context& ctx, unsigned short port);
+        ~cNetWebSocketServer();
 
-            void fnSetOnMessage(tOnMessage fn) { m_fnOnMessage = std::move(fn); }
-            void fnSetOnConnected(tOnConnected fn) { m_fnOnConnected = std::move(fn); }
-            void fnSetOnDisconnected(tOnDisconnected fn) { m_fnOnDisconnected = std::move(fn); }
+        void fnSetOnMessage(tOnMessage fn) { m_fnOnMessage = std::move(fn); }
+        void fnSetOnConnected(tOnConnected fn) { m_fnOnConnected = std::move(fn); }
+        void fnSetOnDisconnected(tOnDisconnected fn) { m_fnOnDisconnected = std::move(fn); }
 
-            bool fnStart();
-            void fnStop();
+        bool fnStart();
+        void fnStop();
 
-        private:
-            struct sWsSession : public std::enable_shared_from_this<sWsSession> {
-                using tcp = boost::asio::ip::tcp;
-                using websocket = boost::beast::websocket::stream<tcp::socket>;
+        // send text to конкретной сессии (void* из callbacks)
+        bool fnSendText(void* pSession, const std::string& txt);
 
-                sWsSession(tcp::socket&& sock, cNetWebSocketServer* owner);
-                ~sWsSession();
+    private:
+        struct sWsSession : public std::enable_shared_from_this<sWsSession> {
+            using tcp = boost::asio::ip::tcp;
+            using ws_stream = boost::beast::websocket::stream<tcp::socket>;
 
-                void fnStart();
-                void fnDoRead();
-                void fnSendText(const std::string& txt);
+            sWsSession(tcp::socket&& sock, cNetWebSocketServer* owner);
 
-                websocket            m_ws;
-                boost::beast::flat_buffer m_buffer;
+            void fnStart();
+            void fnDoRead();
 
-                cNetWebSocketServer* m_owner;
-                bool                 m_bOpen;
-            };
+            void fnSendTextQueued(std::string txt);
+            void fnDoWrite();
 
-            void fnDoAccept();
+            void fnClose();
 
-            boost::asio::io_context& m_ctx;
-            unsigned short                             m_port;
-            std::unique_ptr<boost::asio::ip::tcp::acceptor> m_acceptor;
-            bool                                        m_running;
+            ws_stream                 m_ws;
+            boost::beast::flat_buffer m_buffer;
+            cNetWebSocketServer* m_owner{ nullptr };
 
-            tOnMessage       m_fnOnMessage;
-            tOnConnected     m_fnOnConnected;
-            tOnDisconnected  m_fnOnDisconnected;
+            // очередь отправки (чтобы не было одновременных async_write)
+            std::deque<std::string> m_outQ;
+            bool m_open{ false };
+            bool m_writing{ false };
         };
 
-    } // namespace Network
-} // namespace Sys
+        void fnDoAccept();
+        void fnRegisterSession(void* key, std::shared_ptr<sWsSession> s);
+        void fnUnregisterSession(void* key);
+
+    private:
+        boost::asio::io_context& m_ctx;
+        unsigned short m_port{ 0 };
+
+        std::unique_ptr<boost::asio::ip::tcp::acceptor> m_acceptor;
+        bool m_running{ false };
+
+        tOnMessage      m_fnOnMessage;
+        tOnConnected    m_fnOnConnected;
+        tOnDisconnected m_fnOnDisconnected;
+
+        std::mutex m_sessionsMtx;
+        std::unordered_map<void*, std::weak_ptr<sWsSession>> m_sessions;
+    };
+
+} // namespace Sys::Network

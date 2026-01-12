@@ -1,46 +1,74 @@
 #include "cMediaOpusEncDec.h"
-#include <iostream>
 
 namespace Sys {
     namespace Media {
 
-        cMediaOpusEncoder::cMediaOpusEncoder(int sampleRate, int channels) {
+        cMediaOpusEncoder::cMediaOpusEncoder(int sampleRate, int channels)
+            : m_sr(sampleRate), m_ch(channels)
+        {
             int error;
-            m_encoder = opus_encoder_create(sampleRate, channels, OPUS_APPLICATION_VOIP, &error);
+            m_encoder = opus_encoder_create(m_sr, m_ch, OPUS_APPLICATION_VOIP, &error);
             if (error != OPUS_OK) m_encoder = nullptr;
+
+            if (m_encoder) {
+                opus_encoder_ctl(m_encoder, OPUS_SET_BITRATE(24000));
+                opus_encoder_ctl(m_encoder, OPUS_SET_COMPLEXITY(5));
+                opus_encoder_ctl(m_encoder, OPUS_SET_SIGNAL(OPUS_SIGNAL_VOICE));
+                opus_encoder_ctl(m_encoder, OPUS_SET_INBAND_FEC(1));
+                opus_encoder_ctl(m_encoder, OPUS_SET_PACKET_LOSS_PERC(10));
+                opus_encoder_ctl(m_encoder, OPUS_SET_DTX(1));
+            }
         }
 
-        cMediaOpusEncoder::~cMediaOpusEncoder() {
+        cMediaOpusEncoder::~cMediaOpusEncoder()
+        {
             if (m_encoder) opus_encoder_destroy(m_encoder);
         }
 
-        std::vector<uint8_t> cMediaOpusEncoder::fnEncode(const std::vector<int16_t>& pcm) {
-            std::vector<uint8_t> out(4000);
+        std::vector<uint8_t> cMediaOpusEncoder::fnEncode(const std::vector<int16_t>& interleavedPcm, int frames)
+        {
             if (!m_encoder) return {};
-            int len = opus_encode(m_encoder, pcm.data(), static_cast<int>(pcm.size()), out.data(), static_cast<opus_int32>(out.size()));
+            if (frames <= 0) return {};
+            if ((int)interleavedPcm.size() < frames * m_ch) return {};
+
+            std::vector<uint8_t> out(4000);
+
+            // frames = frames per channel
+            int len = opus_encode(m_encoder, interleavedPcm.data(), frames, out.data(), (opus_int32)out.size());
             if (len < 0) return {};
-            out.resize(len);
+
+            out.resize((size_t)len);
             return out;
         }
 
-        cMediaOpusDecoder::cMediaOpusDecoder(int sampleRate, int channels) {
+        cMediaOpusDecoder::cMediaOpusDecoder(int sampleRate, int channels)
+            : m_sr(sampleRate), m_ch(channels)
+        {
             int error;
-            m_decoder = opus_decoder_create(sampleRate, channels, &error);
+            m_decoder = opus_decoder_create(m_sr, m_ch, &error);
             if (error != OPUS_OK) m_decoder = nullptr;
         }
 
-        cMediaOpusDecoder::~cMediaOpusDecoder() {
+        cMediaOpusDecoder::~cMediaOpusDecoder()
+        {
             if (m_decoder) opus_decoder_destroy(m_decoder);
         }
 
-        std::vector<int16_t> cMediaOpusDecoder::fnDecode(const std::vector<uint8_t>& data) {
-            std::vector<int16_t> pcm(480 * 2);
+        std::vector<int16_t> cMediaOpusDecoder::fnDecode(const std::vector<uint8_t>& data, int maxFrames)
+        {
             if (!m_decoder) return {};
-            int len = opus_decode(m_decoder, data.data(), static_cast<opus_int32>(data.size()), pcm.data(), static_cast<int>(pcm.size()), 0);
-            if (len < 0) return {};
-            pcm.resize(len);
+            if (data.empty()) return {};
+
+            std::vector<int16_t> pcm((size_t)maxFrames * (size_t)m_ch);
+
+            // maxFrames = frames per channel
+            int frames = opus_decode(m_decoder, data.data(), (opus_int32)data.size(),
+                pcm.data(), maxFrames, 0);
+            if (frames < 0) return {};
+
+            pcm.resize((size_t)frames * (size_t)m_ch);
             return pcm;
         }
 
-    } // namespace Media
-} // namespace Sys
+    } // Media
+} // Sys

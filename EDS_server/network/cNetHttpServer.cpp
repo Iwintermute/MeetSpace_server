@@ -56,42 +56,52 @@ namespace Sys {
         {
             if (!m_bRunning || !m_pAcceptor) return;
 
-            m_pAcceptor->async_accept([this](boost::system::error_code ec, tcp::socket socket) {
-                if (!ec) {
-                    auto pStream = std::make_shared<boost::beast::tcp_stream>(std::move(socket));
-                    auto pBuffer = std::make_shared<boost::beast::flat_buffer>();
+            m_pAcceptor->async_accept(
+                [this](boost::system::error_code ec, tcp::socket socket)
+                {
+                    if (ec) {
+                        boost::asio::post(m_rIoCtx, [this]() { fnDoAccept(); });
+                        return;
+                    }
 
-                    http::request<http::string_body> req;
-                    http::async_read(*pStream, *pBuffer, req,
-                        [this, pStream, pBuffer, req = std::move(req)](boost::system::error_code ec, std::size_t) mutable {
-                            http::response<http::string_body> res{ http::status::ok, 11 };
-                            res.set(http::field::server, "cNetHttpServer");
-                            res.set(http::field::content_type, "application/json");
-                            res.keep_alive(false);
+                    auto stream = std::make_shared<boost::beast::tcp_stream>(std::move(socket));
+                    auto buffer = std::make_shared<boost::beast::flat_buffer>();
+                    auto req = std::make_shared<http::request<http::string_body>>();
 
-                            std::string target = std::string(req.target());
-                            if (target == "/health")
-                                res.body() = m_fnHealth ? m_fnHealth() : R"({"status":"ok"})";
-                            else if (target == "/metrics")
-                                res.body() = m_fnMetrics ? m_fnMetrics() : R"({"metrics":{}})";
-                            else {
-                                res.result(http::status::not_found);
-                                res.body() = R"({"error":"not_found"})";
+                    http::async_read(*stream, *buffer, *req,
+                        [this, stream, buffer, req](boost::system::error_code ec2, std::size_t) mutable
+                        {
+                            if (ec2) {
+                                // клиент мог разорвать соединение — просто выходим
+                                return;
                             }
-                            res.prepare_payload();
 
-                            http::async_write(*pStream, res,
-                                [pStream](boost::system::error_code ec2, std::size_t) {
+                            auto res = std::make_shared<http::response<http::string_body>>(http::status::ok, req->version());
+                            res->set(http::field::server, "cNetHttpServer");
+                            res->set(http::field::content_type, "application/json");
+                            res->keep_alive(false);
+
+                            std::string target = std::string(req->target());
+                            if (target == "/health")
+                                res->body() = m_fnHealth ? m_fnHealth() : R"({"status":"ok"})";
+                            else if (target == "/metrics")
+                                res->body() = m_fnMetrics ? m_fnMetrics() : R"({"metrics":{}})";
+                            else {
+                                res->result(http::status::not_found);
+                                res->body() = R"({"error":"not_found"})";
+                            }
+                            res->prepare_payload();
+
+                            http::async_write(*stream, *res,
+                                [stream, res](boost::system::error_code, std::size_t)
+                                {
                                     boost::system::error_code ec3;
-                                    try { pStream->socket().shutdown(tcp::socket::shutdown_send, ec3); }
-                                    catch (...) {}
+                                    stream->socket().shutdown(tcp::socket::shutdown_send, ec3);
                                 });
                         });
-                }
 
-                boost::asio::post(m_rIoCtx, [this]() { fnDoAccept(); });
+                    boost::asio::post(m_rIoCtx, [this]() { fnDoAccept(); });
                 });
         }
-
     } // namespace Network
 } // namespace Sys
