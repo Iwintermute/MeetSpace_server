@@ -76,13 +76,13 @@
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <IncludePath>C:\Users\Пользователь\Desktop\opus-main\include;C:\Users\Пользователь\Desktop\portaudio-19.7.0\include;C:\Users\Пользователь\Desktop\openssl-openssl-3.6.0\include;C:\Users\Пользователь\Desktop\libsrtp-2.7.0\include;C:\local\boost_1_89_0;$(IncludePath)</IncludePath>
-    <LibraryPath>$(SolutionDir)networkEDS\include\portaudio;$(SolutionDir)networkEDS\include\opus;$(SolutionDir)networkEDS\include\srtp;C:\local\boost_1_89_0\libs;$(BoostLibDir);$(LibraryPath)</LibraryPath>
+    <IncludePath>C:\Users\Пользователь\Desktop\openssl-openssl-3.6.0\include;C:\local\boost_1_89_0;$(IncludePath)</IncludePath>
+    <LibraryPath>$(SolutionDir)thirdparty\portaudio;$(SolutionDir)thirdparty\opus;$(SolutionDir)thirdparty\srtp;C:\local\boost_1_89_0\libs;$(BoostLibDir);$(LibraryPath)</LibraryPath>
     <ExternalIncludePath>$(ExternalIncludePath)</ExternalIncludePath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-    <IncludePath>$(SolutionDir)networkEDS\include;$(SolutionDir)networkEDS\include\portaudio;$(SolutionDir)networkEDS\include\opus;$(SolutionDir)networkEDS\include\srtp;$(BoostIncludeDir);$(IncludePath)</IncludePath>
-    <LibraryPath>$(SolutionDir)networkEDS\include\portaudio;$(SolutionDir)networkEDS\include\opus;$(SolutionDir)networkEDS\include\srtp;$(BoostLibDir);$(LibraryPath)</LibraryPath>
+    <IncludePath>$(SolutionDir)networkEDS\include;$(SolutionDir)thirdparty\portaudio;$(SolutionDir)thirdparty\opus;$(SolutionDir)thirdparty\srtp;$(BoostIncludeDir);$(IncludePath)</IncludePath>
+    <LibraryPath>$(SolutionDir)thirdparty\portaudio;$(SolutionDir)thirdparty\opus;$(SolutionDir)thirdparty\srtp;$(BoostLibDir);$(LibraryPath)</LibraryPath>
     <ExternalIncludePath>$(ExternalIncludePath)</ExternalIncludePath>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
@@ -149,7 +149,7 @@
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalDependencies>portaudio_static_x64.lib;opus.lib;srtp3.lib;libssl.lib;libcrypto.lib;ws2_32.lib;secur32.lib;crypt32.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <AdditionalLibraryDirectories>$(BoostLibDir);$(SolutionDir)networkEDS\include\portaudio;$(SolutionDir)networkEDS\include\opus;$(SolutionDir)networkEDS\include\srtp;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>$(BoostLibDir);$(SolutionDir)thirdparty\portaudio;$(SolutionDir)thirdparty\opus;$(SolutionDir)thirdparty\srtp;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
@@ -182,18 +182,18 @@
     <ClInclude Include="network\cNetWebSocketServer.h" />
     <ClInclude Include="rtc\cRtcManager.h" />
     <ClInclude Include="rtc\cRtcPeer.h" />
-    <ClInclude Include="include\nlohmann\json.hpp" />
+    <ClInclude Include="nlohmann\json.hpp" />
     <ClInclude Include="util\cLogger.h" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="include\portaudio\portaudio_x64.dll" />
+    <None Include="portaudio\portaudio_x64.dll" />
     <None Include="packages.config" />
   </ItemGroup>
   <ItemGroup>
-    <Library Include="..\..\..\..\Users\Пользователь\Desktop\portaudio_static_x64.lib" />
-    <Library Include="include\opus\opus.lib" />
-    <Library Include="include\portaudio\portaudio_x64.lib" />
-    <Library Include="include\srtp\srtp3.lib" />
+    <Library Include="$(SolutionDir)thirdparty\portaudio\portaudio_static_x64.lib" />
+    <Library Include="opus\opus.lib" />
+    <Library Include="portaudio\portaudio_x64.lib" />
+    <Library Include="srtp\srtp3.lib" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
