@@ -95,7 +95,7 @@
     <ClInclude Include="rtc\cRtcPeer.h">
       <Filter>Файлы заголовков</Filter>
     </ClInclude>
-    <ClInclude Include="include\nlohmann\json.hpp">
+    <ClInclude Include="nlohmann\json.hpp">
       <Filter>Файлы заголовков</Filter>
     </ClInclude>
     <ClInclude Include="util\cLogger.h">
@@ -106,13 +106,13 @@
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <Library Include="include\opus\opus.lib" />
-    <Library Include="include\portaudio\portaudio_x64.lib" />
-    <Library Include="include\srtp\srtp3.lib" />
-    <Library Include="..\..\..\..\Users\Пользователь\Desktop\portaudio_static_x64.lib" />
+    <Library Include="opus\opus.lib" />
+    <Library Include="portaudio\portaudio_x64.lib" />
+    <Library Include="srtp\srtp3.lib" />
+    <Library Include="$(SolutionDir)thirdparty\portaudio\portaudio_static_x64.lib" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="include\portaudio\portaudio_x64.dll" />
+    <None Include="portaudio\portaudio_x64.dll" />
     <None Include="packages.config" />
   </ItemGroup>
 </Project>
