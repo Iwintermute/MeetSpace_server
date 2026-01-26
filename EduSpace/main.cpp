@@ -6,10 +6,10 @@
 // - Documentation        https://dearimgui.com/docs (same as your local docs/ folder).
 // - Introduction, links and more at the top of imgui.cpp
 
-#include "../../framework/headers/includes.h"
-#include "../../framework/data/fonts.h"
-#include "../../framework/data/images.h"
-#include "../../framework/headers/blur.h"
+#include "../framework/headers/includes.h"
+#include "../framework/data/fonts.h"
+#include "../framework/data/images.h"
+#include "../framework/headers/blur.h"
 #include "imgui.h"
 #include "imgui_impl_win32.h"
 #include "imgui_impl_dx11.h"

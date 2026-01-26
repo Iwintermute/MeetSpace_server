@@ -43,11 +43,11 @@
     <ClCompile Include="..\..\framework\widgets\notify.cpp" />
     <ClCompile Include="..\..\framework\widgets\textfield.cpp" />
     <ClCompile Include="..\..\framework\widgets\window.cpp" />
-    <ClCompile Include="..\..\backends\imgui_impl_dx10.cpp" />
-    <ClCompile Include="..\..\backends\imgui_impl_dx11.cpp" />
-    <ClCompile Include="..\..\backends\imgui_impl_dx12.cpp" />
-    <ClCompile Include="..\..\backends\imgui_impl_dx9.cpp" />
-    <ClCompile Include="..\..\backends\imgui_impl_win32.cpp" />
+    <ClCompile Include="..\thirdparty\imgui\backends\imgui_impl_dx10.cpp" />
+    <ClCompile Include="..\thirdparty\imgui\backends\imgui_impl_dx11.cpp" />
+    <ClCompile Include="..\thirdparty\imgui\backends\imgui_impl_dx12.cpp" />
+    <ClCompile Include="..\thirdparty\imgui\backends\imgui_impl_dx9.cpp" />
+    <ClCompile Include="..\thirdparty\imgui\backends\imgui_impl_win32.cpp" />
     <ClCompile Include="..\..\imgui.cpp" />
     <ClCompile Include="..\..\imgui_draw.cpp" />
     <ClCompile Include="..\..\imgui_freetype.cpp" />
@@ -83,15 +83,15 @@
     <ClInclude Include="..\..\framework\settings\colors.h" />
     <ClInclude Include="..\..\framework\settings\elements.h" />
     <ClInclude Include="..\..\framework\settings\variables.h" />
-    <ClInclude Include="..\..\backends\imgui_impl_dx10.h" />
-    <ClInclude Include="..\..\backends\imgui_impl_dx11.h" />
-    <ClInclude Include="..\..\backends\imgui_impl_dx12.h" />
-    <ClInclude Include="..\..\backends\imgui_impl_dx9.h" />
-    <ClInclude Include="..\..\backends\imgui_impl_win32.h" />
-    <ClInclude Include="..\..\imconfig.h" />
-    <ClInclude Include="..\..\imgui.h" />
-    <ClInclude Include="..\..\imgui_freetype.h" />
-    <ClInclude Include="..\..\imgui_internal.h" />
+    <ClInclude Include="..\thirdparty\imgui\backends\imgui_impl_dx10.h" />
+    <ClInclude Include="..\thirdparty\imgui\backends\imgui_impl_dx11.h" />
+    <ClInclude Include="..\thirdparty\imgui\backends\imgui_impl_dx12.h" />
+    <ClInclude Include="..\thirdparty\imgui\backends\imgui_impl_dx9.h" />
+    <ClInclude Include="..\thirdparty\imgui\backends\imgui_impl_win32.h" />
+    <ClInclude Include="..\thirdparty\imgui\imconfig.h" />
+    <ClInclude Include="..\thirdparty\imgui\imgui.h" />
+    <ClInclude Include="..\thirdparty\imgui\imgui_freetype.h" />
+    <ClInclude Include="..\thirdparty\imgui\imgui_internal.h" />
     <ClInclude Include="net_log.h" />
     <ClInclude Include="winfirst.h" />
   </ItemGroup>
@@ -170,7 +170,7 @@
     <ClCompile>
       <WarningLevel>Level4</WarningLevel>
       <Optimization>Disabled</Optimization>
-      <AdditionalIncludeDirectories>..\..;..\..\backends;%(AdditionalIncludeDirectories);</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\thirdparty\imgui\;..\thirdparty\imgui\backends;%(AdditionalIncludeDirectories);</AdditionalIncludeDirectories>
       <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
@@ -184,7 +184,7 @@
     <ClCompile>
       <WarningLevel>Level4</WarningLevel>
       <Optimization>Disabled</Optimization>
-      <AdditionalIncludeDirectories>..\..;..\..\backends;%(AdditionalIncludeDirectories);</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\thirdparty\imgui\;..\thirdparty\imgui\backends;%(AdditionalIncludeDirectories);</AdditionalIncludeDirectories>
       <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <LanguageStandard>stdcpp20</LanguageStandard>
@@ -203,7 +203,7 @@
       <Optimization>MaxSpeed</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
-      <AdditionalIncludeDirectories>..\..;..\..\backends;%(AdditionalIncludeDirectories);</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\thirdparty\imgui\;..\thirdparty\imgui\backends;%(AdditionalIncludeDirectories);</AdditionalIncludeDirectories>
       <BufferSecurityCheck>false</BufferSecurityCheck>
       <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
@@ -223,7 +223,7 @@ winmm.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <Optimization>MaxSpeed</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
-      <AdditionalIncludeDirectories>..\..;..\..\backends;%(AdditionalIncludeDirectories);</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\thirdparty\imgui\;..\thirdparty\imgui\backends;%(AdditionalIncludeDirectories);</AdditionalIncludeDirectories>
       <BufferSecurityCheck>false</BufferSecurityCheck>
       <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
       <LanguageStandard>stdcpp20</LanguageStandard>
@@ -240,12 +240,12 @@ winmm.lib;%(AdditionalDependencies)</AdditionalDependencies>
   </ItemDefinitionGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
-    <Import Project="..\..\..\..\packages\libdatachannel.0.22.6\build\native\libdatachannel.targets" Condition="Exists('..\..\..\..\packages\libdatachannel.0.22.6\build\native\libdatachannel.targets')" />
+    <Import Project="..\packages\libdatachannel.0.22.6\build\native\libdatachannel.targets" Condition="Exists('..\packages\libdatachannel.0.22.6\build\native\libdatachannel.targets')" />
   </ImportGroup>
   <Target Name="EnsureNuGetPackageBuildImports" BeforeTargets="PrepareForBuild">
     <PropertyGroup>
       <ErrorText>Данный проект ссылается на пакеты NuGet, отсутствующие на этом компьютере. Используйте восстановление пакетов NuGet, чтобы скачать их.  Дополнительную информацию см. по адресу: http://go.microsoft.com/fwlink/?LinkID=322105. Отсутствует следующий файл: {0}.</ErrorText>
     </PropertyGroup>
-    <Error Condition="!Exists('..\..\..\..\packages\libdatachannel.0.22.6\build\native\libdatachannel.targets')" Text="$([System.String]::Format('$(ErrorText)', '..\..\..\..\packages\libdatachannel.0.22.6\build\native\libdatachannel.targets'))" />
+    <Error Condition="!Exists('..\packages\libdatachannel.0.22.6\build\native\libdatachannel.targets')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\libdatachannel.0.22.6\build\native\libdatachannel.targets'))" />
   </Target>
 </Project>

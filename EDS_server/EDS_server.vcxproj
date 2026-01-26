@@ -29,7 +29,7 @@
     <BoostRoot Condition="'$(BoostRoot)' == '' and '$(BOOST_ROOT)' != ''">$(BOOST_ROOT)</BoostRoot>
     <BoostRoot Condition="'$(BoostRoot)' == ''">C:\local\boost_1_89_0</BoostRoot>
     <BoostIncludeDir Condition="'$(BoostIncludeDir)' == '' and '$(BOOST_INCLUDEDIR)' != ''">$(BOOST_INCLUDEDIR)</BoostIncludeDir>
-    <BoostIncludeDir Condition="'$(BoostIncludeDir)' == '' and Exists('$(BoostRoot)\\include')">$(BoostRoot)\include</BoostIncludeDir>
+    <BoostIncludeDir Condition="'$(BoostIncludeDir)' == '' and Exists('$(BoostRoot)\include')">$(BoostRoot)\include</BoostIncludeDir>
     <BoostIncludeDir Condition="'$(BoostIncludeDir)' == ''">$(BoostRoot)</BoostIncludeDir>
     <BoostLibDir Condition="'$(BoostLibDir)' == '' and '$(BOOST_LIBRARYDIR)' != ''">$(BOOST_LIBRARYDIR)</BoostLibDir>
     <BoostLibDir Condition="'$(BoostLibDir)' == ''">$(BoostRoot)\lib</BoostLibDir>
@@ -76,7 +76,7 @@
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <IncludePath>C:\Users\Пользователь\Desktop\openssl-openssl-3.6.0\include;C:\local\boost_1_89_0;$(IncludePath)</IncludePath>
+    <IncludePath>C:\Users\Пользователь\Desktop\openssl-openssl-3.6.0\include;C:\local\boost_1_89_0;$(SolutionDir)thirdparty\opus;$(IncludePath)</IncludePath>
     <LibraryPath>$(SolutionDir)thirdparty\portaudio;$(SolutionDir)thirdparty\opus;$(SolutionDir)thirdparty\srtp;C:\local\boost_1_89_0\libs;$(BoostLibDir);$(LibraryPath)</LibraryPath>
     <ExternalIncludePath>$(ExternalIncludePath)</ExternalIncludePath>
   </PropertyGroup>
