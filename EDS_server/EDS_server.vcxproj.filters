@@ -106,9 +106,9 @@
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <Library Include="opus\opus.lib" />
-    <Library Include="portaudio\portaudio_x64.lib" />
-    <Library Include="srtp\srtp3.lib" />
+    <Library Include="$(SolutionDir)thirdparty\opus\opus.lib" />
+    <Library Include="$(SolutionDir)thirdparty\portaudio\portaudio_x64.lib" />
+    <Library Include="$(SolutionDir)thirdparty\srtp\srtp3.lib" />
     <Library Include="$(SolutionDir)thirdparty\portaudio\portaudio_static_x64.lib" />
   </ItemGroup>
   <ItemGroup>

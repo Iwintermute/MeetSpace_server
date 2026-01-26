@@ -32,70 +32,70 @@
     <ClCompile Include="..\thirdparty\imgui\imgui_widgets.cpp">
       <Filter>thirdparty\imgui</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\framework\gui.cpp">
+    <ClCompile Include="..\framework\gui.cpp">
       <Filter>framework</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\framework\helpers\config.cpp">
+    <ClCompile Include="..\framework\helpers\config.cpp">
       <Filter>framework\helpers</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\framework\helpers\draw.cpp">
+    <ClCompile Include="..\framework\helpers\draw.cpp">
       <Filter>framework\helpers</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\framework\helpers\fonts.cpp">
+    <ClCompile Include="..\framework\helpers\fonts.cpp">
       <Filter>framework\helpers</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\framework\widgets\helpers.cpp">
+    <ClCompile Include="..\framework\widgets\helpers.cpp">
       <Filter>framework\widgets</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\framework\widgets\notify.cpp">
+    <ClCompile Include="..\framework\widgets\notify.cpp">
       <Filter>framework\widgets</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\framework\widgets\window.cpp">
+    <ClCompile Include="..\framework\widgets\window.cpp">
       <Filter>framework\widgets</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\framework\widgets\pages.cpp">
+    <ClCompile Include="..\framework\widgets\pages.cpp">
       <Filter>framework\widgets</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\framework\widgets\textfield.cpp">
+    <ClCompile Include="..\framework\widgets\textfield.cpp">
       <Filter>framework\widgets</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\framework\widgets\button.cpp">
+    <ClCompile Include="..\framework\widgets\button.cpp">
       <Filter>framework\widgets</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\framework\widgets\cards.cpp">
+    <ClCompile Include="..\framework\widgets\cards.cpp">
       <Filter>framework\widgets</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\framework\helpers\blur.cpp">
+    <ClCompile Include="..\framework\helpers\blur.cpp">
       <Filter>framework\helpers</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\framework\messenger_gui.cpp">
+    <ClCompile Include="..\framework\messenger_gui.cpp">
       <Filter>framework</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\framework\settings\app_state.cpp">
+    <ClCompile Include="..\framework\settings\app_state.cpp">
       <Filter>framework\settings</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\framework\settings\chat_manager.cpp">
+    <ClCompile Include="..\framework\settings\chat_manager.cpp">
       <Filter>framework\settings</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\framework\widgets\messenger_widgets.cpp">
+    <ClCompile Include="..\framework\widgets\messenger_widgets.cpp">
       <Filter>framework\widgets</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\framework\conference_gui.cpp" />
-    <ClCompile Include="..\..\framework\settings\conference_manager.cpp" />
-    <ClCompile Include="..\..\framework\widgets\conference_widgets.cpp" />
-    <ClCompile Include="..\..\framework\net\cAudioIO.cpp">
+    <ClCompile Include="..\framework\conference_gui.cpp" />
+    <ClCompile Include="..\framework\settings\conference_manager.cpp" />
+    <ClCompile Include="..\framework\widgets\conference_widgets.cpp" />
+    <ClCompile Include="..\framework\net\cAudioIO.cpp">
       <Filter>framework\media</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\framework\net\cConferenceNet.cpp">
+    <ClCompile Include="..\framework\net\cConferenceNet.cpp">
       <Filter>framework\net</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\framework\net\cRtcClientPeer.cpp">
+    <ClCompile Include="..\framework\net\cRtcClientPeer.cpp">
       <Filter>framework\rtc</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\framework\net\cWsClient.cpp">
+    <ClCompile Include="..\framework\net\cWsClient.cpp">
       <Filter>framework\net</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\framework\net\cOpusCodec.cpp">
+    <ClCompile Include="..\framework\net\cOpusCodec.cpp">
       <Filter>framework\media</Filter>
     </ClCompile>
   </ItemGroup>
@@ -173,70 +173,70 @@
     <ClInclude Include="..\thirdparty\imgui\imgui_internal.h">
       <Filter>thirdparty\imgui</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\framework\data\fonts.h">
+    <ClInclude Include="..\framework\data\fonts.h">
       <Filter>framework\data</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\framework\data\images.h">
+    <ClInclude Include="..\framework\data\images.h">
       <Filter>framework\data</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\framework\headers\config.h">
+    <ClInclude Include="..\framework\headers\config.h">
       <Filter>framework\headers</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\framework\headers\draw.h">
+    <ClInclude Include="..\framework\headers\draw.h">
       <Filter>framework\headers</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\framework\headers\flags.h">
+    <ClInclude Include="..\framework\headers\flags.h">
       <Filter>framework\headers</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\framework\headers\fonts.h">
+    <ClInclude Include="..\framework\headers\fonts.h">
       <Filter>framework\headers</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\framework\headers\functions.h">
+    <ClInclude Include="..\framework\headers\functions.h">
       <Filter>framework\headers</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\framework\headers\includes.h">
+    <ClInclude Include="..\framework\headers\includes.h">
       <Filter>framework\headers</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\framework\headers\widgets.h">
+    <ClInclude Include="..\framework\headers\widgets.h">
       <Filter>framework\headers</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\framework\settings\colors.h">
+    <ClInclude Include="..\framework\settings\colors.h">
       <Filter>framework\settings</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\framework\settings\elements.h">
+    <ClInclude Include="..\framework\settings\elements.h">
       <Filter>framework\settings</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\framework\settings\variables.h">
+    <ClInclude Include="..\framework\settings\variables.h">
       <Filter>framework\settings</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\framework\headers\blur.h">
+    <ClInclude Include="..\framework\headers\blur.h">
       <Filter>framework\headers</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\framework\headers\app_state.h">
+    <ClInclude Include="..\framework\headers\app_state.h">
       <Filter>framework\headers</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\framework\headers\chat_manager.h">
+    <ClInclude Include="..\framework\headers\chat_manager.h">
       <Filter>framework\headers</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\framework\headers\messenger_widgets.h">
+    <ClInclude Include="..\framework\headers\messenger_widgets.h">
       <Filter>framework\headers</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\framework\headers\conference_state.h" />
-    <ClInclude Include="..\..\framework\headers\conference_manager.h" />
-    <ClInclude Include="..\..\framework\headers\conference_widgets.h" />
-    <ClInclude Include="..\..\framework\net\cAudioIO.h">
+    <ClInclude Include="..\framework\headers\conference_state.h" />
+    <ClInclude Include="..\framework\headers\conference_manager.h" />
+    <ClInclude Include="..\framework\headers\conference_widgets.h" />
+    <ClInclude Include="..\framework\net\cAudioIO.h">
       <Filter>framework\media</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\framework\net\cConferenceNet.h">
+    <ClInclude Include="..\framework\net\cConferenceNet.h">
       <Filter>framework\net</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\framework\net\cRtcClientPeer.h">
+    <ClInclude Include="..\framework\net\cRtcClientPeer.h">
       <Filter>framework\rtc</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\framework\net\cWsClient.h">
+    <ClInclude Include="..\framework\net\cWsClient.h">
       <Filter>framework\net</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\framework\net\cOpusCodec.h">
+    <ClInclude Include="..\framework\net\cOpusCodec.h">
       <Filter>framework\media</Filter>
     </ClInclude>
     <ClInclude Include="winfirst.h" />

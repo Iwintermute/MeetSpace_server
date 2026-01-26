@@ -1,6 +1,6 @@
 // cWsClient.cpp
 #include "cWsClient.h"
-#include "../../../eduspace/thirdparty/imgui/EduSpace/EduSpace/net_log.h"
+#include "../../EduSpace/net_log.h"
 #include <boost/beast/http.hpp>
 
 namespace beast = boost::beast;
