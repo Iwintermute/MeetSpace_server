@@ -1,5 +1,5 @@
 #pragma once
-#include <opus.h>
+#include <../../thirdparty/opus/opus.h>
 #include <vector>
 #include <cstdint>
 

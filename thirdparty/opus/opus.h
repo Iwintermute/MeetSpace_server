@@ -2,6 +2,7 @@
 #define OPUS_H
 
 #include <stdint.h>
+#include "opus_defines.h"
 
 #ifdef __cplusplus
 extern "C" {

@@ -19,70 +19,70 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="..\..\framework\net\cAudioIO.cpp" />
-    <ClCompile Include="..\..\framework\net\cConferenceNet.cpp" />
-    <ClCompile Include="..\..\framework\net\cOpusCodec.cpp" />
-    <ClCompile Include="..\..\framework\net\cRtcClientPeer.cpp" />
-    <ClCompile Include="..\..\framework\net\cWsClient.cpp" />
-    <ClCompile Include="..\..\framework\gui.cpp" />
-    <ClCompile Include="..\..\framework\helpers\blur.cpp" />
-    <ClCompile Include="..\..\framework\helpers\config.cpp" />
-    <ClCompile Include="..\..\framework\helpers\draw.cpp" />
-    <ClCompile Include="..\..\framework\helpers\fonts.cpp" />
-    <ClCompile Include="..\..\framework\messenger_gui.cpp" />
-    <ClCompile Include="..\..\framework\settings\app_state.cpp" />
-    <ClCompile Include="..\..\framework\settings\chat_manager.cpp" />
-    <ClCompile Include="..\..\framework\widgets\button.cpp" />
-    <ClCompile Include="..\..\framework\widgets\cards.cpp" />
-    <ClCompile Include="..\..\framework\widgets\helpers.cpp" />
-    <ClCompile Include="..\..\framework\widgets\messenger_widgets.cpp" />
-    <ClCompile Include="..\..\framework\conference_gui.cpp" />
-    <ClCompile Include="..\..\framework\settings\conference_manager.cpp" />
-    <ClCompile Include="..\..\framework\widgets\conference_widgets.cpp" />
-    <ClCompile Include="..\..\framework\widgets\pages.cpp" />
-    <ClCompile Include="..\..\framework\widgets\notify.cpp" />
-    <ClCompile Include="..\..\framework\widgets\textfield.cpp" />
-    <ClCompile Include="..\..\framework\widgets\window.cpp" />
+    <ClCompile Include="..\framework\net\cAudioIO.cpp" />
+    <ClCompile Include="..\framework\net\cConferenceNet.cpp" />
+    <ClCompile Include="..\framework\net\cOpusCodec.cpp" />
+    <ClCompile Include="..\framework\net\cRtcClientPeer.cpp" />
+    <ClCompile Include="..\framework\net\cWsClient.cpp" />
+    <ClCompile Include="..\framework\gui.cpp" />
+    <ClCompile Include="..\framework\helpers\blur.cpp" />
+    <ClCompile Include="..\framework\helpers\config.cpp" />
+    <ClCompile Include="..\framework\helpers\draw.cpp" />
+    <ClCompile Include="..\framework\helpers\fonts.cpp" />
+    <ClCompile Include="..\framework\messenger_gui.cpp" />
+    <ClCompile Include="..\framework\settings\app_state.cpp" />
+    <ClCompile Include="..\framework\settings\chat_manager.cpp" />
+    <ClCompile Include="..\framework\widgets\button.cpp" />
+    <ClCompile Include="..\framework\widgets\cards.cpp" />
+    <ClCompile Include="..\framework\widgets\helpers.cpp" />
+    <ClCompile Include="..\framework\widgets\messenger_widgets.cpp" />
+    <ClCompile Include="..\framework\conference_gui.cpp" />
+    <ClCompile Include="..\framework\settings\conference_manager.cpp" />
+    <ClCompile Include="..\framework\widgets\conference_widgets.cpp" />
+    <ClCompile Include="..\framework\widgets\pages.cpp" />
+    <ClCompile Include="..\framework\widgets\notify.cpp" />
+    <ClCompile Include="..\framework\widgets\textfield.cpp" />
+    <ClCompile Include="..\framework\widgets\window.cpp" />
     <ClCompile Include="..\thirdparty\imgui\backends\imgui_impl_dx10.cpp" />
     <ClCompile Include="..\thirdparty\imgui\backends\imgui_impl_dx11.cpp" />
     <ClCompile Include="..\thirdparty\imgui\backends\imgui_impl_dx12.cpp" />
     <ClCompile Include="..\thirdparty\imgui\backends\imgui_impl_dx9.cpp" />
     <ClCompile Include="..\thirdparty\imgui\backends\imgui_impl_win32.cpp" />
-    <ClCompile Include="..\..\imgui.cpp" />
-    <ClCompile Include="..\..\imgui_draw.cpp" />
-    <ClCompile Include="..\..\imgui_freetype.cpp" />
-    <ClCompile Include="..\..\imgui_tables.cpp" />
-    <ClCompile Include="..\..\imgui_widgets.cpp" />
+    <ClCompile Include="..\thirdparty\imgui\imgui.cpp" />
+    <ClCompile Include="..\thirdparty\imgui\imgui_draw.cpp" />
+    <ClCompile Include="..\thirdparty\imgui\imgui_freetype.cpp" />
+    <ClCompile Include="..\thirdparty\imgui\imgui_tables.cpp" />
+    <ClCompile Include="..\thirdparty\imgui\imgui_widgets.cpp" />
     <ClCompile Include="main.cpp" />
   </ItemGroup>
   <ItemGroup>
     <Library Include="..\..\..\freetype\win64\freetype.lib" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\..\framework\net\cAudioIO.h" />
-    <ClInclude Include="..\..\framework\net\cConferenceNet.h" />
-    <ClInclude Include="..\..\framework\net\cOpusCodec.h" />
-    <ClInclude Include="..\..\framework\net\cRtcClientPeer.h" />
-    <ClInclude Include="..\..\framework\net\cWsClient.h" />
-    <ClInclude Include="..\..\framework\data\fonts.h" />
-    <ClInclude Include="..\..\framework\data\images.h" />
-    <ClInclude Include="..\..\framework\headers\app_state.h" />
-    <ClInclude Include="..\..\framework\headers\blur.h" />
-    <ClInclude Include="..\..\framework\headers\chat_manager.h" />
-    <ClInclude Include="..\..\framework\headers\config.h" />
-    <ClInclude Include="..\..\framework\headers\draw.h" />
-    <ClInclude Include="..\..\framework\headers\flags.h" />
-    <ClInclude Include="..\..\framework\headers\fonts.h" />
-    <ClInclude Include="..\..\framework\headers\functions.h" />
-    <ClInclude Include="..\..\framework\headers\includes.h" />
-    <ClInclude Include="..\..\framework\headers\messenger_widgets.h" />
-    <ClInclude Include="..\..\framework\headers\conference_state.h" />
-    <ClInclude Include="..\..\framework\headers\conference_manager.h" />
-    <ClInclude Include="..\..\framework\headers\conference_widgets.h" />
-    <ClInclude Include="..\..\framework\headers\widgets.h" />
-    <ClInclude Include="..\..\framework\settings\colors.h" />
-    <ClInclude Include="..\..\framework\settings\elements.h" />
-    <ClInclude Include="..\..\framework\settings\variables.h" />
+    <ClInclude Include="..\framework\net\cAudioIO.h" />
+    <ClInclude Include="..\framework\net\cConferenceNet.h" />
+    <ClInclude Include="..\framework\net\cOpusCodec.h" />
+    <ClInclude Include="..\framework\net\cRtcClientPeer.h" />
+    <ClInclude Include="..\framework\net\cWsClient.h" />
+    <ClInclude Include="..\framework\data\fonts.h" />
+    <ClInclude Include="..\framework\data\images.h" />
+    <ClInclude Include="..\framework\headers\app_state.h" />
+    <ClInclude Include="..\framework\headers\blur.h" />
+    <ClInclude Include="..\framework\headers\chat_manager.h" />
+    <ClInclude Include="..\framework\headers\config.h" />
+    <ClInclude Include="..\framework\headers\draw.h" />
+    <ClInclude Include="..\framework\headers\flags.h" />
+    <ClInclude Include="..\framework\headers\fonts.h" />
+    <ClInclude Include="..\framework\headers\functions.h" />
+    <ClInclude Include="..\framework\headers\includes.h" />
+    <ClInclude Include="..\framework\headers\messenger_widgets.h" />
+    <ClInclude Include="..\framework\headers\conference_state.h" />
+    <ClInclude Include="..\framework\headers\conference_manager.h" />
+    <ClInclude Include="..\framework\headers\conference_widgets.h" />
+    <ClInclude Include="..\framework\headers\widgets.h" />
+    <ClInclude Include="..\framework\settings\colors.h" />
+    <ClInclude Include="..\framework\settings\elements.h" />
+    <ClInclude Include="..\framework\settings\variables.h" />
     <ClInclude Include="..\thirdparty\imgui\backends\imgui_impl_dx10.h" />
     <ClInclude Include="..\thirdparty\imgui\backends\imgui_impl_dx11.h" />
     <ClInclude Include="..\thirdparty\imgui\backends\imgui_impl_dx12.h" />
@@ -166,6 +166,9 @@
     <IncludePath>$(SolutionDir)\thirdparty\imgui;$(SolutionDir)\thirdparty\dxsdk\Include;$(SolutionDir)\thirdparty\freetype\include;$(IncludePath)</IncludePath>
     <LibraryPath>$(SolutionDir)\thirdparty\dxsdk\Lib\x64;$(SolutionDir)\thirdparty\freetype\win64;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
+  <PropertyGroup Label="Vcpkg">
+    <VcpkgEnabled>false</VcpkgEnabled>
+  </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
       <WarningLevel>Level4</WarningLevel>
@@ -184,7 +187,7 @@
     <ClCompile>
       <WarningLevel>Level4</WarningLevel>
       <Optimization>Disabled</Optimization>
-      <AdditionalIncludeDirectories>..\thirdparty\imgui\;..\thirdparty\imgui\backends;%(AdditionalIncludeDirectories);</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\thirdparty\imgui\;..\thirdparty\imgui\backends;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <LanguageStandard>stdcpp20</LanguageStandard>
@@ -193,7 +196,7 @@
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalDependencies>d3d11.lib;d3dcompiler.lib;dxgi.lib;portaudio_static_x64.lib;opus.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <AdditionalLibraryDirectories>$(SolutionDir)thirdparty/dxsdk/Lib/x64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>$(SolutionDir)thirdparty\dxsdk\Lib\x64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <SubSystem>Windows</SubSystem>
     </Link>
   </ItemDefinitionGroup>
