@@ -2,36 +2,6 @@
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
     <ClCompile Include="main.cpp" />
-    <ClCompile Include="..\thirdparty\imgui\backends\imgui_impl_dx9.cpp">
-      <Filter>thirdparty\imgui\impl</Filter>
-    </ClCompile>
-    <ClCompile Include="..\thirdparty\imgui\backends\imgui_impl_dx10.cpp">
-      <Filter>thirdparty\imgui\impl</Filter>
-    </ClCompile>
-    <ClCompile Include="..\thirdparty\imgui\backends\imgui_impl_dx11.cpp">
-      <Filter>thirdparty\imgui\impl</Filter>
-    </ClCompile>
-    <ClCompile Include="..\thirdparty\imgui\backends\imgui_impl_dx12.cpp">
-      <Filter>thirdparty\imgui\impl</Filter>
-    </ClCompile>
-    <ClCompile Include="..\thirdparty\imgui\backends\imgui_impl_win32.cpp">
-      <Filter>thirdparty\imgui\impl</Filter>
-    </ClCompile>
-    <ClCompile Include="..\thirdparty\imgui\imgui.cpp">
-      <Filter>thirdparty\imgui</Filter>
-    </ClCompile>
-    <ClCompile Include="..\thirdparty\imgui\imgui_draw.cpp">
-      <Filter>thirdparty\imgui</Filter>
-    </ClCompile>
-    <ClCompile Include="..\thirdparty\imgui\imgui_freetype.cpp">
-      <Filter>thirdparty\imgui</Filter>
-    </ClCompile>
-    <ClCompile Include="..\thirdparty\imgui\imgui_tables.cpp">
-      <Filter>thirdparty\imgui</Filter>
-    </ClCompile>
-    <ClCompile Include="..\thirdparty\imgui\imgui_widgets.cpp">
-      <Filter>thirdparty\imgui</Filter>
-    </ClCompile>
     <ClCompile Include="..\framework\gui.cpp">
       <Filter>framework</Filter>
     </ClCompile>
@@ -146,33 +116,6 @@
     </Library>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\thirdparty\imgui\backends\imgui_impl_dx9.h">
-      <Filter>thirdparty\imgui\impl</Filter>
-    </ClInclude>
-    <ClInclude Include="..\thirdparty\imgui\backends\imgui_impl_dx10.h">
-      <Filter>thirdparty\imgui\impl</Filter>
-    </ClInclude>
-    <ClInclude Include="..\thirdparty\imgui\backends\imgui_impl_dx11.h">
-      <Filter>thirdparty\imgui\impl</Filter>
-    </ClInclude>
-    <ClInclude Include="..\thirdparty\imgui\backends\imgui_impl_dx12.h">
-      <Filter>thirdparty\imgui\impl</Filter>
-    </ClInclude>
-    <ClInclude Include="..\thirdparty\imgui\backends\imgui_impl_win32.h">
-      <Filter>thirdparty\imgui\impl</Filter>
-    </ClInclude>
-    <ClInclude Include="..\thirdparty\imgui\imconfig.h">
-      <Filter>thirdparty\imgui</Filter>
-    </ClInclude>
-    <ClInclude Include="..\thirdparty\imgui\imgui.h">
-      <Filter>thirdparty\imgui</Filter>
-    </ClInclude>
-    <ClInclude Include="..\thirdparty\imgui\imgui_freetype.h">
-      <Filter>thirdparty\imgui</Filter>
-    </ClInclude>
-    <ClInclude Include="..\thirdparty\imgui\imgui_internal.h">
-      <Filter>thirdparty\imgui</Filter>
-    </ClInclude>
     <ClInclude Include="..\framework\data\fonts.h">
       <Filter>framework\data</Filter>
     </ClInclude>

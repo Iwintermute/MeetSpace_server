@@ -16,7 +16,6 @@
 #include "imgui_freetype.h"
 #include <d3d11.h>
 #include <tchar.h>
-#include <d3dx11.h>
 #include <dwmapi.h>
 #pragma comment(lib, "d3dx11.lib")
 
