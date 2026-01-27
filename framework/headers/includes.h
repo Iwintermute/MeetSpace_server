@@ -2,8 +2,7 @@
 
 #define IMGUI_DEFINE_MATH_OPERATORS
 
-#include "imgui.h"
-#include "imgui_internal.h"
+#include <algorithm>
 #include <vector>
 #include <sstream>
 #include <string>
@@ -13,6 +12,7 @@
 #include <variant>
 #include <array>
 
+#include "imgui.h"
 #include "config.h"
 #include "flags.h"
 #include "search.h"
@@ -24,4 +24,3 @@
 #include "functions.h"
 #include "../data/fonts.h"
 #include "blur.h"
-#include <algorithm>

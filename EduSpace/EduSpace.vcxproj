@@ -43,16 +43,6 @@
     <ClCompile Include="..\framework\widgets\notify.cpp" />
     <ClCompile Include="..\framework\widgets\textfield.cpp" />
     <ClCompile Include="..\framework\widgets\window.cpp" />
-    <ClCompile Include="..\thirdparty\imgui\backends\imgui_impl_dx10.cpp" />
-    <ClCompile Include="..\thirdparty\imgui\backends\imgui_impl_dx11.cpp" />
-    <ClCompile Include="..\thirdparty\imgui\backends\imgui_impl_dx12.cpp" />
-    <ClCompile Include="..\thirdparty\imgui\backends\imgui_impl_dx9.cpp" />
-    <ClCompile Include="..\thirdparty\imgui\backends\imgui_impl_win32.cpp" />
-    <ClCompile Include="..\thirdparty\imgui\imgui.cpp" />
-    <ClCompile Include="..\thirdparty\imgui\imgui_draw.cpp" />
-    <ClCompile Include="..\thirdparty\imgui\imgui_freetype.cpp" />
-    <ClCompile Include="..\thirdparty\imgui\imgui_tables.cpp" />
-    <ClCompile Include="..\thirdparty\imgui\imgui_widgets.cpp" />
     <ClCompile Include="main.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -83,15 +73,6 @@
     <ClInclude Include="..\framework\settings\colors.h" />
     <ClInclude Include="..\framework\settings\elements.h" />
     <ClInclude Include="..\framework\settings\variables.h" />
-    <ClInclude Include="..\thirdparty\imgui\backends\imgui_impl_dx10.h" />
-    <ClInclude Include="..\thirdparty\imgui\backends\imgui_impl_dx11.h" />
-    <ClInclude Include="..\thirdparty\imgui\backends\imgui_impl_dx12.h" />
-    <ClInclude Include="..\thirdparty\imgui\backends\imgui_impl_dx9.h" />
-    <ClInclude Include="..\thirdparty\imgui\backends\imgui_impl_win32.h" />
-    <ClInclude Include="..\thirdparty\imgui\imconfig.h" />
-    <ClInclude Include="..\thirdparty\imgui\imgui.h" />
-    <ClInclude Include="..\thirdparty\imgui\imgui_freetype.h" />
-    <ClInclude Include="..\thirdparty\imgui\imgui_internal.h" />
     <ClInclude Include="net_log.h" />
     <ClInclude Include="winfirst.h" />
   </ItemGroup>
@@ -101,7 +82,7 @@
   <PropertyGroup Label="Globals">
     <ProjectGuid>{355249A3-5AC7-478F-8BCC-B6D1C22ED60B}</ProjectGuid>
     <RootNamespace>EduSpace</RootNamespace>
-    <WindowsTargetPlatformVersion>10.0.22621.0</WindowsTargetPlatformVersion>
+    <WindowsTargetPlatformVersion>10.0.26100.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
@@ -150,12 +131,7 @@
     <OutDir>$(ProjectDir)$(Configuration)\</OutDir>
     <IntDir>$(ProjectDir)$(Configuration)\</IntDir>
   </PropertyGroup>
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <OutDir>$(ProjectDir)$(Configuration)\</OutDir>
-    <IntDir>$(ProjectDir)$(Configuration)\</IntDir>
-    <IncludePath>$(SolutionDir)thirdparty\nlohmann;C:\local\boost_1_89_0;$(SolutionDir)thirdparty\freetype\include;$(SolutionDir)thirdparty\dxsdk\Include;$(IncludePath)</IncludePath>
-    <LibraryPath>C:\local\boost_1_89_0\libs;$(SolutionDir)thirdparty\opus;$(SolutionDir)thirdparty\portaudio;$(SolutionDir)thirdparty\srtp;$(SolutionDir)thirdparty\freetype\win64;$(SolutionDir)thirdparty\dxsdk\Lib\x64;$(LibraryPath)</LibraryPath>
-  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <OutDir>$(ProjectDir)$(Configuration)\</OutDir>
     <IntDir>$(ProjectDir)$(Configuration)\</IntDir>
@@ -167,7 +143,7 @@
     <LibraryPath>$(SolutionDir)\thirdparty\dxsdk\Lib\x64;$(SolutionDir)\thirdparty\freetype\win64;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <PropertyGroup Label="Vcpkg">
-    <VcpkgEnabled>false</VcpkgEnabled>
+    <VcpkgEnabled>true</VcpkgEnabled>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
@@ -185,18 +161,14 @@
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
-      <WarningLevel>Level4</WarningLevel>
+      <WarningLevel>Level1</WarningLevel>
       <Optimization>Disabled</Optimization>
-      <AdditionalIncludeDirectories>..\thirdparty\imgui\;..\thirdparty\imgui\backends;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <LanguageStandard>stdcpp20</LanguageStandard>
-      <ForcedIncludeFiles>$(ProjectDir)winfirst.h;%(ForcedIncludeFiles)</ForcedIncludeFiles>
     </ClCompile>
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>d3d11.lib;d3dcompiler.lib;dxgi.lib;portaudio_static_x64.lib;opus.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <AdditionalLibraryDirectories>$(SolutionDir)thirdparty\dxsdk\Lib\x64;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <SubSystem>Windows</SubSystem>
     </Link>
   </ItemDefinitionGroup>

@@ -106,13 +106,6 @@
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <Library Include="$(SolutionDir)thirdparty\opus\opus.lib" />
-    <Library Include="$(SolutionDir)thirdparty\portaudio\portaudio_x64.lib" />
-    <Library Include="$(SolutionDir)thirdparty\srtp\srtp3.lib" />
-    <Library Include="$(SolutionDir)thirdparty\portaudio\portaudio_static_x64.lib" />
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="portaudio\portaudio_x64.dll" />
     <None Include="packages.config" />
   </ItemGroup>
 </Project>

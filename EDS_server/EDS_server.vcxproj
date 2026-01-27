@@ -131,7 +131,6 @@
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalDependencies>%(AdditionalDependencies)</AdditionalDependencies>
-      <AdditionalLibraryDirectories>%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -186,14 +185,7 @@
     <ClInclude Include="util\cLogger.h" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="$(SolutionDir)thirdparty\portaudio\portaudio_x64.dll" />
     <None Include="packages.config" />
-  </ItemGroup>
-  <ItemGroup>
-    <Library Include="$(SolutionDir)thirdparty\portaudio\portaudio_static_x64.lib" />
-    <Library Include="$(SolutionDir)thirdparty\opus\opus.lib" />
-    <Library Include="$(SolutionDir)thirdparty\portaudio\portaudio_x64.lib" />
-    <Library Include="$(SolutionDir)thirdparty\srtp\srtp3.lib" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
