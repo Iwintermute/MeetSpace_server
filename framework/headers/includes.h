@@ -13,6 +13,10 @@
 #include <array>
 
 #include "imgui.h"
+#include "imgui_internal.h"
+#include "imgui_freetype.h"
+#include "backends/imgui_impl_dx11.h"
+
 #include "config.h"
 #include "flags.h"
 #include "search.h"

@@ -11,10 +11,12 @@
 #include "../framework/data/images.h"
 #include "../framework/headers/blur.h"
 #include "imgui.h"
-#include "imgui_impl_win32.h"
-#include "imgui_impl_dx11.h"
+#include "backends/imgui_impl_win32.h"
+#include "backends/imgui_impl_dx11.h"
 #include "imgui_freetype.h"
+
 #include <d3d11.h>
+#include <d3dx11.h>
 #include <tchar.h>
 #include <dwmapi.h>
 #pragma comment(lib, "d3dx11.lib")

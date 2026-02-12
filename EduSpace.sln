@@ -6,6 +6,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "EduSpace", "EduSpace\EduSpa
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "EDS_server", "EDS_server\EDS_server.vcxproj", "{7204691F-C1B6-4EC5-A161-D05B2B79B78D}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Cli", "Cli\Cli.vcxproj", "{B1065838-D401-4945-A008-BAE16292B93C}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Win32 = Debug|Win32
@@ -30,6 +32,14 @@ Global
 		{7204691F-C1B6-4EC5-A161-D05B2B79B78D}.Release|Win32.Build.0 = Release|Win32
 		{7204691F-C1B6-4EC5-A161-D05B2B79B78D}.Release|x64.ActiveCfg = Release|x64
 		{7204691F-C1B6-4EC5-A161-D05B2B79B78D}.Release|x64.Build.0 = Release|x64
+		{B1065838-D401-4945-A008-BAE16292B93C}.Debug|Win32.ActiveCfg = Debug|Win32
+		{B1065838-D401-4945-A008-BAE16292B93C}.Debug|Win32.Build.0 = Debug|Win32
+		{B1065838-D401-4945-A008-BAE16292B93C}.Debug|x64.ActiveCfg = Debug|x64
+		{B1065838-D401-4945-A008-BAE16292B93C}.Debug|x64.Build.0 = Debug|x64
+		{B1065838-D401-4945-A008-BAE16292B93C}.Release|Win32.ActiveCfg = Release|Win32
+		{B1065838-D401-4945-A008-BAE16292B93C}.Release|Win32.Build.0 = Release|Win32
+		{B1065838-D401-4945-A008-BAE16292B93C}.Release|x64.ActiveCfg = Release|x64
+		{B1065838-D401-4945-A008-BAE16292B93C}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

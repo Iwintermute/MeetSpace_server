@@ -1,6 +1,4 @@
 #include "../headers/includes.h"
-#include "../../thirdparty/imgui/imgui_freetype.h"
-#include "imgui_impl_dx11.h"
 
 void c_font::update()
 {
