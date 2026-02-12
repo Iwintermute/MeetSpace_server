@@ -180,7 +180,17 @@ void c_draw::text(ImDrawList* draw_list, const ImFont* font, float font_size, co
     font->RenderText(draw_list, font_size, pos, col, clip_rect, text_begin, text_end, wrap_width, cpu_fine_clip_rect != NULL);
 }
 
-void c_draw::text_clipped(ImDrawList* draw_list, ImFont* font, const ImVec2& pos_min, const ImVec2& pos_max, ImU32 color, const char* text, const char* text_display_end, const ImVec2* text_size_if_known, const ImVec2& align, const ImRect* clip_rect)
+void c_draw::text_clipped(
+    ImDrawList* draw_list, 
+    ImFont* font, 
+    const ImVec2& pos_min,
+    const ImVec2& pos_max,
+    ImU32 color,
+    const char* text,
+    const char* text_display_end,
+    const ImVec2* text_size_if_known,
+    const ImVec2& align,
+    const ImRect* clip_rect)
 {
     PushFont(font);
 

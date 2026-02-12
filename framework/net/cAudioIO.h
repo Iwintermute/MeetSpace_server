@@ -1,5 +1,5 @@
 #pragma once
-#include <portaudio.h>
+#include <portaudio/portaudio.h>
 #include <functional>
 #include <vector>
 #include <mutex>
