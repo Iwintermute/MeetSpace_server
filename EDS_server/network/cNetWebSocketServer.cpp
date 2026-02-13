@@ -1,4 +1,4 @@
-#include "cNetWebSocketServer.h"
+п»ї#include "cNetWebSocketServer.h"
 #include <iostream>
 
 using namespace Sys::Network;
@@ -13,7 +13,7 @@ cNetWebSocketServer::sWsSession::sWsSession(tcp::socket&& sock, cNetWebSocketSer
     : m_ws(std::move(sock))
     , m_owner(owner)
 {
-    // можно настроить max message size и т.п.
+    // РјРѕР¶РЅРѕ РЅР°СЃС‚СЂРѕРёС‚СЊ max message size Рё С‚.Рї.
     // m_ws.read_message_max(16 * 1024 * 1024);
 }
 
@@ -21,7 +21,7 @@ void cNetWebSocketServer::sWsSession::fnStart()
 {
     auto self = shared_from_this();
 
-    // Важно: accept должен выполняться в io_context потоке.
+    // Р’Р°Р¶РЅРѕ: accept РґРѕР»Р¶РµРЅ РІС‹РїРѕР»РЅСЏС‚СЊСЃСЏ РІ io_context РїРѕС‚РѕРєРµ.
     m_ws.async_accept([self](beast::error_code ec)
         {
             if (ec) {
@@ -66,7 +66,7 @@ void cNetWebSocketServer::sWsSession::fnSendTextQueued(std::string txt)
 
     auto self = shared_from_this();
 
-    // post в executor websocket stream, чтобы и очередь и writes жили в одном потоке.
+    // post РІ executor websocket stream, С‡С‚РѕР±С‹ Рё РѕС‡РµСЂРµРґСЊ Рё writes Р¶РёР»Рё РІ РѕРґРЅРѕРј РїРѕС‚РѕРєРµ.
     boost::asio::post(m_ws.get_executor(), [self, txt = std::move(txt)]() mutable
         {
             if (!self->m_open) return;
@@ -114,7 +114,7 @@ void cNetWebSocketServer::sWsSession::fnClose()
         m_owner->m_fnOnDisconnected(this);
 
     beast::error_code ec;
-    // нормальное закрытие
+    // РЅРѕСЂРјР°Р»СЊРЅРѕРµ Р·Р°РєСЂС‹С‚РёРµ
     m_ws.close(websocket::close_code::normal, ec);
 }
 
@@ -186,7 +186,7 @@ void cNetWebSocketServer::fnDoAccept()
                 std::cerr << "[WS] accept error: " << ec.message() << "\n";
             }
 
-            // продолжаем принимать
+            // РїСЂРѕРґРѕР»Р¶Р°РµРј РїСЂРёРЅРёРјР°С‚СЊ
             fnDoAccept();
         });
 }

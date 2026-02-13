@@ -1,4 +1,4 @@
-#include "cLogger.h"
+﻿#include "cLogger.h"
 #include <iostream>
 
 std::mutex Sys::cLogger::m_mtx;

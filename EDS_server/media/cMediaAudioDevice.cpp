@@ -1,4 +1,4 @@
-#include "cMediaAudioDevice.h"
+п»ї#include "cMediaAudioDevice.h"
 #include <algorithm>
 #include <iostream>
 
@@ -21,7 +21,7 @@ namespace Sys {
                 device->m_fnOnAudioFrame(buf, (int)frameCount, device->m_ch);
             }
 
-            // самопрослушивание если нужно
+            // СЃР°РјРѕРїСЂРѕСЃР»СѓС€РёРІР°РЅРёРµ РµСЃР»Рё РЅСѓР¶РЅРѕ
             // device->fnPlaySamples(buf);
 
             return paContinue;
