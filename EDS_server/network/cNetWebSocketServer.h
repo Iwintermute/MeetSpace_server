@@ -1,4 +1,4 @@
-#pragma once
+п»ї#pragma once
 
 #include <boost/asio.hpp>
 #include <boost/beast.hpp>
@@ -28,7 +28,7 @@ namespace Sys::Network {
         bool fnStart();
         void fnStop();
 
-        // send text to конкретной сессии (void* из callbacks)
+        // send text to РєРѕРЅРєСЂРµС‚РЅРѕР№ СЃРµСЃСЃРёРё (void* РёР· callbacks)
         bool fnSendText(void* pSession, const std::string& txt);
 
     private:
@@ -50,7 +50,7 @@ namespace Sys::Network {
             boost::beast::flat_buffer m_buffer;
             cNetWebSocketServer* m_owner{ nullptr };
 
-            // очередь отправки (чтобы не было одновременных async_write)
+            // РѕС‡РµСЂРµРґСЊ РѕС‚РїСЂР°РІРєРё (С‡С‚РѕР±С‹ РЅРµ Р±С‹Р»Рѕ РѕРґРЅРѕРІСЂРµРјРµРЅРЅС‹С… async_write)
             std::deque<std::string> m_outQ;
             bool m_open{ false };
             bool m_writing{ false };

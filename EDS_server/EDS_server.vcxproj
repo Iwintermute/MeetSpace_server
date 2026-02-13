@@ -179,7 +179,6 @@
     <ClInclude Include="network\cNetWebSocketServer.h" />
     <ClInclude Include="rtc\cRtcManager.h" />
     <ClInclude Include="rtc\cRtcPeer.h" />
-    <ClInclude Include="nlohmann\json.hpp" />
     <ClInclude Include="util\cLogger.h" />
   </ItemGroup>
   <ItemGroup>
