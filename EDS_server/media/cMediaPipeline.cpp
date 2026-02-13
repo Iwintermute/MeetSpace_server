@@ -1,4 +1,4 @@
-#include "cMediaPipeline.h"
+ï»¿#include "cMediaPipeline.h"
 #include <iostream>
 #include "../rtc/cRtcPeer.h"
 namespace Sys {
@@ -27,8 +27,8 @@ namespace Sys {
             for (auto& [peerId, decoder] : m_peerDecoders) {
                 (void)decoder;
 
-                auto peer = m_rtcMgr->fnGetPeer(peerId);   // <-- ÍÅ ñîçäà¸ì íîâûé peer
-                if (peer) peer->fnSendBinary(encoded);     // <-- áèíàðü, íå string
+                auto peer = m_rtcMgr->fnGetPeer(peerId);   // <-- ÐÐ• ÑÐ¾Ð·Ð´Ð°Ñ‘Ð¼ Ð½Ð¾Ð²Ñ‹Ð¹ peer
+                if (peer) peer->fnSendBinary(encoded);     // <-- Ð±Ð¸Ð½Ð°Ñ€ÑŒ, Ð½Ðµ string
             }
         }
 

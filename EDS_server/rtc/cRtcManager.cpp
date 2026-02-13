@@ -1,4 +1,4 @@
-#include "cRtcManager.h"
+п»ї#include "cRtcManager.h"
 #include "cRtcPeer.h"
 #include "../util/cLogger.h"
 
@@ -35,7 +35,7 @@ std::shared_ptr<cRtcPeer> cRtcManager::fnGetOrCreatePeer_Locked(const std::strin
 {
     auto it = m_peers.find(peerKey);
     if (it != m_peers.end()) {
-        // обновляем session
+        // РѕР±РЅРѕРІР»СЏРµРј session
         it->second.pSession = pSession;
         m_sess[pSession].insert(peerKey);
         return it->second.pPeer;
@@ -43,9 +43,9 @@ std::shared_ptr<cRtcPeer> cRtcManager::fnGetOrCreatePeer_Locked(const std::strin
 
     auto pPeer = std::make_shared<cRtcPeer>();
 
-    // LocalDescription (answer) -> клиенту
+    // LocalDescription (answer) -> РєР»РёРµРЅС‚Сѓ
     pPeer->fnSetOnLocalDescription([this, peerKey](const rtc::Description& desc) {
-        // desc.typeString() будет "answer" после offer
+        // desc.typeString() Р±СѓРґРµС‚ "answer" РїРѕСЃР»Рµ offer
         json j{
             {"type","webrtc_answer"},
             {"peer", peerKey},
@@ -61,7 +61,7 @@ std::shared_ptr<cRtcPeer> cRtcManager::fnGetOrCreatePeer_Locked(const std::strin
         if (sess) fnSendJsonToSession(sess, j);
         });
 
-    // ICE -> клиенту
+    // ICE -> РєР»РёРµРЅС‚Сѓ
     pPeer->fnSetOnLocalCandidate([this, peerKey](const rtc::Candidate& cand) {
         json j{
             {"type","webrtc_ice"},
@@ -79,7 +79,7 @@ std::shared_ptr<cRtcPeer> cRtcManager::fnGetOrCreatePeer_Locked(const std::strin
         if (sess) fnSendJsonToSession(sess, j);
         });
 
-    // Binary -> наружу (релэй по конфе)
+    // Binary -> РЅР°СЂСѓР¶Сѓ (СЂРµР»СЌР№ РїРѕ РєРѕРЅС„Рµ)
     pPeer->fnSetOnBinary([this, peerKey](const std::vector<uint8_t>& data) {
         if (m_onPeerBinary) m_onPeerBinary(peerKey, data);
         });
@@ -115,15 +115,15 @@ std::vector<std::string> cRtcManager::fnOnWsDisconnected(void* pSession)
     auto sit = m_sess.find(pSession);
     if (sit == m_sess.end()) return removed;
 
-    // копируем peerKeys
+    // РєРѕРїРёСЂСѓРµРј peerKeys
     for (const auto& peerKey : sit->second) removed.push_back(peerKey);
 
-    // уничтожаем peer-ы
+    // СѓРЅРёС‡С‚РѕР¶Р°РµРј peer-С‹
     for (const auto& peerKey : sit->second) {
         fnDestroyPeer_Locked(peerKey);
     }
 
-    // fnDestroyPeer_Locked уже чистит m_sess, но на всякий случай:
+    // fnDestroyPeer_Locked СѓР¶Рµ С‡РёСЃС‚РёС‚ m_sess, РЅРѕ РЅР° РІСЃСЏРєРёР№ СЃР»СѓС‡Р°Р№:
     m_sess.erase(pSession);
 
     return removed;
@@ -145,7 +145,7 @@ void cRtcManager::fnOnSignalingMessage(void* pSession, const json& jMsg)
             }
 
             const std::string sdp = jMsg.at("sdp").get<std::string>();
-            // ВАЖНО: answer отправится async из onLocalDescription
+            // Р’РђР–РќРћ: answer РѕС‚РїСЂР°РІРёС‚СЃСЏ async РёР· onLocalDescription
             pPeer->fnApplyRemoteOffer(sdp);
         }
         else if (type == "webrtc_ice") {

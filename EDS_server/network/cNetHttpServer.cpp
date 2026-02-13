@@ -1,4 +1,4 @@
-#include "cNetHttpServer.h"
+п»ї#include "cNetHttpServer.h"
 #include <boost/beast/http.hpp>
 #include <iostream>
 
@@ -72,7 +72,7 @@ namespace Sys {
                         [this, stream, buffer, req](boost::system::error_code ec2, std::size_t) mutable
                         {
                             if (ec2) {
-                                // клиент мог разорвать соединение — просто выходим
+                                // РєР»РёРµРЅС‚ РјРѕРі СЂР°Р·РѕСЂРІР°С‚СЊ СЃРѕРµРґРёРЅРµРЅРёРµ вЂ” РїСЂРѕСЃС‚Рѕ РІС‹С…РѕРґРёРј
                                 return;
                             }
 

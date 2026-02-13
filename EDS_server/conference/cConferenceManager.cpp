@@ -1,4 +1,4 @@
-#include "cConferenceManager.h"
+ï»¿#include "cConferenceManager.h"
 #include <random>
 
 using namespace Sys::Conference;
@@ -60,7 +60,7 @@ void cConferenceManager::fnLeave(const std::string& peerKey)
 
     cit->second.peers.erase(peerKey);
 
-    // optional: óäàëÿòü ïóñòûå êîíôåðåíöèè
+    // optional: ÑƒÐ´Ð°Ð»ÑÑ‚ÑŒ Ð¿ÑƒÑÑ‚Ñ‹Ðµ ÐºÐ¾Ð½Ñ„ÐµÑ€ÐµÐ½Ñ†Ð¸Ð¸
     if (cit->second.peers.empty()) {
         m_inviteToConf.erase(cit->second.invite);
         m_confs.erase(cit);

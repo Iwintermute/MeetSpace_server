@@ -76,9 +76,7 @@
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <IncludePath>C:\Users\Пользователь\Desktop\openssl-openssl-3.6.0\include;C:\local\boost_1_89_0;$(SolutionDir)thirdparty\opus;$(IncludePath)</IncludePath>
-    <LibraryPath>$(SolutionDir)thirdparty\portaudio;$(SolutionDir)thirdparty\opus;$(SolutionDir)thirdparty\srtp;C:\local\boost_1_89_0\libs;$(BoostLibDir);$(LibraryPath)</LibraryPath>
-    <ExternalIncludePath>$(ExternalIncludePath)</ExternalIncludePath>
+    <IncludePath>$(SolutionDir)thirdparty\imgui\imgui.h;$(IncludePath)</IncludePath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <IncludePath>$(SolutionDir)networkEDS\include;$(SolutionDir)thirdparty\portaudio;$(SolutionDir)thirdparty\opus;$(SolutionDir)thirdparty\srtp;$(BoostIncludeDir);$(IncludePath)</IncludePath>

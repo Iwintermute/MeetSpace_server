@@ -1,4 +1,4 @@
-#include "cRtcPeer.h"
+п»ї#include "cRtcPeer.h"
 #include "../util/cLogger.h"
 #include <cstring>
 
@@ -20,7 +20,7 @@ cRtcPeer::cRtcPeer() {
         });
 
     m_pc->onLocalDescription([this](rtc::Description const& desc) {
-        // Это главный путь: сюда прилетает ANSWER после setLocalDescription()
+        // Р­С‚Рѕ РіР»Р°РІРЅС‹Р№ РїСѓС‚СЊ: СЃСЋРґР° РїСЂРёР»РµС‚Р°РµС‚ ANSWER РїРѕСЃР»Рµ setLocalDescription()
         if (m_onLocalDesc) m_onLocalDesc(desc);
         });
 
@@ -28,13 +28,13 @@ cRtcPeer::cRtcPeer() {
         if (m_onLocalCand) m_onLocalCand(cand);
         });
 
-    // Если клиент создаёт DC первым — принимаем
+    // Р•СЃР»Рё РєР»РёРµРЅС‚ СЃРѕР·РґР°С‘С‚ DC РїРµСЂРІС‹Рј вЂ” РїСЂРёРЅРёРјР°РµРј
     m_pc->onDataChannel([this](std::shared_ptr<rtc::DataChannel> dc) {
         fnBindDataChannel(std::move(dc));
         });
 
-    // Сервер может создать DC тоже, но делаем это не всегда сразу,
-    // чтобы не получить дубликаты — "ensure once"
+    // РЎРµСЂРІРµСЂ РјРѕР¶РµС‚ СЃРѕР·РґР°С‚СЊ DC С‚РѕР¶Рµ, РЅРѕ РґРµР»Р°РµРј СЌС‚Рѕ РЅРµ РІСЃРµРіРґР° СЃСЂР°Р·Сѓ,
+    // С‡С‚РѕР±С‹ РЅРµ РїРѕР»СѓС‡РёС‚СЊ РґСѓР±Р»РёРєР°С‚С‹ вЂ” "ensure once"
     fnEnsureDataChannel();
 }
 
@@ -52,7 +52,7 @@ void cRtcPeer::fnEnsureDataChannel() {
         fnBindDataChannel(std::move(dc));
     }
     catch (...) {
-        // не критично — если клиент создаст, мы его примем
+        // РЅРµ РєСЂРёС‚РёС‡РЅРѕ вЂ” РµСЃР»Рё РєР»РёРµРЅС‚ СЃРѕР·РґР°СЃС‚, РјС‹ РµРіРѕ РїСЂРёРјРµРј
     }
 }
 
@@ -60,7 +60,7 @@ void cRtcPeer::fnBindDataChannel(std::shared_ptr<rtc::DataChannel> dc) {
     std::lock_guard<std::mutex> lg(m_mtx);
     if (m_closed) return;
 
-    // если уже есть открытый/назначенный — оставим первый
+    // РµСЃР»Рё СѓР¶Рµ РµСЃС‚СЊ РѕС‚РєСЂС‹С‚С‹Р№/РЅР°Р·РЅР°С‡РµРЅРЅС‹Р№ вЂ” РѕСЃС‚Р°РІРёРј РїРµСЂРІС‹Р№
     if (m_dc) return;
     m_dc = std::move(dc);
 
@@ -73,7 +73,7 @@ void cRtcPeer::fnBindDataChannel(std::shared_ptr<rtc::DataChannel> dc) {
             if (!out.empty()) std::memcpy(out.data(), b.data(), b.size());
             m_onBinary(out);
         }
-        // текст на сервере не нужен — игнор
+        // С‚РµРєСЃС‚ РЅР° СЃРµСЂРІРµСЂРµ РЅРµ РЅСѓР¶РµРЅ вЂ” РёРіРЅРѕСЂ
         });
 }
 
@@ -85,7 +85,7 @@ void cRtcPeer::fnApplyRemoteOffer(const std::string& sdpOffer) {
     rtc::Description remoteDesc(sdpOffer, "offer");
     m_pc->setRemoteDescription(remoteDesc);
 
-    // Async: libdatachannel сгенерит answer и дернет onLocalDescription
+    // Async: libdatachannel СЃРіРµРЅРµСЂРёС‚ answer Рё РґРµСЂРЅРµС‚ onLocalDescription
     m_pc->setLocalDescription();
 }
 
