@@ -18,6 +18,11 @@ namespace Sys {
         void fnShutdown();
 
     private:
+        std::string fnGeneratePeerKey();
+
+        // Новое отображение: session -> peerKey (для быстрой валидации)
+        std::unordered_map<void*, std::string> m_sessionToPeer;
+
         Network::cNetIoContext m_ioCtx;
         std::unique_ptr<Network::cNetWebSocketServer> m_wsServer;
         std::unique_ptr<Network::cNetHttpServer> m_httpServer;
@@ -35,7 +40,7 @@ namespace Sys {
         void fnOnWsConnected(void* session);
         void fnOnWsDisconnected(void* session);
 
-        void fnHandleConferenceMsg(void* session, const nlohmann::json& j);
+        void fnHandleConferenceMsg(void* session, const nlohmann::json& j, const std::string& peerKey);
     };
 
 } // namespace Sys
