@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include "../rtc/cRtcManager.h"
 #include "cMediaAudioDevice.h"
 #include "cMediaOpusEncDec.h"

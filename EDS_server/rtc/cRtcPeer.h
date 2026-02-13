@@ -1,4 +1,4 @@
-#pragma once
+п»ї#pragma once
 #include <rtc/rtc.hpp>
 #include <memory>
 #include <string>
@@ -36,7 +36,7 @@ namespace Sys::Rtc {
 
     private:
         void fnBindDataChannel(std::shared_ptr<rtc::DataChannel> dc);
-        void fnEnsureDataChannel(); // если клиент не создаст DC — создадим сами
+        void fnEnsureDataChannel(); // РµСЃР»Рё РєР»РёРµРЅС‚ РЅРµ СЃРѕР·РґР°СЃС‚ DC вЂ” СЃРѕР·РґР°РґРёРј СЃР°РјРё
 
     private:
         std::shared_ptr<rtc::PeerConnection> m_pc;
