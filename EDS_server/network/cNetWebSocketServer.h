@@ -3,6 +3,8 @@
 #include <boost/asio.hpp>
 #include <boost/beast.hpp>
 
+#include "modules/BaseModule.h"
+
 #include <functional>
 #include <memory>
 #include <string>
@@ -12,7 +14,7 @@
 
 namespace Sys::Network {
 
-    class cNetWebSocketServer {
+    class cNetWebSocketServer : public BaseModule {
     public:
         using tOnMessage = std::function<void(const std::string&, void*)>;
         using tOnConnected = std::function<void(void*)>;

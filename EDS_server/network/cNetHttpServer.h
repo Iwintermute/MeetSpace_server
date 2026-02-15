@@ -5,10 +5,12 @@
 #include <memory>
 #include <string>
 
+#include "modules/BaseModule.h"
+
 namespace Sys {
     namespace Network {
 
-        class cNetHttpServer {
+        class cNetHttpServer : public BaseModule{
         public:
             using tHealthFn = std::function<std::string()>;
             using tMetricsFn = std::function<std::string()>;
