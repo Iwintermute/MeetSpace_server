@@ -1,14 +1,15 @@
-#pragma once
+﻿#pragma once
 
+#include "iModule.h"
 #include <functional>
 
-namespace Core::interfaces{
-    //Интерфейс действия
-    /*Пример: 
+#include <nlohmann/json.hpp>
+//Интерфейс действия
+/*Пример: В верхнеуровневом менеджере регистрируются объекты реализации iAction, после чего он может дёргать их execute с параметрами
     
-    */
-    class iWsAction : public IModule{
-        virtual ~iWsAction() = default;
-        virtual void execute(const nlohmann::json& msg, void* session) = 0;
-    }
-}
+*/
+class iAction : public iModule {
+    virtual ~iAction() = default;
+
+    virtual bool execute() = 0;
+};

@@ -2,9 +2,9 @@
 
 #include <string>
 
-class IModule {
+class iModule {
 public:
-    virtual ~IModule() = default;
+    virtual ~iModule() = default;
 
     virtual int getId() const = 0;
     virtual std::string getName() const = 0;
