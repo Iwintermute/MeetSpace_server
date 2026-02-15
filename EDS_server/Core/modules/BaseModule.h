@@ -1,5 +1,5 @@
 ﻿#pragma once
-#include "IModule.h"
+#include "interfaces/IModule.h"
 #include <atomic>
 #include <string>
 
