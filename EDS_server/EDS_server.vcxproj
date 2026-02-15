@@ -125,7 +125,7 @@
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <LanguageStandard_C>stdc17</LanguageStandard_C>
-      <AdditionalIncludeDirectories>$(ProjectDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)/Core;$(ProjectDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -152,45 +152,19 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="conference\cConferenceManager.cpp" />
-    <ClCompile Include="core\cAppCore.cpp" />
-    <ClCompile Include="crypto\cCryptoRtpProtector.cpp" />
-    <ClCompile Include="eduspace_server.cpp" />
-    <ClCompile Include="json\cJsonSerializer.cpp" />
-    <ClCompile Include="media\cMediaAudioDevice.cpp" />
-    <ClCompile Include="media\cMediaOpusEncDec.cpp" />
-    <ClCompile Include="media\cMediaPipeline.cpp" />
-    <ClCompile Include="network\cNetHttpServer.cpp" />
-    <ClCompile Include="network\cNetIoContext.cpp" />
-    <ClCompile Include="network\cNetWebSocketServer.cpp" />
-    <ClCompile Include="rtc\cRtcManager.cpp" />
-    <ClCompile Include="rtc\cRtcPeer.cpp" />
-    <ClCompile Include="util\cLogger.cpp" />
-  </ItemGroup>
-  <ItemGroup>
-    <ClInclude Include="conference\cConferenceManager.h" />
-    <ClInclude Include="core\cAppCore.h" />
+    <ClInclude Include="App\cAppCore.h" />
+    <ClInclude Include="Core\interfaces\iModule.h" />
+    <ClInclude Include="Core\interfaces\iAction.h" />
+    <ClInclude Include="Core\interfaces\iActionManager.h" />
     <ClInclude Include="Core\managers\ModuleRegistry.h" />
-    <ClInclude Include="crypto\cCryptoRtpProtector.h" />
-    <ClInclude Include="includes.h" />
-    <ClInclude Include="iWsHandler.h" />
-    <ClInclude Include="json\cJsonSerializer.h" />
-    <ClInclude Include="media\cMediaAudioDevice.h" />
-    <ClInclude Include="media\cMediaOpusEncDec.h" />
-    <ClInclude Include="media\cMediaPipeline.h" />
-    <ClInclude Include="network\cNetHttpServer.h" />
-    <ClInclude Include="network\cNetIoContext.h" />
-    <ClInclude Include="network\cNetWebSocketServer.h" />
-    <ClInclude Include="rtc\cRtcManager.h" />
-    <ClInclude Include="rtc\cRtcPeer.h" />
-    <ClInclude Include="Sys\interfaces\iModule.h" />
-    <ClInclude Include="Sys\interfaces\iWsAction.h" />
-    <ClInclude Include="Sys\interfaces\iWsManagerModule.h" />
-    <ClInclude Include="Sys\modules\BaseModule.h" />
-    <ClInclude Include="util\cLogger.h" />
+    <ClInclude Include="Core\modules\BaseModule.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="App\cAppCore.cpp" />
+    <ClCompile Include="eduspace_server.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
