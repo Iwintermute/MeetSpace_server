@@ -1,4 +1,4 @@
-﻿#include "core/cAppCore.h"
+﻿#include "App/cAppCore.h"
 #include <iostream>
 
 int main()

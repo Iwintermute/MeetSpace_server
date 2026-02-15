@@ -17,7 +17,7 @@
 */
 class ModuleRegistry {
 private:
-    std::unordered_map<int, std::unique_ptr<IModule>> modules_;
+    std::unordered_map<int, std::unique_ptr<iModule>> modules_;
     int nextId_ = 1;
     std::mutex mutex_;
 
@@ -51,7 +51,7 @@ public:
         return ptr;
     }
 
-    IModule* getModule(const int& id) {
+    iModule* getModule(const int& id) {
         auto it = modules_.find(id);
         return it != modules_.end() ? it->second.get() : nullptr;
     }

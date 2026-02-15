@@ -1,9 +1,9 @@
 ﻿#pragma once
-#include "interfaces/IModule.h"
+#include "interfaces/iModule.h"
 #include <atomic>
 #include <string>
 
-class BaseModule : public IModule {
+class BaseModule : public iModule {
     enum class ModuleStatus : uint8_t { SUCCESS, DISABLED, MODULE_ERROR };
 
 protected:
