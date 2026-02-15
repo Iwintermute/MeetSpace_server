@@ -1,13 +1,26 @@
 ﻿#include "cAppCore.h"
-#include "../util/cLogger.h"
+#include "utils/cLogger.h"
 #include <iostream>
 #include <thread>
-#include "../rtc/cRtcPeer.h"
+#include "rtc/cRtcPeer.h"
+
+#include "managers/ModuleRegistry.h"
 
 namespace Sys {
 
     cAppCore::cAppCore() {}
     cAppCore::~cAppCore() { fnShutdown(); }
+
+    bool fnInitNew(boost::asio::io_context io) {
+        ModuleRegistry Registry;
+
+        std::string name = "name";
+
+        BaseModule* baseModule = Registry.registerModule<BaseModule>(name);
+
+        Registry.initializeAll();
+
+    }
 
     bool cAppCore::fnInit(unsigned short wsPort, unsigned short httpPort)
     {
