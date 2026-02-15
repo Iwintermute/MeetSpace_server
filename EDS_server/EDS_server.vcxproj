@@ -76,7 +76,9 @@
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <IncludePath>$(SolutionDir)thirdparty\imgui\imgui.h;$(IncludePath)</IncludePath>
+    <IncludePath>$(IncludePath)</IncludePath>
+    <AllProjectIncludesArePublic>true</AllProjectIncludesArePublic>
+    <AllProjectBMIsArePublic>true</AllProjectBMIsArePublic>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <IncludePath>$(SolutionDir)networkEDS\include;$(SolutionDir)thirdparty\portaudio;$(SolutionDir)thirdparty\opus;$(SolutionDir)thirdparty\srtp;$(BoostIncludeDir);$(IncludePath)</IncludePath>
@@ -123,7 +125,7 @@
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <LanguageStandard_C>stdc17</LanguageStandard_C>
-      <AdditionalIncludeDirectories>%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -168,6 +170,7 @@
   <ItemGroup>
     <ClInclude Include="conference\cConferenceManager.h" />
     <ClInclude Include="core\cAppCore.h" />
+    <ClInclude Include="Core\managers\ModuleRegistry.h" />
     <ClInclude Include="crypto\cCryptoRtpProtector.h" />
     <ClInclude Include="includes.h" />
     <ClInclude Include="json\cJsonSerializer.h" />
@@ -179,6 +182,10 @@
     <ClInclude Include="network\cNetWebSocketServer.h" />
     <ClInclude Include="rtc\cRtcManager.h" />
     <ClInclude Include="rtc\cRtcPeer.h" />
+    <ClInclude Include="Sys\interfaces\iModule.h" />
+    <ClInclude Include="Sys\interfaces\iWsAction.h" />
+    <ClInclude Include="Sys\interfaces\iWsManagerModule.h" />
+    <ClInclude Include="Sys\modules\BaseModule.h" />
     <ClInclude Include="util\cLogger.h" />
   </ItemGroup>
   <ItemGroup>
