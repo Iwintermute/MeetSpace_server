@@ -8,7 +8,7 @@ namespace utils {
     // - length: длина строки (по умолчанию 8, максимум 64).
     // Для эффективности: RNG статический (thread_local для многопоточки).
     // Использование: wordGenerator() для дефолтного, или с параметрами.
-    std::string wordGenerator(size_t length = 8, const char* alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789")
+    std::string fnWordGenerator(size_t length = 8, const char* alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789")
     {
         if (length > 64) length = 64; // Ограничение по максимуму
         if (length == 0) return "";

@@ -173,6 +173,7 @@
     <ClInclude Include="Core\managers\ModuleRegistry.h" />
     <ClInclude Include="crypto\cCryptoRtpProtector.h" />
     <ClInclude Include="includes.h" />
+    <ClInclude Include="iWsHandler.h" />
     <ClInclude Include="json\cJsonSerializer.h" />
     <ClInclude Include="media\cMediaAudioDevice.h" />
     <ClInclude Include="media\cMediaOpusEncDec.h" />
