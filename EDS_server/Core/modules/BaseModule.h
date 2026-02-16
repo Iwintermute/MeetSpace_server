@@ -28,22 +28,9 @@ public:
     bool isEnabled() const override { return enabled_.load(); }
     void setEnabled(bool enabled) override { enabled_.store(enabled); }
 
-    bool initialize() override {
-        if (!enabled_ || initialized_) return false;
+    bool initialize() override {}
 
-        bool result = onInitialize();
-        if (result) {
-            initialized_.store(true);
-        }
-        return result;
-    }
-
-    void shutdown() override {
-        if (initialized_) {
-            onShutdown();
-            initialized_.store(false);
-        }
-    }
+    void shutdown() override {}
 
     friend class ModuleRegistry;
 

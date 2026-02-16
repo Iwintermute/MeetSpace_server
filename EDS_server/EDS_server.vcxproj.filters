@@ -41,106 +41,37 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="core\cAppCore.cpp">
-      <Filter>EDS_server\Core</Filter>
-    </ClCompile>
-    <ClCompile Include="crypto\cCryptoRtpProtector.cpp">
-      <Filter>EDS_server\Core</Filter>
-    </ClCompile>
     <ClCompile Include="eduspace_server.cpp">
       <Filter>EDS_server</Filter>
     </ClCompile>
-    <ClCompile Include="json\cJsonSerializer.cpp">
+    <ClCompile Include="App\cAppCore.cpp">
+      <Filter>Исходные файлы</Filter>
+    </ClCompile>
+    <ClCompile Include="BaseModule.cpp">
+      <Filter>Исходные файлы</Filter>
+    </ClCompile>
+    <ClCompile Include="Core\EventBus.h">
       <Filter>EDS_server\Core</Filter>
-    </ClCompile>
-    <ClCompile Include="media\cMediaAudioDevice.cpp">
-      <Filter>EDS_server\Core</Filter>
-    </ClCompile>
-    <ClCompile Include="media\cMediaOpusEncDec.cpp">
-      <Filter>EDS_server\Core</Filter>
-    </ClCompile>
-    <ClCompile Include="media\cMediaPipeline.cpp">
-      <Filter>EDS_server\Core</Filter>
-    </ClCompile>
-    <ClCompile Include="network\cNetHttpServer.cpp">
-      <Filter>EDS_server\Core</Filter>
-    </ClCompile>
-    <ClCompile Include="network\cNetIoContext.cpp">
-      <Filter>EDS_server\Core</Filter>
-    </ClCompile>
-    <ClCompile Include="network\cNetWebSocketServer.cpp">
-      <Filter>EDS_server\Core</Filter>
-    </ClCompile>
-    <ClCompile Include="rtc\cRtcManager.cpp">
-      <Filter>EDS_server\Core</Filter>
-    </ClCompile>
-    <ClCompile Include="rtc\cRtcPeer.cpp">
-      <Filter>EDS_server\Core</Filter>
-    </ClCompile>
-    <ClCompile Include="util\cLogger.cpp">
-      <Filter>EDS_server\Core\utils</Filter>
-    </ClCompile>
-    <ClCompile Include="conference\cConferenceManager.cpp">
-      <Filter>EDS_server\Core\managers\conference</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="core\cAppCore.h">
-      <Filter>EDS_server\Core</Filter>
-    </ClInclude>
-    <ClInclude Include="crypto\cCryptoRtpProtector.h">
-      <Filter>EDS_server\Core</Filter>
-    </ClInclude>
-    <ClInclude Include="includes.h">
-      <Filter>EDS_server\Core</Filter>
-    </ClInclude>
-    <ClInclude Include="json\cJsonSerializer.h">
-      <Filter>EDS_server\Core</Filter>
-    </ClInclude>
-    <ClInclude Include="media\cMediaAudioDevice.h">
-      <Filter>EDS_server\Core</Filter>
-    </ClInclude>
-    <ClInclude Include="media\cMediaOpusEncDec.h">
-      <Filter>EDS_server\Core</Filter>
-    </ClInclude>
-    <ClInclude Include="media\cMediaPipeline.h">
-      <Filter>EDS_server\Core</Filter>
-    </ClInclude>
-    <ClInclude Include="network\cNetHttpServer.h">
-      <Filter>EDS_server\Core</Filter>
-    </ClInclude>
-    <ClInclude Include="network\cNetIoContext.h">
-      <Filter>EDS_server\Core</Filter>
-    </ClInclude>
-    <ClInclude Include="network\cNetWebSocketServer.h">
-      <Filter>EDS_server\Core</Filter>
-    </ClInclude>
-    <ClInclude Include="rtc\cRtcManager.h">
-      <Filter>EDS_server\Core</Filter>
-    </ClInclude>
-    <ClInclude Include="rtc\cRtcPeer.h">
-      <Filter>EDS_server\Core</Filter>
-    </ClInclude>
-    <ClInclude Include="util\cLogger.h">
-      <Filter>EDS_server\Core\utils</Filter>
-    </ClInclude>
-    <ClInclude Include="conference\cConferenceManager.h">
-      <Filter>EDS_server\Core\managers\conference</Filter>
-    </ClInclude>
-    <ClInclude Include="Sys\interfaces\iModule.h">
-      <Filter>EDS_server\Core\interfaces</Filter>
-    </ClInclude>
-    <ClInclude Include="Sys\interfaces\iWsAction.h">
-      <Filter>EDS_server\Core\interfaces</Filter>
-    </ClInclude>
-    <ClInclude Include="Sys\interfaces\iWsManagerModule.h">
-      <Filter>EDS_server\Core\interfaces</Filter>
-    </ClInclude>
-    <ClInclude Include="Sys\modules\BaseModule.h">
-      <Filter>EDS_server\Core\modules</Filter>
-    </ClInclude>
     <ClInclude Include="Core\managers\ModuleRegistry.h">
       <Filter>EDS_server\Core\managers</Filter>
+    </ClInclude>
+    <ClInclude Include="App\cAppCore.h">
+      <Filter>Файлы заголовков</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\interfaces\iModule.h">
+      <Filter>EDS_server\Core\interfaces</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\interfaces\iAction.h">
+      <Filter>EDS_server\Core\interfaces</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\interfaces\iActionManager.h">
+      <Filter>EDS_server\Core\interfaces</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\modules\BaseModule.h">
+      <Filter>EDS_server\Core\modules</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
