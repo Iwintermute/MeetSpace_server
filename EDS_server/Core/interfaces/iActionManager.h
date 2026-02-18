@@ -1,6 +1,6 @@
 ﻿#pragma once
-#include "IModule.h"
-#include "iWsAction.h"
+#include "interfaces/iModule.h"
+#include "interfaces/iAction.h"
 
 #include <nlohmann/json.hpp>
 
@@ -9,16 +9,20 @@
 #include <string>
 #include <memory>
 
-namespace Core::interfaces {
-    class iWsManagerModule : public Core::interfaces::IModule{
-    public:
-        using tActionFactory = std::function<std::unique_ptr<iWsAction>()>;
+struct ExecutionContext {
+    void* wsSession{ nullptr };
+    std::string peer;
 
-        virtual void registerAction(const std::string& type, tActionFactory factory) = 0;  // Динамическая регистрация
-        virtual void unregisterAction(const std::string& type) = 0;  // Для отключения
-        virtual bool handleMessage(const nlohmann::json& msg, void* session) = 0;  // Делегирует в action
+};
 
-    protected:
-        std::unordered_map<std::string, tActionFactory> m_actions;
-    };
-}
+class iActionManager : public iModule{
+public:
+    using tActionFactory = std::function<std::unique_ptr<iAction>()>;
+
+    virtual void registerAction(const std::string& type, tActionFactory factory) = 0;  // Динамическая регистрация
+    virtual void unregisterAction(const std::string& type) = 0;  // Для отключения
+    virtual bool handleMessage(const nlohmann::json& msg, void* session) = 0;  // Делегирует в action
+
+protected:
+    std::unordered_map<std::string, tActionFactory> m_actions;
+};
