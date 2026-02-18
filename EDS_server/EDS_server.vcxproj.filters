@@ -34,6 +34,9 @@
     <Filter Include="EDS_server\Core\utils">
       <UniqueIdentifier>{K0E1A5C6-B359-4E41-9B60-3365922CA832}</UniqueIdentifier>
     </Filter>
+    <Filter Include="EDS_server\App">
+      <UniqueIdentifier>{f21a9435-f719-4810-a399-42d1f2196306}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <Filter Include="EDS_server">
@@ -44,22 +47,25 @@
     <ClCompile Include="eduspace_server.cpp">
       <Filter>EDS_server</Filter>
     </ClCompile>
-    <ClCompile Include="App\cAppCore.cpp">
-      <Filter>Исходные файлы</Filter>
-    </ClCompile>
-    <ClCompile Include="BaseModule.cpp">
-      <Filter>Исходные файлы</Filter>
-    </ClCompile>
     <ClCompile Include="Core\EventBus.h">
       <Filter>EDS_server\Core</Filter>
+    </ClCompile>
+    <ClCompile Include="App\cAppCore.cpp">
+      <Filter>EDS_server\App</Filter>
+    </ClCompile>
+    <ClCompile Include="BaseModule.cpp">
+      <Filter>EDS_server\Core\modules</Filter>
+    </ClCompile>
+    <ClCompile Include="BaseAction.cpp">
+      <Filter>EDS_server\Core\modules</Filter>
+    </ClCompile>
+    <ClCompile Include="BaseActionManager.cpp">
+      <Filter>EDS_server\Core\modules</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Core\managers\ModuleRegistry.h">
       <Filter>EDS_server\Core\managers</Filter>
-    </ClInclude>
-    <ClInclude Include="App\cAppCore.h">
-      <Filter>Файлы заголовков</Filter>
     </ClInclude>
     <ClInclude Include="Core\interfaces\iModule.h">
       <Filter>EDS_server\Core\interfaces</Filter>
@@ -71,6 +77,15 @@
       <Filter>EDS_server\Core\interfaces</Filter>
     </ClInclude>
     <ClInclude Include="Core\modules\BaseModule.h">
+      <Filter>EDS_server\Core\modules</Filter>
+    </ClInclude>
+    <ClInclude Include="App\cAppCore.h">
+      <Filter>EDS_server\App</Filter>
+    </ClInclude>
+    <ClInclude Include="BaseAction.h">
+      <Filter>EDS_server\Core\modules</Filter>
+    </ClInclude>
+    <ClInclude Include="BaseActionManager.h">
       <Filter>EDS_server\Core\modules</Filter>
     </ClInclude>
   </ItemGroup>
