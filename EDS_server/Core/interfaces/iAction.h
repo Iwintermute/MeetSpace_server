@@ -1,6 +1,6 @@
 ﻿#pragma once
 
-#include "iModule.h"
+#include "interfaces/iModule.h"
 #include <functional>
 
 #include <nlohmann/json.hpp>
