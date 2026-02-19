@@ -37,6 +37,15 @@
     <Filter Include="EDS_server\App">
       <UniqueIdentifier>{f21a9435-f719-4810-a399-42d1f2196306}</UniqueIdentifier>
     </Filter>
+    <Filter Include="EDS_server\Network">
+      <UniqueIdentifier>{a18a65de-9792-47fc-a0ff-4e23eea4b586}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="EDS_server\rtc">
+      <UniqueIdentifier>{53616b12-b66c-4407-b11c-496880287646}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="EDS_server\media">
+      <UniqueIdentifier>{531b77f0-7053-41c1-9558-23cd6ecebdb4}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <Filter Include="EDS_server">
@@ -61,6 +70,33 @@
     </ClCompile>
     <ClCompile Include="BaseActionManager.cpp">
       <Filter>EDS_server\Core\modules</Filter>
+    </ClCompile>
+    <ClCompile Include="network\cNetHttpServer.cpp">
+      <Filter>EDS_server\Network</Filter>
+    </ClCompile>
+    <ClCompile Include="network\cNetIoContext.cpp">
+      <Filter>EDS_server\Network</Filter>
+    </ClCompile>
+    <ClCompile Include="network\cNetWebSocketServer.cpp">
+      <Filter>EDS_server\Network</Filter>
+    </ClCompile>
+    <ClCompile Include="rtc\cRtcManager.cpp">
+      <Filter>EDS_server\rtc</Filter>
+    </ClCompile>
+    <ClCompile Include="rtc\cRtcPeer.cpp">
+      <Filter>EDS_server\rtc</Filter>
+    </ClCompile>
+    <ClCompile Include="media\cMediaAudioDevice.cpp">
+      <Filter>EDS_server\media</Filter>
+    </ClCompile>
+    <ClCompile Include="media\cMediaOpusEncDec.cpp">
+      <Filter>EDS_server\media</Filter>
+    </ClCompile>
+    <ClCompile Include="media\cMediaPipeline.cpp">
+      <Filter>EDS_server\media</Filter>
+    </ClCompile>
+    <ClCompile Include="EventBus.cpp">
+      <Filter>EDS_server\Core</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -87,6 +123,30 @@
     </ClInclude>
     <ClInclude Include="BaseActionManager.h">
       <Filter>EDS_server\Core\modules</Filter>
+    </ClInclude>
+    <ClInclude Include="network\cNetHttpServer.h">
+      <Filter>EDS_server\Network</Filter>
+    </ClInclude>
+    <ClInclude Include="network\cNetIoContext.h">
+      <Filter>EDS_server\Network</Filter>
+    </ClInclude>
+    <ClInclude Include="network\cNetWebSocketServer.h">
+      <Filter>EDS_server\Network</Filter>
+    </ClInclude>
+    <ClInclude Include="rtc\cRtcManager.h">
+      <Filter>EDS_server\rtc</Filter>
+    </ClInclude>
+    <ClInclude Include="rtc\cRtcPeer.h">
+      <Filter>EDS_server\rtc</Filter>
+    </ClInclude>
+    <ClInclude Include="media\cMediaAudioDevice.h">
+      <Filter>EDS_server\media</Filter>
+    </ClInclude>
+    <ClInclude Include="media\cMediaOpusEncDec.h">
+      <Filter>EDS_server\media</Filter>
+    </ClInclude>
+    <ClInclude Include="media\cMediaPipeline.h">
+      <Filter>EDS_server\media</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

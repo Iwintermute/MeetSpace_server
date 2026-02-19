@@ -160,6 +160,14 @@
     <ClInclude Include="Core\interfaces\iActionManager.h" />
     <ClInclude Include="Core\managers\ModuleRegistry.h" />
     <ClInclude Include="Core\modules\BaseModule.h" />
+    <ClInclude Include="media\cMediaAudioDevice.h" />
+    <ClInclude Include="media\cMediaOpusEncDec.h" />
+    <ClInclude Include="media\cMediaPipeline.h" />
+    <ClInclude Include="network\cNetHttpServer.h" />
+    <ClInclude Include="network\cNetIoContext.h" />
+    <ClInclude Include="network\cNetWebSocketServer.h" />
+    <ClInclude Include="rtc\cRtcManager.h" />
+    <ClInclude Include="rtc\cRtcPeer.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />
@@ -171,6 +179,15 @@
     <ClCompile Include="BaseModule.cpp" />
     <ClCompile Include="Core\EventBus.h" />
     <ClCompile Include="eduspace_server.cpp" />
+    <ClCompile Include="EventBus.cpp" />
+    <ClCompile Include="media\cMediaAudioDevice.cpp" />
+    <ClCompile Include="media\cMediaOpusEncDec.cpp" />
+    <ClCompile Include="media\cMediaPipeline.cpp" />
+    <ClCompile Include="network\cNetHttpServer.cpp" />
+    <ClCompile Include="network\cNetIoContext.cpp" />
+    <ClCompile Include="network\cNetWebSocketServer.cpp" />
+    <ClCompile Include="rtc\cRtcManager.cpp" />
+    <ClCompile Include="rtc\cRtcPeer.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
