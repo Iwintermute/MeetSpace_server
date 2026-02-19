@@ -5,7 +5,20 @@
 #include <mutex>
 
 class EventBus {
+    EventBus() = default;
+
 public:
+
+    EventBus(const EventBus&) = delete;
+    EventBus& operator=(const EventBus&) = delete;
+    EventBus(EventBus&&) = delete;
+    EventBus& operator=(EventBus&&) = delete;
+
+    static std::shared_ptr<EventBus> instance() {
+        static std::shared_ptr<EventBus> inst = std::make_shared<EventBus>();
+        return inst;
+    }
+
     // Подписка на событие типа Event
     template<typename Event>
     boost::signals2::connection subscribe(typename boost::signals2::signal<void(const Event&)>::slot_type slot) {
