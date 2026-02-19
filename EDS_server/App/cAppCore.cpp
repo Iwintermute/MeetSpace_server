@@ -11,12 +11,19 @@ namespace Sys {
     cAppCore::cAppCore() {}
     cAppCore::~cAppCore() { fnShutdown(); }
 
-    bool fnInitNew(boost::asio::io_context io) {
+    bool fnInitNew(unsigned short wsPort, unsigned short httpPort) {
+        Network::cNetIoContext m_ioCtx;
+
+
         ModuleRegistry Registry;
 
-        std::string name = "name";
+        m_ioCtx.fnInit();
+        auto WSServer = Registry.registerModule<Network::cNetWebSocketServer>(m_ioCtx.fnIo(), wsPort);
+        auto HTTPServer = Registry.registerModule<Network::cNetHttpServer>(m_ioCtx.fnIo(), httpPort);
+        //std::string name = "name";
 
-        BaseModule* baseModule = Registry.registerModule<BaseModule>(name);
+        //BaseModule* baseModule = Registry.registerModule<BaseModule>(name);
+
 
         Registry.initializeAll();
 
