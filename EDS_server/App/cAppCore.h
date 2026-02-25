@@ -3,7 +3,7 @@
 #include "../network/cNetHttpServer.h"
 #include "../network/cNetWebSocketServer.h"
 #include "../rtc/cRtcManager.h"
-#include "../conference/cConferenceManager.h"
+#include "managers/conference/cConferenceManager.h"
 #include <memory>
 
 namespace Sys {

@@ -10,7 +10,7 @@
 namespace Sys {
     namespace Network {
 
-        class cNetHttpServer : public BaseModule{
+        class cNetHttpServer{
         public:
             using tHealthFn = std::function<std::string()>;
             using tMetricsFn = std::function<std::string()>;

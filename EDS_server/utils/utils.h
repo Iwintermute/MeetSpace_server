@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
-#include "cLogger.h"
-#include "fnWordGenerator.h"
+#include "utils/cLogger.h"
+#include "utils/fnWordGenerator.h"
