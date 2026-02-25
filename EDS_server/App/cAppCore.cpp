@@ -11,23 +11,23 @@ namespace Sys {
     cAppCore::cAppCore() {}
     cAppCore::~cAppCore() { fnShutdown(); }
 
-    bool fnInitNew(unsigned short wsPort, unsigned short httpPort) {
-        Network::cNetIoContext m_ioCtx;
+    //bool fnInitNew(unsigned short wsPort, unsigned short httpPort) {
+    //    Network::cNetIoContext m_ioCtx;
 
 
-        ModuleRegistry Registry;
+    //    ModuleRegistry Registry;
 
-        m_ioCtx.fnInit();
-        auto WSServer = Registry.registerModule<Network::cNetWebSocketServer>(m_ioCtx.fnIo(), wsPort);
-        auto HTTPServer = Registry.registerModule<Network::cNetHttpServer>(m_ioCtx.fnIo(), httpPort);
-        //std::string name = "name";
+    //    m_ioCtx.fnInit();
+    //    auto WSServer = Registry.registerModule<Network::cNetWebSocketServer>(m_ioCtx.fnIo(), wsPort);
+    //    auto HTTPServer = Registry.registerModule<Network::cNetHttpServer>(m_ioCtx.fnIo(), httpPort);
+    //    //std::string name = "name";
 
-        //BaseModule* baseModule = Registry.registerModule<BaseModule>(name);
+    //    //BaseModule* baseModule = Registry.registerModule<BaseModule>(name);
 
 
-        Registry.initializeAll();
+    //    Registry.initializeAll();
 
-    }
+    //}
 
     bool cAppCore::fnInit(unsigned short wsPort, unsigned short httpPort)
     {

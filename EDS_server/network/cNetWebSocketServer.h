@@ -14,7 +14,7 @@
 
 namespace Sys::Network {
 
-    class cNetWebSocketServer : public BaseModule {
+    class cNetWebSocketServer{
     public:
         using tOnMessage = std::function<void(const std::string&, void*)>;
         using tOnConnected = std::function<void(void*)>;

@@ -15,7 +15,7 @@ public:
     EventBus& operator=(EventBus&&) = delete;
 
     static std::shared_ptr<EventBus> instance() {
-        static std::shared_ptr<EventBus> inst = std::make_shared<EventBus>();
+        static std::shared_ptr<EventBus> inst(new EventBus);
         return inst;
     }
 
