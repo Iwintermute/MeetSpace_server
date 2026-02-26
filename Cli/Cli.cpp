@@ -11,6 +11,8 @@
 
 #include<windows.h>
 
+#include<nlohmann/json.hpp>
+
 namespace beast = boost::beast;
 namespace websocket = beast::websocket;
 namespace net = boost::asio;
@@ -144,6 +146,59 @@ int main(int argc, char** argv)
                     continue;
                 }
 
+                try
+                {
+                    ws.write(net::buffer(rest));
+                    std::cout << "> " << rest << "\n";
+                }
+                catch (std::exception const& e)
+                {
+                    std::cerr << "write error: " << e.what() << "\n";
+                    g_running = false;
+                    break;
+                }
+            }
+            else if (cmd == "testCreate") {
+                std::string rest = "{\"type\":\"conf_create\"}";
+                try
+                {
+                    ws.write(net::buffer(rest));
+                    std::cout << "> " << rest << "\n";
+                }
+                catch (std::exception const& e)
+                {
+                    std::cerr << "write error: " << e.what() << "\n";
+                    g_running = false;
+                    break;
+                }
+            }
+            else if (cmd == "testJoin")
+            {
+                std::string rest;
+                std::getline(iss >> std::ws, rest);
+                if (rest.empty())
+                {
+                    std::cout << "Usage: testJoin 65GE46D\n";
+                    continue;
+                }
+                nlohmann::json j = {
+                    {"type", "conf_join"},
+                    {"invite", rest}
+                };
+                try
+                {
+                    ws.write(net::buffer(j.dump()));
+                    std::cout << "> " << j.dump() << "\n";
+                }
+                catch (std::exception const& e)
+                {
+                    std::cerr << "write error: " << e.what() << "\n";
+                    g_running = false;
+                    break;
+                }
+            }
+            else if (cmd == "testSend") {
+                std::string rest = "{\"type\":\"chat_message\",\"text\":\"Hello World!\"}";
                 try
                 {
                     ws.write(net::buffer(rest));
