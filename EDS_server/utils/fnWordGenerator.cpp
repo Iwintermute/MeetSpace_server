@@ -1,8 +1,6 @@
 ﻿#include "utils/fnWordGenerator.h"
 
-using namespace utils;
-
-std::string fnWordGenerator(size_t length, const char* alphabet)
+std::string utils::fnWordGenerator(size_t length, const char* alphabet)
 {
     if (length > 64) length = 64; // Ограничение по максимуму
     if (length == 0) return "";

@@ -153,13 +153,14 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="App\cAppCore.h" />
-    <ClInclude Include="BaseAction.h" />
-    <ClInclude Include="BaseActionManager.h" />
+    <ClInclude Include="App\feature\cConferenceManager.h" />
+    <ClInclude Include="App\wsFormat.h" />
     <ClInclude Include="Core\interfaces\iModule.h" />
     <ClInclude Include="Core\interfaces\iAction.h" />
     <ClInclude Include="Core\interfaces\iActionManager.h" />
-    <ClInclude Include="Core\managers\conference\cConferenceManager.h" />
     <ClInclude Include="Core\managers\ModuleRegistry.h" />
+    <ClInclude Include="Core\modules\BaseAction.h" />
+    <ClInclude Include="Core\modules\BaseActionManager.h" />
     <ClInclude Include="Core\modules\BaseModule.h" />
     <ClInclude Include="media\cMediaAudioDevice.h" />
     <ClInclude Include="media\cMediaOpusEncDec.h" />
@@ -178,14 +179,13 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="App\cAppCore.cpp" />
-    <ClCompile Include="BaseAction.cpp" />
-    <ClCompile Include="BaseActionManager.cpp" />
-    <ClCompile Include="BaseModule.cpp" />
+    <ClCompile Include="App\feature\cConferenceManager.cpp" />
+    <ClCompile Include="Core\EventBus.cpp" />
     <ClCompile Include="Core\EventBus.h" />
-    <ClCompile Include="Core\managers\conference\cConferenceManager.cpp" />
+    <ClCompile Include="Core\modules\BaseAction.cpp" />
+    <ClCompile Include="Core\modules\BaseActionManager.cpp" />
+    <ClCompile Include="Core\modules\BaseModule.cpp" />
     <ClCompile Include="eduspace_server.cpp" />
-    <ClCompile Include="EventBus.cpp" />
-    <ClCompile Include="fnWordGenerator.cpp" />
     <ClCompile Include="media\cMediaAudioDevice.cpp" />
     <ClCompile Include="media\cMediaOpusEncDec.cpp" />
     <ClCompile Include="media\cMediaPipeline.cpp" />
@@ -195,6 +195,7 @@
     <ClCompile Include="rtc\cRtcManager.cpp" />
     <ClCompile Include="rtc\cRtcPeer.cpp" />
     <ClCompile Include="utils\cLogger.cpp" />
+    <ClCompile Include="utils\fnWordGenerator.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

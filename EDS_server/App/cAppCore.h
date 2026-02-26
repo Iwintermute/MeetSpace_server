@@ -3,7 +3,7 @@
 #include "../network/cNetHttpServer.h"
 #include "../network/cNetWebSocketServer.h"
 #include "../rtc/cRtcManager.h"
-#include "managers/conference/cConferenceManager.h"
+#include "App/feature/cConferenceManager.h"
 #include <memory>
 
 namespace Sys {
@@ -14,6 +14,7 @@ namespace Sys {
         ~cAppCore();
 
         bool fnInit(unsigned short wsPort, unsigned short httpPort);
+        bool fnInitNew(unsigned short wsPort, unsigned short httpPort);
         void fnRun();
         void fnShutdown();
 

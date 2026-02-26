@@ -22,9 +22,6 @@
     <Filter Include="EDS_server\Core\managers">
       <UniqueIdentifier>{G0E1A5C6-B359-4E41-9B60-3365922CA832}</UniqueIdentifier>
     </Filter>
-    <Filter Include="EDS_server\Core\managers\conference">
-      <UniqueIdentifier>{H0E1A5C6-B359-4E41-9B60-3365922CA832}</UniqueIdentifier>
-    </Filter>
     <Filter Include="EDS_server\Core\managers\handlers">
       <UniqueIdentifier>{I0E1A5C6-B359-4E41-9B60-3365922CA832}</UniqueIdentifier>
     </Filter>
@@ -46,6 +43,9 @@
     <Filter Include="EDS_server\media">
       <UniqueIdentifier>{531b77f0-7053-41c1-9558-23cd6ecebdb4}</UniqueIdentifier>
     </Filter>
+    <Filter Include="EDS_server\App\feature">
+      <UniqueIdentifier>{aeab6c2d-7f55-4873-8dd5-edf8aa0e653d}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <Filter Include="EDS_server">
@@ -61,15 +61,6 @@
     </ClCompile>
     <ClCompile Include="App\cAppCore.cpp">
       <Filter>EDS_server\App</Filter>
-    </ClCompile>
-    <ClCompile Include="BaseModule.cpp">
-      <Filter>EDS_server\Core\modules</Filter>
-    </ClCompile>
-    <ClCompile Include="BaseAction.cpp">
-      <Filter>EDS_server\Core\modules</Filter>
-    </ClCompile>
-    <ClCompile Include="BaseActionManager.cpp">
-      <Filter>EDS_server\Core\modules</Filter>
     </ClCompile>
     <ClCompile Include="network\cNetHttpServer.cpp">
       <Filter>EDS_server\Network</Filter>
@@ -95,16 +86,25 @@
     <ClCompile Include="media\cMediaPipeline.cpp">
       <Filter>EDS_server\media</Filter>
     </ClCompile>
-    <ClCompile Include="EventBus.cpp">
+    <ClCompile Include="App\feature\cConferenceManager.cpp">
+      <Filter>EDS_server\App\feature</Filter>
+    </ClCompile>
+    <ClCompile Include="Core\modules\BaseActionManager.cpp">
+      <Filter>EDS_server\Core\modules</Filter>
+    </ClCompile>
+    <ClCompile Include="Core\modules\BaseModule.cpp">
+      <Filter>EDS_server\Core\modules</Filter>
+    </ClCompile>
+    <ClCompile Include="Core\modules\BaseAction.cpp">
+      <Filter>EDS_server\Core\modules</Filter>
+    </ClCompile>
+    <ClCompile Include="Core\EventBus.cpp">
       <Filter>EDS_server\Core</Filter>
     </ClCompile>
     <ClCompile Include="utils\cLogger.cpp">
       <Filter>EDS_server\utils</Filter>
     </ClCompile>
-    <ClCompile Include="Core\managers\conference\cConferenceManager.cpp">
-      <Filter>EDS_server\Core\managers\conference</Filter>
-    </ClCompile>
-    <ClCompile Include="fnWordGenerator.cpp">
+    <ClCompile Include="utils\fnWordGenerator.cpp">
       <Filter>EDS_server\utils</Filter>
     </ClCompile>
   </ItemGroup>
@@ -121,17 +121,8 @@
     <ClInclude Include="Core\interfaces\iActionManager.h">
       <Filter>EDS_server\Core\interfaces</Filter>
     </ClInclude>
-    <ClInclude Include="Core\modules\BaseModule.h">
-      <Filter>EDS_server\Core\modules</Filter>
-    </ClInclude>
     <ClInclude Include="App\cAppCore.h">
       <Filter>EDS_server\App</Filter>
-    </ClInclude>
-    <ClInclude Include="BaseAction.h">
-      <Filter>EDS_server\Core\modules</Filter>
-    </ClInclude>
-    <ClInclude Include="BaseActionManager.h">
-      <Filter>EDS_server\Core\modules</Filter>
     </ClInclude>
     <ClInclude Include="network\cNetHttpServer.h">
       <Filter>EDS_server\Network</Filter>
@@ -157,6 +148,21 @@
     <ClInclude Include="media\cMediaPipeline.h">
       <Filter>EDS_server\media</Filter>
     </ClInclude>
+    <ClInclude Include="App\feature\cConferenceManager.h">
+      <Filter>EDS_server\App\feature</Filter>
+    </ClInclude>
+    <ClInclude Include="App\wsFormat.h">
+      <Filter>EDS_server\App</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\modules\BaseActionManager.h">
+      <Filter>EDS_server\Core\modules</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\modules\BaseModule.h">
+      <Filter>EDS_server\Core\modules</Filter>
+    </ClInclude>
+    <ClInclude Include="Core\modules\BaseAction.h">
+      <Filter>EDS_server\Core\modules</Filter>
+    </ClInclude>
     <ClInclude Include="utils\cLogger.h">
       <Filter>EDS_server\utils</Filter>
     </ClInclude>
@@ -165,9 +171,6 @@
     </ClInclude>
     <ClInclude Include="utils\utils.h">
       <Filter>EDS_server\utils</Filter>
-    </ClInclude>
-    <ClInclude Include="Core\managers\conference\cConferenceManager.h">
-      <Filter>EDS_server\Core\managers\conference</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
