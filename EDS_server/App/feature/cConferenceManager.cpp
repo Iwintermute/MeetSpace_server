@@ -1,9 +1,13 @@
-﻿#include "cConferenceManager.h"
+﻿#pragma warning(suppress : 6)
+
+#include "cConferenceManager.h"
 #include <random>
+
+#include "utils/fnWordGenerator.h"
 
 using namespace Sys::Conference;
 
-std::string cConferenceManager::fnGenInvite()
+[[deprecated("Используйте utils/wordGenerator.h")]]std::string cConferenceManager::fnGenInvite()//Удалить
 {
     static const char* alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
     std::random_device rd;
@@ -23,7 +27,8 @@ std::pair<int, std::string> cConferenceManager::fnCreateConference(const std::st
     sConference c;
     c.id = m_nextId++;
     c.title = title;
-    c.invite = fnGenInvite();
+    //c.invite = fnGenInvite();
+    c.invite = utils::fnWordGenerator();
 
     m_inviteToConf[c.invite] = c.id;
     m_confs[c.id] = c;
