@@ -42,6 +42,7 @@ namespace Sys {
         void fnOnWsDisconnected(void* session);
 
         void fnHandleConferenceMsg(void* session, const nlohmann::json& j, const std::string& peerKey);
+        void fnHandleChatMsg(void* session, const nlohmann::json& j, const std::string& peerKey);
     };
 
 } // namespace Sys

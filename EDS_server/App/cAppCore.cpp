@@ -111,7 +111,10 @@ namespace Sys {
                 fnHandleConferenceMsg(session, j, peerKey);   // ← передаём trusted peerKey
                 return;
             }
-
+            if (type == "chat_message") {
+                fnHandleChatMsg(session, j, peerKey); //Костыль для чата
+                return;
+            }
             // Signaling (webrtc_*)
             if (type.rfind("webrtc_", 0) == 0) {
                 nlohmann::json fixed = j;
@@ -237,6 +240,29 @@ namespace Sys {
                 if (auto s = fnGetSessionByPeer(p)) m_wsServer->fnSendText(s, ev.dump());
             }
             return;
+        }
+    }
+
+    void cAppCore::fnHandleChatMsg(void* session, const nlohmann::json& j, const std::string& peerKey)
+    {
+        std::string text = j.value("text", "");
+        if (text.empty()) return;
+
+        // Берём всех в той же конференции
+        auto peers = m_confMgr.fnGetPeersInSameConf(peerKey);
+
+        nlohmann::json msg{
+            {"type",     "chat_message"},
+            {"from",     peerKey},
+            {"text",     text},
+            // можно добавить {"timestamp": std::time(nullptr)} если нужно
+        };
+
+        // Рассылаем всем кроме отправителя + эхо себе
+        for (const auto& p : peers)
+        {
+            if (auto s = fnGetSessionByPeer(p))
+                m_wsServer->fnSendText(s, msg.dump());
         }
     }
 
