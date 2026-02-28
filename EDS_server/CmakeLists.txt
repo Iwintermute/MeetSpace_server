@@ -1,0 +1,34 @@
+cmake_minimum_required(VERSION 3.20)
+project(EDS_server)
+
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+# Collect all source files recursively
+file(GLOB_RECURSE SOURCES "*.cpp")
+file(GLOB_RECURSE HEADERS "*.h" "*.hpp")
+
+
+set(MAIN_CPP "eduspace_server.cpp")
+
+# Create executable
+add_executable(${MAIN_CPP} ${SOURCES} ${HEADERS})
+
+# Include directories
+target_include_directories(${MAIN_CPP} PRIVATE 
+    ${CMAKE_CURRENT_SOURCE_DIR}/Core
+    ${CMAKE_CURRENT_SOURCE_DIR}
+)
+
+find_package(OpenSSL REQUIRED)
+find_package(LibDataChannel CONFIG REQUIRED)
+find_package(portaudio CONFIG REQUIRED)
+find_package(opus CONFIG REQUIRED)
+
+  target_link_libraries(${MAIN_CPP} PRIVATE 
+		LibDataChannel::LibDataChannel
+		portaudio
+		Opus::opus
+		OpenSSL::SSL
+		OpenSSL::Crypto
+  )
