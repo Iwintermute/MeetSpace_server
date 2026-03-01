@@ -19,7 +19,7 @@ namespace Sys {
         m_ioCtx.fnInit();
 
         //Registry.registerModule<Chat>();
-    
+
 
         Registry.initializeAll();
         return 1;
@@ -115,6 +115,11 @@ namespace Sys {
                 fnHandleChatMsg(session, j, peerKey); //Костыль для чата
                 return;
             }
+            // ===== НОВОЕ: Обработка аудио данных от клиента =====
+            if (type == "audio_data") {
+                fnHandleAudioData(session, j, peerKey);
+                return;
+            }
             // Signaling (webrtc_*)
             if (type.rfind("webrtc_", 0) == 0) {
                 nlohmann::json fixed = j;
@@ -125,6 +130,56 @@ namespace Sys {
         }
         catch (...) {
             Sys::cLogger::fnLog(Sys::cLogger::Level::Error, "Error in fnOnWsMessage!");
+        }
+    }
+
+    // ===== НОВЫЙ МЕТОД: Обработка аудио данных =====
+    void cAppCore::fnHandleAudioData(void* session, const nlohmann::json& j, const std::string& peerKey)
+    {
+        try {
+            // Проверяем наличие бинарных данных
+            if (!j.contains("data")) {
+                Sys::cLogger::fnLog(Sys::cLogger::Level::Warning,
+                    "Audio packet missing payload from peer: " + peerKey);
+                return;
+            }
+            else if (!j["data"].is_binary()) {
+                Sys::cLogger::fnLog(Sys::cLogger::Level::Warning,
+                    "Strange audio data payload from peer: " + peerKey);
+                return;
+            }
+
+            // Получаем бинарные данные
+            auto binaryData = j["data"].get_binary();
+
+            // Преобразуем в vector<uint8_t> для RTC
+            std::vector<uint8_t> audioData(binaryData.begin(), binaryData.end());
+
+            // Получаем всех участников в той же конференции
+            auto peers = m_confMgr.fnGetPeersInSameConf(peerKey);
+
+            // Отправляем аудио всем участникам через RTC DataChannel
+            for (const auto& targetPeer : peers) {
+                if (targetPeer == peerKey) continue; // Пропускаем отправителя
+
+                auto rtcPeer = m_rtcManager->fnGetPeer(targetPeer);
+                if (rtcPeer && rtcPeer->fnIsReady()) {
+                    rtcPeer->fnSendBinary(audioData);
+                }
+                else {
+                    // Если RTC peer не готов, логируем (опционально)
+                    Sys::cLogger::fnLog(Sys::cLogger::Level::Debug,
+                        "RTC peer not ready for: " + targetPeer);
+                }
+            }
+
+            // Обновляем статистику (опционально)
+            // Можно добавить счетчики пакетов в m_confMgr или отдельный менеджер статистики
+
+        }
+        catch (const std::exception& e) {
+            Sys::cLogger::fnLog(Sys::cLogger::Level::Error,
+                "Error handling audio data: " + std::string(e.what()));
         }
     }
 
@@ -287,7 +342,7 @@ namespace Sys {
     {
         Sys::cLogger::fnLog(Sys::cLogger::Level::Info, "WS Disconnected");
 
-       
+
         Sys::cLogger::fnLog(Sys::cLogger::Level::Info, "WS Disconnected");
 
         if (!m_rtcManager) return;
@@ -311,7 +366,7 @@ namespace Sys {
             }
         }
     }
-    std::string cAppCore::fnGeneratePeerKey()
+    std::string cAppCore::fnGeneratePeerKey()//FIXME: Deprecated, перевести на utils/wordGenerator
     {
         static const char* hex = "0123456789abcdef";
         std::random_device rd;

@@ -10,15 +10,6 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 add_subdirectory(EDS_server)
 add_subdirectory(Cli)
 
-if(CMAKE_BUILD_TYPE STREQUAL "Release")
-    add_compile_options(/O2 /MT)  # Для MSVC
-    # или для GCC: add_compile_options(-O3 -DNDEBUG)
-endif()
-
-if(WIN32)
-    set(PLATFORM_WINDOWS TRUE)
-    message(STATUS "Target platform: Windows")
-elseif(UNIX AND NOT APPLE)
-    set(PLATFORM_LINUX TRUE)
-    message(STATUS "Target platform: Linux")
+if(POLICY CMP0141)
+  cmake_policy(SET CMP0141 NEW)
 endif()

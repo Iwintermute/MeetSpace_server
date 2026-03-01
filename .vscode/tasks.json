@@ -1,0 +1,14 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "type": "cmake",
+            "label": "CMake: build",
+            "command": "build",
+            "preset": "x64-release",
+            "group": "build",
+            "problemMatcher": [],
+            "detail": "Сборка Release версии"
+        }
+    ]
+}

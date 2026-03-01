@@ -43,6 +43,9 @@ namespace Sys {
 
         void fnHandleConferenceMsg(void* session, const nlohmann::json& j, const std::string& peerKey);
         void fnHandleChatMsg(void* session, const nlohmann::json& j, const std::string& peerKey);
+
+        // Новый метод для обработки аудио данных
+        void fnHandleAudioData(void* session, const nlohmann::json& j, const std::string& peerKey);
     };
 
 } // namespace Sys

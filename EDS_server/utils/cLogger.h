@@ -7,11 +7,13 @@ namespace Sys {
 
     class cLogger {
     public:
-        enum class Level { Info, Warning, Error };
+        enum class Level { Info, Warning, Error, Debug };
 
         static void fnLog(Level eLevel, const std::string& sMsg);
 
     private:
+        static void printTimestamp();
+
         static std::mutex m_mtx; 
     };
 

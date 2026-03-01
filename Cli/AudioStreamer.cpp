@@ -87,6 +87,7 @@ bool AudioStreamer::initializeOpus() {
     opus_encoder_ctl(encoder, OPUS_SET_SIGNAL(OPUS_SIGNAL_VOICE));
     opus_encoder_ctl(encoder, OPUS_SET_INBAND_FEC(1));
     opus_encoder_ctl(encoder, OPUS_SET_PACKET_LOSS_PERC(15));
+    opus_encoder_ctl(encoder, OPUS_SET_DTX(1)); // Включить DTX (Discontinuous Transmission)
 
     // Создание декодера
     decoder = opus_decoder_create(config.sampleRate, config.channels, &opusError);
@@ -195,20 +196,29 @@ int AudioStreamer::captureCallback(const void* input, void* output,
     std::lock_guard<std::mutex> lock(self->captureMutex);
     std::copy(in, in + frameCount, self->captureBuffer.begin());
 
-    // Применяем усиление если нужно
-    if (self->config.volume != 1.0f) {
-        for (size_t i = 0; i < frameCount; ++i) {
-            self->captureBuffer[i] *= self->config.volume;
+    // Вычисляем RMS (Root Mean Square) энергию сигнала
+    float sumSquares = 0.0f;
+    for (size_t i = 0; i < frameCount; ++i) {
+        sumSquares += self->captureBuffer[i] * self->captureBuffer[i];
+    }
+    float rms = std::sqrt(sumSquares / frameCount);
+
+    // Порог тишины (экспериментально подобранное значение)
+    const float SILENCE_THRESHOLD = 0.020f;
+
+    // Если есть звук выше порога - добавляем в очередь
+    if (rms > SILENCE_THRESHOLD) {
+        if (self->captureQueue.size() < 10) {
+            // Применяем усиление если нужно
+            if (self->config.volume != 1.0f) {
+                for (size_t i = 0; i < frameCount; ++i) {
+                    self->captureBuffer[i] *= self->config.volume;
+                }
+            }
+            self->captureQueue.push(self->captureBuffer);
         }
     }
-
-    // Помещаем в очередь для обработки
-    if (self->captureQueue.size() < 10) { // Предотвращаем переполнение
-        self->captureQueue.push(self->captureBuffer);
-    }
-    else {
-        self->triggerEvent(AudioEventType::BUFFER_OVERFLOW, "Capture buffer overflow");
-    }
+    // else - тишина, ничего не добавляем в очередь
 
     return paContinue;
 }
@@ -375,21 +385,37 @@ void AudioStreamer::processJitterBuffer() {
 // Отправка аудио пакета
 void AudioStreamer::sendAudioPacket(const std::vector<uint8_t>& encodedData) {
     try {
-        nlohmann::json msg;
-        msg["type"] = "audio_data";
-        msg["sequence"] = sequenceNumber++;
-        msg["timestamp"] = std::chrono::duration_cast<std::chrono::milliseconds>(
-            std::chrono::system_clock::now().time_since_epoch()).count();
-        msg["sample_rate"] = config.sampleRate;
-        msg["channels"] = config.channels;
-        msg["frame_size"] = config.frameSize;
-        msg["data"] = nlohmann::json::binary_t(encodedData);
+        // Создаем заголовок с метаданными
+        struct AudioHeader {
+            uint32_t sequence;
+            uint64_t timestamp;
+            uint32_t sample_rate;
+            uint16_t channels;
+            uint16_t frame_size;
+            uint16_t data_size;  // добавим размер данных
+        } header;
 
-        ws.write(net::buffer(msg.dump()));
+        header.sequence = sequenceNumber++;
+        header.timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::system_clock::now().time_since_epoch()).count();
+        header.sample_rate = config.sampleRate;
+        header.channels = config.channels;
+        header.frame_size = config.frameSize;
+        header.data_size = encodedData.size();
+
+        // Формируем бинарный пакет: заголовок + аудиоданные
+        std::vector<uint8_t> packet;
+        packet.resize(sizeof(header) + encodedData.size());
+
+        memcpy(packet.data(), &header, sizeof(header));
+        memcpy(packet.data() + sizeof(header), encodedData.data(), encodedData.size());
+
+        // Отправляем как бинарный фрейм
+        ws.binary(true);
+        ws.write(net::buffer(packet));
 
         packetsSent++;
         bytesSent += encodedData.size();
-
     }
     catch (const std::exception& e) {
         triggerEvent(AudioEventType::ENCODING_ERROR,
