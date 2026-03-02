@@ -14,9 +14,12 @@
 # ModuleManager
     Управляет жизненным циклом модулей, сохраняет их атрибуты и позволяет иметь модульную структуру.
 
+    Глобальный реестр: используйте instance для получения ссылки на статический экземпляр.
+
 */
 class ModuleRegistry {
 private:
+
     std::unordered_map<int, std::unique_ptr<iModule>> modules_;
     int nextId_ = 1;
     std::mutex mutex_;
@@ -33,6 +36,11 @@ private:
     }
 
 public:
+    static std::shared_ptr<ModuleRegistry> instance(){
+        static std::shared_ptr<ModuleRegistry> inst(new ModuleRegistry);
+        return inst;
+    }
+
     template<typename T, typename... Args>
     T* registerModule(Args&&... args) {
         auto module = std::make_unique<T>(std::forward<Args>(args)...);
