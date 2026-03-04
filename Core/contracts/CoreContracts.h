@@ -2,6 +2,7 @@
 
 #include "contracts/Primitives.h"
 #include "contracts/IMessage.h"
+#include "contracts/TypedMessage.h"
 #include "contracts/IEventBus.h"
 #include "contracts/IModule.h"
 #include "contracts/IAction.h"
