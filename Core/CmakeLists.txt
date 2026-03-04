@@ -1,33 +1,13 @@
 cmake_minimum_required(VERSION 3.20)
-project(EDS_server)
+project(EduSpaceCore LANGUAGES CXX)
 
-set(CMAKE_CXX_STANDARD 20)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
+add_library(eduspace_core INTERFACE)
+add_library(EduSpace::Core ALIAS eduspace_core)
 
-# Collect all source files recursively
-file(GLOB_RECURSE SOURCES "*.cpp")
-file(GLOB_RECURSE HEADERS "*.h" "*.hpp")
+target_compile_features(eduspace_core INTERFACE cxx_std_20)
 
-
-set(TARGET_FILE "eduspace_server")
-
-# Create executable
-add_executable(${TARGET_FILE} ${SOURCES} ${HEADERS})
-
-# Include directories
-target_include_directories(${TARGET_FILE} PRIVATE 
-    ${CMAKE_CURRENT_SOURCE_DIR}
+target_include_directories(eduspace_core
+  INTERFACE
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/..>
 )
-
-find_package(OpenSSL REQUIRED)
-find_package(LibDataChannel CONFIG REQUIRED)
-find_package(portaudio CONFIG REQUIRED)
-find_package(opus CONFIG REQUIRED)
-
-  target_link_libraries(${TARGET_FILE} PRIVATE 
-		LibDataChannel::LibDataChannel
-		portaudio
-		Opus::opus
-		OpenSSL::SSL
-		OpenSSL::Crypto
-  )

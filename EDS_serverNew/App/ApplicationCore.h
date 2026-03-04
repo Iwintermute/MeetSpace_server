@@ -1,4 +1,7 @@
-#include "Core/managers/ModuleRegistry.h"
+﻿#pragma once
+
+#include "managers/ModuleRegistry.h"
+#include <memory>
 
 class ApplicationApi{
 public:

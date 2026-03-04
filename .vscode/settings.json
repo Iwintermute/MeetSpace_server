@@ -1,5 +1,3 @@
 {
-    "cmake.cmakePath": "C:\\PROGRAM FILES\\MICROSOFT VISUAL STUDIO\\18\\COMMUNITY\\COMMON7\\IDE\\COMMONEXTENSIONS\\MICROSOFT\\CMAKE\\CMake\\bin\\cmake.exe",
-    "cmake.generator": "Visual Studio 18",
-    "cmake.platform": "x64"
+    "cmake.useCMakePresets": "always"
 }

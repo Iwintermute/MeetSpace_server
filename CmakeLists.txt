@@ -1,15 +1,54 @@
-set(CMAKE_TOOLCHAIN_FILE "D://vcpkg//scripts//buildsystems//vcpkg.cmake")
-
-cmake_minimum_required(VERSION 3.20)
-project(EduSpace)
+﻿cmake_minimum_required(VERSION 3.20)
+project(EduSpace LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# Add subdirectories for main projects
-add_subdirectory(EDS_server)
-add_subdirectory(Cli)
-
 if(POLICY CMP0141)
   cmake_policy(SET CMP0141 NEW)
+endif()
+
+option(EDUSPACE_BUILD_SERVER "Build EDS_server target" ON)
+option(EDUSPACE_BUILD_CLI "Build Cli target" ON)
+option(EDUSPACE_BUILD_SERVER_NEW "Build EDS_serverNew rewrite target" OFF)
+
+set(EDUSPACE_CORE_DIR "" CACHE PATH "Path to external EduSpace Core directory")
+
+set(_eduspace_core_candidates "")
+if(EDUSPACE_CORE_DIR)
+  list(APPEND _eduspace_core_candidates "${EDUSPACE_CORE_DIR}")
+endif()
+list(APPEND _eduspace_core_candidates
+  "${CMAKE_SOURCE_DIR}/../Core"
+  "${CMAKE_SOURCE_DIR}/Core"
+)
+
+set(EDUSPACE_RESOLVED_CORE_DIR "")
+foreach(_candidate IN LISTS _eduspace_core_candidates)
+  if(EXISTS "${_candidate}/CmakeLists.txt" OR EXISTS "${_candidate}/CMakeLists.txt")
+    set(EDUSPACE_RESOLVED_CORE_DIR "${_candidate}")
+    break()
+  endif()
+endforeach()
+
+if(NOT EDUSPACE_RESOLVED_CORE_DIR)
+  message(FATAL_ERROR
+    "EduSpace Core was not found. Set EDUSPACE_CORE_DIR to external Core path "
+    "or keep Core as ../Core (preferred) / Core (fallback)."
+  )
+endif()
+
+message(STATUS "Using EduSpace Core from: ${EDUSPACE_RESOLVED_CORE_DIR}")
+add_subdirectory("${EDUSPACE_RESOLVED_CORE_DIR}" "${CMAKE_BINARY_DIR}/_deps/eduspace_core")
+
+if(EDUSPACE_BUILD_SERVER)
+  add_subdirectory(EDS_server)
+endif()
+
+if(EDUSPACE_BUILD_CLI)
+  add_subdirectory(Cli)
+endif()
+
+if(EDUSPACE_BUILD_SERVER_NEW)
+  add_subdirectory(EDS_serverNew)
 endif()

@@ -19,12 +19,17 @@ target_include_directories(${TARGET_FILE} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
+if(NOT TARGET eduspace_core)
+  message(FATAL_ERROR "Target eduspace_core is required. Ensure Core is configured in the root CMakeLists.")
+endif()
+
 find_package(OpenSSL REQUIRED)
 find_package(LibDataChannel CONFIG REQUIRED)
 find_package(portaudio CONFIG REQUIRED)
 find_package(opus CONFIG REQUIRED)
 
   target_link_libraries(${TARGET_FILE} PRIVATE 
+    eduspace_core
 		LibDataChannel::LibDataChannel
 		portaudio
 		Opus::opus
