@@ -4,7 +4,7 @@
 #include <cstdint>
 #include <string>
 
-class BaseModule : public iModule {
+class BaseModule : public virtual iModule {
     enum class ModuleStatus : uint8_t { SUCCESS, DISABLED, MODULE_ERROR };
 
 protected:

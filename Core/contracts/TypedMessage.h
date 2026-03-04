@@ -8,6 +8,7 @@ namespace core::contracts {
 
 struct MessageRoute {
     std::string object;
+    std::string agent;
     std::string action;
 };
 

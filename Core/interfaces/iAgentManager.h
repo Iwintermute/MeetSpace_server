@@ -12,7 +12,7 @@
 class iAgent;
 
 //Должен выполнять роль объекта-фитчи
-class iAgentManager : public iModule{
+class iAgentManager : public virtual iModule{
 public:
     using tAgentFactory = std::function<std::unique_ptr<iAgent>()>;
 

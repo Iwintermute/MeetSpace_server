@@ -1,11 +1,14 @@
 ﻿#pragma once
+#include "modules/BaseModule.h"
 #include "interfaces/iAction.h"
 #include "contracts/IMessage.h"
 #include "contracts/Primitives.h"
-
+class BaseAction : public BaseModule, public iAction {
 class BaseAction : public iAction {
 public:
-    BaseAction(const std::string& name, ModuleId id) {}
+    BaseAction(const std::string& name, ModuleId id)
+        : BaseModule(name, id) {
+    }
     virtual ~BaseAction() = default;
 
     // iAction override

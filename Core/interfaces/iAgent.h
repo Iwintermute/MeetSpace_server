@@ -13,7 +13,7 @@
 class iAgentManager;
 
 // Агент управляет набором действий и делегирует им входящие сообщения.
-class iAgent : public iModule {
+class iAgent : public virtual iModule {
 public:
     using tActionFactory = std::function<std::unique_ptr<iAction>()>;
 
