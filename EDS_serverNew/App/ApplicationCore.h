@@ -1,16 +1,16 @@
 ﻿#pragma once
 
-#include "managers/ModuleRegistry.h"
+#include "contracts/IModuleRegistry.h"
 #include <memory>
 
 class ApplicationApi{
 public:
-    ApplicationApi();
+    explicit ApplicationApi(std::shared_ptr<core::contracts::IModuleRegistry> registry = nullptr);
 public:
     bool init();
 
     bool start();
 
 private:
-    std::shared_ptr<ModuleRegistry> CoreRegistry;//Реестр модулей
+    std::shared_ptr<core::contracts::IModuleRegistry> CoreRegistry;//Реестр модулей
 };
