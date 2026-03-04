@@ -1,27 +1,29 @@
 #pragma once
+#include "contracts/IMessage.h"
+#include "contracts/Primitives.h"
+#include "interfaces/iAction.h"
 #include "interfaces/iModule.h"
-#include "interfaces/iAgentManager.h"
 
-#include <nlohmann/json.hpp>
-#include "App/wsFormat.h"
-
-#include <unordered_map>
 #include <functional>
-#include <string>
 #include <memory>
+#include <string>
+#include <string_view>
+#include <unordered_map>
+
+class iAgentManager;
 
 //Должен маршрутизировать запросы от менеджеров и регулировать действия, реализовывать логику проекта
 class iAgent {
 public:
 
-    using tAgentFactory = std::function<std::unique_ptr<iAgent>()>;
+    using tActionFactory = std::function<std::unique_ptr<iAction>()>;
 
-    virtual void registerAgent(const std::string& type, tAgentFactory factory) = 0;  // Динамическая регистрация
-    virtual void unregisterAgent(const std::string& type) = 0;  // Для отключения
-    virtual bool handleMessage(const StandardWsMessage& msg) = 0;  // Делегирует в Agent
+    virtual core::contracts::OperationStatus registerAction(std::string type, tActionFactory factory) = 0;  // Динамическая регистрация
+    virtual core::contracts::OperationStatus unregisterAction(std::string_view type) = 0;  // Для отключения
+    virtual core::contracts::OperationStatus handleMessage(const core::contracts::IMessage& msg) = 0;  // Делегирует в Action
 
 protected:
     std::shared_ptr<iAgentManager> managerKnowledge;
-
+    std::unordered_map<std::string, tActionFactory> Actions;
     std::unordered_map<std::string, tAgentFactory> Actions;
 };
