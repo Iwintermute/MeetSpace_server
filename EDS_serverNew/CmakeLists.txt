@@ -1,12 +1,13 @@
 cmake_minimum_required(VERSION 3.20)
-project(EDS_serverNew)
+project(EDS_serverNew LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Collect all source files recursively
-file(GLOB_RECURSE SOURCES "*.cpp")
-file(GLOB_RECURSE HEADERS "*.h" "*.hpp")
+file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS "*.cpp")
+file(GLOB_RECURSE HEADERS CONFIGURE_DEPENDS "*.h" "*.hpp")
+list(REMOVE_ITEM SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/main.cpp")
 
 set(TARGET_FILE "eds_server_new_arch")
 
@@ -21,7 +22,15 @@ target_include_directories(${TARGET_FILE} PRIVATE
 if(NOT TARGET eduspace_core)
   message(FATAL_ERROR "Target eduspace_core is required. Ensure Core is configured in the root CMakeLists.")
 endif()
+target_link_libraries(${TARGET_FILE} PRIVATE
+    eduspace_core
+)
 
-  target_link_libraries(${TARGET_FILE} PRIVATE 
-		eduspace_core
-  )
+add_executable(eds_server_new_mediasoup_app main.cpp)
+target_include_directories(eds_server_new_mediasoup_app PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
+)
+target_link_libraries(eds_server_new_mediasoup_app PRIVATE
+    ${TARGET_FILE}
+    eduspace_core
+)
