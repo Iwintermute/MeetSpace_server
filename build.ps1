@@ -180,6 +180,8 @@ Write-Host "Using Visual Studio: $vsInstallPath"
 Write-Host "Using VCPKG_ROOT: $resolvedVcpkgRoot"
 
 Import-MsvcEnvironment -VsDevCmdPath $vsDevCmd
+$env:VCPKG_ROOT = $resolvedVcpkgRoot
+Write-Host "Re-applied VCPKG_ROOT after VsDevCmd: $env:VCPKG_ROOT"
 
 if (-not $BuildOnly) {
     $configureArgs = @(
