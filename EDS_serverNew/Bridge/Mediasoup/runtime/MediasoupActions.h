@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Bridge/Mediasoup/runtime/MediasoupRtcBridge.h"
 #include "Bridge/Mediasoup/runtime/MediasoupStateStore.h"
 #include "contracts/IMessage.h"
 #include "contracts/TypedMessage.h"
@@ -13,7 +14,10 @@ namespace eds::server_new::mediasoup {
 
 class MediasoupActionBase : public BaseModule, public iAction {
 public:
-    MediasoupActionBase(std::string name, std::shared_ptr<MediasoupStateStore> stateStore);
+    MediasoupActionBase(
+        std::string name,
+        std::shared_ptr<MediasoupStateStore> stateStore,
+        std::shared_ptr<MediasoupRtcBridge> rtcBridge);
     ~MediasoupActionBase() override = default;
 
 protected:
@@ -25,35 +29,70 @@ protected:
     void onShutdown() override;
 
     std::shared_ptr<MediasoupStateStore> stateStore_;
+    std::shared_ptr<MediasoupRtcBridge> rtcBridge_;
 };
 
 class CreateRoomAction final : public MediasoupActionBase {
 public:
-    explicit CreateRoomAction(std::shared_ptr<MediasoupStateStore> stateStore);
+    CreateRoomAction(
+        std::shared_ptr<MediasoupStateStore> stateStore,
+        std::shared_ptr<MediasoupRtcBridge> rtcBridge);
     core::contracts::OperationStatus execute(const core::contracts::IMessage& message) override;
 };
 
 class JoinRoomAction final : public MediasoupActionBase {
 public:
-    explicit JoinRoomAction(std::shared_ptr<MediasoupStateStore> stateStore);
+    JoinRoomAction(
+        std::shared_ptr<MediasoupStateStore> stateStore,
+        std::shared_ptr<MediasoupRtcBridge> rtcBridge);
     core::contracts::OperationStatus execute(const core::contracts::IMessage& message) override;
 };
 
 class OpenTransportAction final : public MediasoupActionBase {
 public:
-    explicit OpenTransportAction(std::shared_ptr<MediasoupStateStore> stateStore);
+    OpenTransportAction(
+        std::shared_ptr<MediasoupStateStore> stateStore,
+        std::shared_ptr<MediasoupRtcBridge> rtcBridge);
     core::contracts::OperationStatus execute(const core::contracts::IMessage& message) override;
 };
 
 class ProduceAction final : public MediasoupActionBase {
 public:
-    explicit ProduceAction(std::shared_ptr<MediasoupStateStore> stateStore);
+    ProduceAction(
+        std::shared_ptr<MediasoupStateStore> stateStore,
+        std::shared_ptr<MediasoupRtcBridge> rtcBridge);
     core::contracts::OperationStatus execute(const core::contracts::IMessage& message) override;
 };
 
 class ConsumeAction final : public MediasoupActionBase {
 public:
-    explicit ConsumeAction(std::shared_ptr<MediasoupStateStore> stateStore);
+    ConsumeAction(
+        std::shared_ptr<MediasoupStateStore> stateStore,
+        std::shared_ptr<MediasoupRtcBridge> rtcBridge);
+    core::contracts::OperationStatus execute(const core::contracts::IMessage& message) override;
+};
+
+class WebRtcOfferAction final : public MediasoupActionBase {
+public:
+    WebRtcOfferAction(
+        std::shared_ptr<MediasoupStateStore> stateStore,
+        std::shared_ptr<MediasoupRtcBridge> rtcBridge);
+    core::contracts::OperationStatus execute(const core::contracts::IMessage& message) override;
+};
+
+class WebRtcIceAction final : public MediasoupActionBase {
+public:
+    WebRtcIceAction(
+        std::shared_ptr<MediasoupStateStore> stateStore,
+        std::shared_ptr<MediasoupRtcBridge> rtcBridge);
+    core::contracts::OperationStatus execute(const core::contracts::IMessage& message) override;
+};
+
+class WebRtcCloseAction final : public MediasoupActionBase {
+public:
+    WebRtcCloseAction(
+        std::shared_ptr<MediasoupStateStore> stateStore,
+        std::shared_ptr<MediasoupRtcBridge> rtcBridge);
     core::contracts::OperationStatus execute(const core::contracts::IMessage& message) override;
 };
 

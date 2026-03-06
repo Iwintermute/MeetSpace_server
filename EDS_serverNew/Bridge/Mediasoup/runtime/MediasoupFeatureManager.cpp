@@ -7,16 +7,17 @@
 #include <utility>
 
 namespace eds::server_new::mediasoup {
-
-MediasoupFeatureManager::MediasoupFeatureManager(std::shared_ptr<MediasoupStateStore> stateStore)
+MediasoupFeatureManager::MediasoupFeatureManager(
+    std::shared_ptr<MediasoupStateStore> stateStore,
+    std::shared_ptr<MediasoupRtcBridge> rtcBridge)
     : BaseFeatureManager("MediasoupFeatureManager", static_cast<ModuleId>(-1)),
-      stateStore_(std::move(stateStore)) {
-    if (!stateStore_) {
+      stateStore_(std::move(stateStore)),
+      rtcBridge_(std::move(rtcBridge)) {
+    if (!stateStore_ || !rtcBridge_) {
         throw std::invalid_argument("MediasoupFeatureManager requires a state store.");
     }
-
-    auto status = registerAgent(std::string(kDefaultAgent), [stateStore = stateStore_]() {
-        return std::make_unique<MediasoupSignalingAgent>(stateStore);
+    auto status = registerAgent(std::string(kDefaultAgent), [stateStore = stateStore_, rtcBridge = rtcBridge_]() {
+        return std::make_unique<MediasoupSignalingAgent>(stateStore, rtcBridge);
     });
 
     if (!status.ok) {
