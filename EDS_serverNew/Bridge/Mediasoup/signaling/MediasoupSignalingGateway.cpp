@@ -92,6 +92,7 @@ void MediasoupSignalingGateway::onDisconnected(void* session) {
     if (iterator == sessionToPeer_.end()) {
         return;
     }
+    app_.notifyMediasoupSessionDisconnected(iterator->second, reinterpret_cast<std::uintptr_t>(session));
 
     peerToSession_.erase(iterator->second);
     sessionToPeer_.erase(iterator);
@@ -123,12 +124,16 @@ void MediasoupSignalingGateway::onMessage(const std::string& text, void* session
         const auto context = request.value("ctx", json::object());
 
         MediasoupCommand command;
+        command.sessionHandle = reinterpret_cast<std::uintptr_t>(session);
         command.sessionId = trustedPeer;
         command.peerId = context.value("peerId", context.value("peer", trustedPeer));
         command.roomId = context.value("roomId", std::string{});
         command.transportId = context.value("transportId", std::string{});
         command.producerId = context.value("producerId", std::string{});
         command.kind = context.value("kind", std::string{});
+        command.sdp = context.value("sdp", std::string{});
+        command.sdpMid = context.value("sdpMid", std::string{});
+        command.candidate = context.value("candidate", std::string{});
 
         if (command.peerId != trustedPeer) {
             response = {
@@ -156,6 +161,18 @@ void MediasoupSignalingGateway::onMessage(const std::string& text, void* session
             { "ok", status.ok },
             { "message", status.message }
         };
+
+        const auto events = app_.pollMediasoupEventsForPeer(trustedPeer);
+        for (const auto& event : events) {
+            json outbound{
+                { "type", event.type },
+                { "peer", event.peerId },
+                { "sdp", event.sdp },
+                { "sdpMid", event.sdpMid },
+                { "candidate", event.candidate }
+            };
+            wsServer_->sendText(session, outbound.dump());
+        }
     } catch (const std::exception& ex) {
         response = {
             { "type", "dispatch_result" },

@@ -45,8 +45,11 @@ core::contracts::OperationStatus ApplicationApi::registerMediasoup() {
     if (!mediasoupState_) {
         mediasoupState_ = std::make_shared<eds::server_new::mediasoup::MediasoupStateStore>();
     }
+    if (!mediasoupRtcBridge_) {
+        mediasoupRtcBridge_ = std::make_shared<eds::server_new::mediasoup::MediasoupRtcBridge>();
+    }
     if (!mediasoupManager_) {
-        mediasoupManager_ = std::make_shared<eds::server_new::mediasoup::MediasoupFeatureManager>(mediasoupState_);
+        mediasoupManager_ = std::make_shared<eds::server_new::mediasoup::MediasoupFeatureManager>(mediasoupState_, mediasoupRtcBridge_);
     }
 
     auto status = dispatcher_.registerManager(std::string(eds::server_new::mediasoup::kRouteObject), mediasoupManager_);
@@ -56,5 +59,18 @@ core::contracts::OperationStatus ApplicationApi::registerMediasoup() {
 
     mediasoupRegistered_ = true;
     return core::contracts::OperationStatus::success();
+}
+std::vector<eds::server_new::mediasoup::MediasoupSignalingEvent> ApplicationApi::pollMediasoupEventsForPeer(const std::string& peerId) {
+    if (!mediasoupRtcBridge_ || peerId.empty()) {
+        return {};
+    }
+
+    return mediasoupRtcBridge_->consumeEventsForPeer(peerId);
+}
+void ApplicationApi::notifyMediasoupSessionDisconnected(const std::string& peerId, std::uintptr_t sessionHandle) {
+    if (!mediasoupRtcBridge_) {
+        return;
+    }
+    mediasoupRtcBridge_->onSessionDisconnected(peerId, sessionHandle);
 }
 
