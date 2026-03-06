@@ -7,6 +7,7 @@
 #include <string>
 #include <thread>
 #include <atomic>
+#include <mutex>
 #include <sstream>
 #include <iomanip>
 #include <chrono>
@@ -25,6 +26,32 @@ using tcp = net::ip::tcp;
 
 std::atomic<bool> g_running{ true };
 std::unique_ptr<AudioStreamer> g_audioStreamer;
+std::mutex g_peerMutex;
+std::string g_assignedPeer;
+
+void setAssignedPeer(const std::string& peer) {
+    std::lock_guard<std::mutex> lock(g_peerMutex);
+    g_assignedPeer = peer;
+}
+
+std::string getAssignedPeer() {
+    std::lock_guard<std::mutex> lock(g_peerMutex);
+    return g_assignedPeer;
+}
+
+nlohmann::json makeMediasoupRequest(const std::string& action, nlohmann::json context = nlohmann::json::object()) {
+    const auto assignedPeer = getAssignedPeer();
+    if (!assignedPeer.empty() && !context.contains("peer")) {
+        context["peer"] = assignedPeer;
+    }
+
+    return nlohmann::json{
+        {"object", "mediasoup"},
+        {"agent", "signaling"},
+        {"action", action},
+        {"ctx", std::move(context)}
+    };
+}
 
 void printColored(const std::string& text, int color) {
 #ifdef _WIN32
@@ -105,6 +132,7 @@ void do_read(websocket::stream<beast::tcp_stream>& ws) {
 
     while (g_running) {
         try {
+            ws.next_layer().expires_after(std::chrono::milliseconds(250));
             ws.read(buffer);
             auto msg = beast::buffers_to_string(buffer.data());
 
@@ -112,12 +140,18 @@ void do_read(websocket::stream<beast::tcp_stream>& ws) {
             try {
                 auto json = nlohmann::json::parse(msg);
 
-                // Обработка аудио данных от сервера
+                // Обработка сообщений от сервера
                 if (json.contains("type")) {
-                    if (json["type"] == "audio_data" && g_audioStreamer) {
+                    const auto type = json["type"].get<std::string>();
+
+                    if (type == "audio_data" && g_audioStreamer) {
                         g_audioStreamer->processIncomingAudio(json);
                     }
                     else {
+                        if ((type == "peer_assigned" || type == "dispatch_result") && json.contains("peer")) {
+                            setAssignedPeer(json["peer"].get<std::string>());
+                        }
+
                         printTimestamp();
                         std::cout << "< " << msg << std::endl;
                     }
@@ -136,6 +170,12 @@ void do_read(websocket::stream<beast::tcp_stream>& ws) {
             buffer.consume(buffer.size());
         }
         catch (beast::system_error const& se) {
+            if (se.code() == beast::error::timeout) {
+                if (!g_running.load()) {
+                    break;
+                }
+                continue;
+            }
             if (se.code() == websocket::error::closed ||
                 se.code() == net::error::eof ||
                 se.code() == net::error::operation_aborted) {
@@ -196,6 +236,7 @@ int main(int argc, char** argv) {
     if (argc < 3) {
         std::cerr << "Usage: " << argv[0] << " <host> <port> [options]\n";
         std::cerr << "Options:\n";
+        std::cerr << "  --path <value>    WebSocket handshake path (default: /)\n";
         std::cerr << "  --audio           Enable audio streaming\n";
         std::cerr << "  --both            Enable both capture and playback\n";
         std::cerr << "  --capture-only    Enable only audio capture\n";
@@ -204,13 +245,14 @@ int main(int argc, char** argv) {
         std::cerr << "  --rate <hz>       Set sample rate (default: 48000)\n";
         std::cerr << "  --bitrate <kbps>  Set Opus bitrate (default: 64)\n";
         std::cerr << "Example:\n";
-        std::cerr << "  " << argv[0] << " 127.0.0.1 8080 --audio\n";
-        std::cerr << "  " << argv[0] << " localhost 4433 --both --rate 44100\n";
+        std::cerr << "  " << argv[0] << " 127.0.0.1 9002 --path /\n";
+        std::cerr << "  " << argv[0] << " localhost 9002 --both --rate 44100\n";
         return 1;
     }
 
     std::string host = argv[1];
     auto const  port = argv[2];
+    std::string wsPath = "/";
 
     bool enableAudio = false;
     bool enableCapture = false;
@@ -250,6 +292,12 @@ int main(int argc, char** argv) {
         else if (arg == "--bitrate" && i + 1 < argc) {
             bitrate = std::stoi(argv[++i]) * 1000;
         }
+        else if (arg == "--path" && i + 1 < argc) {
+            wsPath = argv[++i];
+            if (!wsPath.empty() && wsPath.front() != '/') {
+                wsPath = "/" + wsPath;
+            }
+        }
     }
 
     if (showDevices) {
@@ -274,7 +322,7 @@ int main(int argc, char** argv) {
             }));
 
         ws.next_layer().expires_never();
-        ws.handshake(host, "/ws");
+        ws.handshake(host, wsPath);
 
         printTimestamp();
         std::cout << "[connected] " << host << ":" << port << "\n";
@@ -327,18 +375,38 @@ int main(int argc, char** argv) {
             std::cout << "  audio devices        - показать доступные устройства\n";
         }
         std::cout << "\nTest Commands:\n";
-        std::cout << "  testCreate           - создать конференцию\n";
-        std::cout << "  testJoin <code>      - присоединиться к конференции\n";
-        std::cout << "  testSend             - отправить тестовое сообщение\n";
+        std::cout << "  testCreate [roomId]                 - отправить mediasoup/create_room\n";
+        std::cout << "  testJoin <roomId>                   - отправить mediasoup/join_room\n";
+        std::cout << "  testOffer [sdp]                     - отправить mediasoup/webrtc_offer\n";
+        std::cout << "  testIce [sdpMid] [candidate]        - отправить mediasoup/webrtc_ice\n";
+        std::cout << "  testClose                           - отправить mediasoup/webrtc_close\n";
+        std::cout << "  testProkyrka [roomId]               - create_room -> join_room\n";
+        std::cout << "  testFlow [roomId]                   - create_room -> join_room -> offer -> ice -> close\n";
         std::cout << "\nOther:\n";
         std::cout << "  quit / exit / q      - завершить\n";
-        std::cout << "  help                  - эта справка\n\n";
+        std::cout << "  help / ?             - эта справка\n\n";
 
         // Запускаем поток чтения
         std::thread reader([&ws] { do_read(ws); });
 
         std::string line;
-        bool statsTimerRunning = false;
+        auto sendText = [&ws](const std::string& text) -> bool {
+            try {
+                ws.write(net::buffer(text));
+                printTimestamp();
+                std::cout << "> " << text << "\n";
+                return true;
+            }
+            catch (const std::exception& e) {
+                std::cerr << "write error: " << e.what() << "\n";
+                g_running = false;
+                return false;
+            }
+        };
+
+        auto sendJson = [&sendText](const nlohmann::json& payload) -> bool {
+            return sendText(payload.dump());
+        };
 
         while (g_running && std::getline(std::cin, line)) {
             if (line.empty()) continue;
@@ -362,14 +430,7 @@ int main(int argc, char** argv) {
                     std::cout << "Usage: send {\"type\":\"hello\"}\n";
                     continue;
                 }
-
-                try {
-                    ws.write(net::buffer(rest));
-                    printTimestamp();
-                    std::cout << "> " << rest << "\n";
-                }
-                catch (std::exception const& e) {
-                    std::cerr << "write error: " << e.what() << "\n";
+                if (!sendText(rest)) {
                     g_running = false;
                     break;
                 }
@@ -421,50 +482,138 @@ int main(int argc, char** argv) {
                 }
             }
             else if (cmd == "testCreate") {
-                std::string rest = "{\"type\":\"conf_create\"}";
-                try {
-                    ws.write(net::buffer(rest));
-                    printTimestamp();
-                    std::cout << "> " << rest << "\n";
+                std::string roomId;
+                std::getline(iss >> std::ws, roomId);
+                if (roomId.empty()) {
+                    roomId = "room-cli";
                 }
-                catch (std::exception const& e) {
-                    std::cerr << "write error: " << e.what() << "\n";
-                    g_running = false;
+                const auto payload = makeMediasoupRequest("create_room", nlohmann::json{
+                    {"roomId", roomId}
+                });
+                if (!sendJson(payload)) {
                     break;
                 }
             }
             else if (cmd == "testJoin") {
-                std::string rest;
-                std::getline(iss >> std::ws, rest);
-                if (rest.empty()) {
-                    std::cout << "Usage: testJoin 65GE46D\n";
+                std::string roomId;
+                iss >> roomId;
+                if (roomId.empty()) {
+                    std::cout << "Usage: testJoin <roomId>\n";
                     continue;
                 }
-                nlohmann::json j = {
-                    {"type", "conf_join"},
-                    {"invite", rest}
-                };
-                try {
-                    ws.write(net::buffer(j.dump()));
-                    printTimestamp();
-                    std::cout << "> " << j.dump() << "\n";
-                }
-                catch (std::exception const& e) {
-                    std::cerr << "write error: " << e.what() << "\n";
-                    g_running = false;
+                const auto payload = makeMediasoupRequest("join_room", nlohmann::json{
+                    {"roomId", roomId}
+                });
+                if (!sendJson(payload)) {
                     break;
                 }
             }
-            else if (cmd == "testSend") {
-                std::string rest = "{\"type\":\"chat_message\",\"text\":\"Hello World!\"}";
-                try {
-                    ws.write(net::buffer(rest));
-                    printTimestamp();
-                    std::cout << "> " << rest << "\n";
+            else if (cmd == "testOffer") {
+                std::string sdp;
+                std::getline(iss >> std::ws, sdp);
+                if (sdp.empty()) {
+                    sdp = "v=0\r\no=- 0 0 IN IP4 127.0.0.1\r\ns=cli\r\nt=0 0\r\na=group:BUNDLE 0\r\nm=application 9 UDP/DTLS/SCTP webrtc-datachannel\r\nc=IN IP4 0.0.0.0\r\na=mid:0\r\na=sctp-port:5000\r\n";
                 }
-                catch (std::exception const& e) {
-                    std::cerr << "write error: " << e.what() << "\n";
-                    g_running = false;
+
+                const auto payload = makeMediasoupRequest("webrtc_offer", nlohmann::json{
+                    {"sdp", sdp}
+                });
+                if (!sendJson(payload)) {
+                    break;
+                }
+            }
+            else if (cmd == "testIce") {
+                std::string sdpMid;
+                iss >> sdpMid;
+
+                std::string candidate;
+                std::getline(iss >> std::ws, candidate);
+
+                if (sdpMid.empty()) {
+                    sdpMid = "0";
+                }
+                if (candidate.empty()) {
+                    candidate = "candidate:0 1 UDP 2122252543 127.0.0.1 5000 typ host";
+                }
+
+                const auto payload = makeMediasoupRequest("webrtc_ice", nlohmann::json{
+                    {"sdpMid", sdpMid},
+                    {"candidate", candidate}
+                });
+                if (!sendJson(payload)) {
+                    break;
+                }
+            }
+            else if (cmd == "testClose") {
+                const auto payload = makeMediasoupRequest("webrtc_close");
+                if (!sendJson(payload)) {
+                    break;
+                }
+            }
+            else if (cmd == "testProkyrka") {
+                std::string roomId;
+                iss >> roomId;
+                if (roomId.empty()) {
+                    roomId = "room-cli";
+                }
+
+                const auto createPayload = makeMediasoupRequest("create_room", nlohmann::json{
+                    {"roomId", roomId}
+                });
+                if (!sendJson(createPayload)) {
+                    break;
+                }
+
+                std::this_thread::sleep_for(std::chrono::milliseconds(120));
+                const auto joinPayload = makeMediasoupRequest("join_room", nlohmann::json{
+                    {"roomId", roomId}
+                });
+                if (!sendJson(joinPayload)) {
+                    break;
+                }
+            }
+            else if (cmd == "testFlow") {
+                std::string roomId;
+                iss >> roomId;
+                if (roomId.empty()) {
+                    roomId = "room-cli";
+                }
+
+                const auto createPayload = makeMediasoupRequest("create_room", nlohmann::json{
+                    {"roomId", roomId}
+                });
+                if (!sendJson(createPayload)) {
+                    break;
+                }
+
+                std::this_thread::sleep_for(std::chrono::milliseconds(120));
+                const auto joinPayload = makeMediasoupRequest("join_room", nlohmann::json{
+                    {"roomId", roomId}
+                });
+                if (!sendJson(joinPayload)) {
+                    break;
+                }
+
+                std::this_thread::sleep_for(std::chrono::milliseconds(120));
+                const auto offerPayload = makeMediasoupRequest("webrtc_offer", nlohmann::json{
+                    {"sdp", "v=0\r\no=- 0 0 IN IP4 127.0.0.1\r\ns=cli\r\nt=0 0\r\na=group:BUNDLE 0\r\nm=application 9 UDP/DTLS/SCTP webrtc-datachannel\r\nc=IN IP4 0.0.0.0\r\na=mid:0\r\na=sctp-port:5000\r\n"}
+                });
+                if (!sendJson(offerPayload)) {
+                    break;
+                }
+
+                std::this_thread::sleep_for(std::chrono::milliseconds(120));
+                const auto icePayload = makeMediasoupRequest("webrtc_ice", nlohmann::json{
+                    {"sdpMid", "0"},
+                    {"candidate", "candidate:0 1 UDP 2122252543 127.0.0.1 5000 typ host"}
+                });
+                if (!sendJson(icePayload)) {
+                    break;
+                }
+
+                std::this_thread::sleep_for(std::chrono::milliseconds(120));
+                const auto closePayload = makeMediasoupRequest("webrtc_close");
+                if (!sendJson(closePayload)) {
                     break;
                 }
             }
@@ -480,8 +629,20 @@ int main(int argc, char** argv) {
             g_audioStreamer->shutdown();
         }
 
-        ws.close(websocket::close_code::normal);
-        reader.join();
+        try {
+            if (reader.joinable()) {
+                reader.join();
+            }
+
+            beast::error_code closeEc;
+            if (ws.is_open()) {
+                ws.close(websocket::close_code::normal, closeEc);
+            }
+        }
+        catch (const std::exception& shutdownError) {
+            printTimestamp();
+            std::cerr << "[shutdown] " << shutdownError.what() << "\n";
+        }
     }
     catch (beast::system_error const& se) {
         fail(se.code(), "main");
