@@ -24,9 +24,21 @@ if(_eduspace_word_generator_cpp)
   target_sources(${TARGET_FILE} PRIVATE "${_eduspace_word_generator_cpp}")
 endif()
 
+set(_eduspace_rtc_sources "")
+set(_eduspace_legacy_server_dir "${CMAKE_SOURCE_DIR}/EDS_server")
+if(EXISTS "${_eduspace_legacy_server_dir}/rtc/cRtcManager.cpp")
+  list(APPEND _eduspace_rtc_sources
+    "${_eduspace_legacy_server_dir}/rtc/cRtcManager.cpp"
+    "${_eduspace_legacy_server_dir}/rtc/cRtcPeer.cpp"
+    "${_eduspace_legacy_server_dir}/utils/cLogger.cpp"
+  )
+  target_sources(${TARGET_FILE} PRIVATE ${_eduspace_rtc_sources})
+endif()
+
 # Include directories
 target_include_directories(${TARGET_FILE} PRIVATE 
     ${CMAKE_CURRENT_SOURCE_DIR}
+    ${_eduspace_legacy_server_dir}
 )
 
 if(NOT TARGET eduspace_core)
@@ -34,6 +46,14 @@ if(NOT TARGET eduspace_core)
 endif()
 target_link_libraries(${TARGET_FILE} PRIVATE
     eduspace_core
+)
+
+find_package(OpenSSL REQUIRED)
+find_package(LibDataChannel CONFIG REQUIRED)
+target_link_libraries(${TARGET_FILE} PRIVATE
+  LibDataChannel::LibDataChannel
+  OpenSSL::SSL
+  OpenSSL::Crypto
 )
 
 set(_eduspace_vcpkg_include_candidates "")
@@ -62,13 +82,13 @@ foreach(_candidate IN LISTS _eduspace_vcpkg_include_candidates)
 endforeach()
 if(_eduspace_boost_include)
   target_include_directories(${TARGET_FILE} PUBLIC "${_eduspace_boost_include}")
-  target_compile_definitions(${TARGET_FILE} PRIVATE BOOST_ERROR_CODE_HEADER_ONLY)
+  target_compile_definitions(${TARGET_FILE} PUBLIC BOOST_ERROR_CODE_HEADER_ONLY)
 else()
   message(WARNING "Boost headers were not auto-detected in vcpkg include paths. Mediasoup signaling transport may fail to compile.")
 endif()
 
 if(WIN32)
-  target_compile_definitions(${TARGET_FILE} PRIVATE _WIN32_WINNT=0x0A00)
+  target_compile_definitions(${TARGET_FILE} PUBLIC _WIN32_WINNT=0x0A00)
   target_link_libraries(${TARGET_FILE} PRIVATE ws2_32 mswsock)
 endif()
 
