@@ -6,6 +6,7 @@
 namespace eds::server_new::mediasoup {
 
 struct MediasoupCommand {
+    std::string sessionId;
     std::string peerId;
     std::string roomId;
     std::string transportId;

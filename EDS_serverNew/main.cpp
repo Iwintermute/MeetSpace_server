@@ -1,4 +1,5 @@
 #include "App/ApplicationCore.h"
+#include "Bridge/Mediasoup/signaling/MediasoupSignalingGateway.h"
 #include "Bridge/Mediasoup/runtime/MediasoupCommand.h"
 
 #include <iostream>
@@ -28,11 +29,24 @@ bool dispatch(
 
 }
 
-int main() {
+int main(int argc, char** argv) {
+    constexpr unsigned short kDefaultWsPort = 9002;
     ApplicationApi app;
     if (!app.init()) {
         std::cerr << "Failed to initialize application.\n";
         return 1;
+    }
+
+    if (argc > 1 && std::string(argv[1]) == "--server") {
+        eds::server_new::mediasoup::signaling::MediasoupSignalingGateway gateway(app, kDefaultWsPort);
+        if (!gateway.start()) {
+            std::cerr << "Failed to start Mediasoup signaling gateway.\n";
+            return 1;
+        }
+
+        std::cout << "[mediasoup] signaling gateway started on ws://0.0.0.0:" << kDefaultWsPort << '\n';
+        gateway.wait();
+        return 0;
     }
 
     eds::server_new::mediasoup::MediasoupCommand createRoom;
