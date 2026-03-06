@@ -14,6 +14,16 @@ set(TARGET_FILE "eds_server_new_arch")
 # New architecture target (rewrite in progress)
 add_library(${TARGET_FILE} STATIC ${SOURCES} ${HEADERS})
 
+set(_eduspace_word_generator_cpp "")
+if(DEFINED EDUSPACE_RESOLVED_CORE_DIR AND EXISTS "${EDUSPACE_RESOLVED_CORE_DIR}/utils/WordGenerator.cpp")
+  set(_eduspace_word_generator_cpp "${EDUSPACE_RESOLVED_CORE_DIR}/utils/WordGenerator.cpp")
+elseif(EXISTS "${CMAKE_SOURCE_DIR}/Core/utils/WordGenerator.cpp")
+  set(_eduspace_word_generator_cpp "${CMAKE_SOURCE_DIR}/Core/utils/WordGenerator.cpp")
+endif()
+if(_eduspace_word_generator_cpp)
+  target_sources(${TARGET_FILE} PRIVATE "${_eduspace_word_generator_cpp}")
+endif()
+
 # Include directories
 target_include_directories(${TARGET_FILE} PRIVATE 
     ${CMAKE_CURRENT_SOURCE_DIR}
@@ -25,6 +35,42 @@ endif()
 target_link_libraries(${TARGET_FILE} PRIVATE
     eduspace_core
 )
+
+set(_eduspace_vcpkg_include_candidates "")
+if(DEFINED VCPKG_INSTALLED_DIR AND DEFINED VCPKG_TARGET_TRIPLET)
+  list(APPEND _eduspace_vcpkg_include_candidates
+    "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/include"
+  )
+endif()
+if(DEFINED ENV{VCPKG_ROOT})
+  if(DEFINED VCPKG_TARGET_TRIPLET)
+    list(APPEND _eduspace_vcpkg_include_candidates
+      "$ENV{VCPKG_ROOT}/installed/${VCPKG_TARGET_TRIPLET}/include"
+    )
+  endif()
+  list(APPEND _eduspace_vcpkg_include_candidates
+    "$ENV{VCPKG_ROOT}/installed/x64-windows/include"
+  )
+endif()
+
+set(_eduspace_boost_include "")
+foreach(_candidate IN LISTS _eduspace_vcpkg_include_candidates)
+  if(EXISTS "${_candidate}/boost/asio.hpp")
+    set(_eduspace_boost_include "${_candidate}")
+    break()
+  endif()
+endforeach()
+if(_eduspace_boost_include)
+  target_include_directories(${TARGET_FILE} PUBLIC "${_eduspace_boost_include}")
+  target_compile_definitions(${TARGET_FILE} PRIVATE BOOST_ERROR_CODE_HEADER_ONLY)
+else()
+  message(WARNING "Boost headers were not auto-detected in vcpkg include paths. Mediasoup signaling transport may fail to compile.")
+endif()
+
+if(WIN32)
+  target_compile_definitions(${TARGET_FILE} PRIVATE _WIN32_WINNT=0x0A00)
+  target_link_libraries(${TARGET_FILE} PRIVATE ws2_32 mswsock)
+endif()
 
 add_executable(eds_server_new_mediasoup_app main.cpp)
 target_include_directories(eds_server_new_mediasoup_app PRIVATE
