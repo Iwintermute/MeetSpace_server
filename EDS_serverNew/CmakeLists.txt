@@ -100,3 +100,15 @@ target_link_libraries(eds_server_new_mediasoup_app PRIVATE
     ${TARGET_FILE}
     eduspace_core
 )
+
+if(MSVC)
+  target_link_options(eds_server_new_mediasoup_app PRIVATE
+    "/WHOLEARCHIVE:eds_server_new_arch.lib"
+  )
+elseif(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+  target_link_options(eds_server_new_mediasoup_app PRIVATE
+    "-Wl,--whole-archive"
+    "$<TARGET_FILE:${TARGET_FILE}>"
+    "-Wl,--no-whole-archive"
+  )
+endif()
