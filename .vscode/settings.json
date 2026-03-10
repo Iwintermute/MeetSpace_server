@@ -1,3 +1,11 @@
 {
-    "cmake.useCMakePresets": "always"
+    "cmake.useCMakePresets": "always",
+    "cmake.configurePreset": "x64-debug-vscode",
+    "cmake.buildPreset": "x64-debug-vscode",
+    "cmake.configureEnvironment": {
+        "VCPKG_ROOT": "${env:VCPKG_ROOT}"
+    },
+    "cmake.environment": {
+        "VCPKG_ROOT": "${env:VCPKG_ROOT}"
+    }
 }

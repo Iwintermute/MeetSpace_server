@@ -92,7 +92,7 @@ void MediasoupSignalingGateway::onDisconnected(void* session) {
     if (iterator == sessionToPeer_.end()) {
         return;
     }
-    app_.notifyMediasoupSessionDisconnected(iterator->second, reinterpret_cast<std::uintptr_t>(session));
+    app_.notifyFeatureSessionDisconnected(iterator->second, reinterpret_cast<std::uintptr_t>(session));
 
     peerToSession_.erase(iterator->second);
     sessionToPeer_.erase(iterator);
@@ -108,7 +108,7 @@ void MediasoupSignalingGateway::onMessage(const std::string& text, void* session
         const auto trustedPeer = resolveTrustedPeer(session);
         const auto request = json::parse(text);
         const auto objectType = request.value("object", std::string(kRouteObject));
-        const auto agentType = request.value("agent", std::string(kDefaultAgent));
+        const auto agentType = request.value("agent", std::string{});
         const auto actionType = request.value("action", std::string{});
 
         if (actionType.empty()) {
@@ -122,56 +122,31 @@ void MediasoupSignalingGateway::onMessage(const std::string& text, void* session
         }
 
         const auto context = request.value("ctx", json::object());
+        eds::server_new::features::runtime::FeatureDispatchRequest dispatchRequest;
+        dispatchRequest.sessionHandle = reinterpret_cast<std::uintptr_t>(session);
+        dispatchRequest.peerId = trustedPeer;
+        dispatchRequest.objectType = objectType;
+        dispatchRequest.agentType = agentType;
+        dispatchRequest.actionType = actionType;
+        dispatchRequest.context = context;
 
-        MediasoupCommand command;
-        command.sessionHandle = reinterpret_cast<std::uintptr_t>(session);
-        command.sessionId = trustedPeer;
-        command.peerId = context.value("peerId", context.value("peer", trustedPeer));
-        command.roomId = context.value("roomId", std::string{});
-        command.transportId = context.value("transportId", std::string{});
-        command.producerId = context.value("producerId", std::string{});
-        command.kind = context.value("kind", std::string{});
-        command.sdp = context.value("sdp", std::string{});
-        command.sdpMid = context.value("sdpMid", std::string{});
-        command.candidate = context.value("candidate", std::string{});
-
-        if (command.peerId != trustedPeer) {
-            response = {
-                { "type", "dispatch_result" },
-                { "ok", false },
-                { "message", "peer impersonation detected." }
-            };
-            wsServer_->sendText(session, response.dump());
-            return;
-        }
-
-        core::contracts::MessageRoute route{
-            objectType,
-            agentType,
-            actionType
-        };
-
-        const auto status = app_.dispatchMediasoup(route, command);
+        auto dispatchResult = app_.dispatchFeature(dispatchRequest);
+        const auto& status = dispatchResult.status;
+        const auto effectiveAgent = dispatchResult.effectiveAgent.empty()
+            ? agentType
+            : dispatchResult.effectiveAgent;
         response = {
             { "type", "dispatch_result" },
             { "object", objectType },
-            { "agent", agentType },
+            { "agent", effectiveAgent },
             { "action", actionType },
             { "peer", trustedPeer },
             { "ok", status.ok },
             { "message", status.message }
         };
 
-        const auto events = app_.pollMediasoupEventsForPeer(trustedPeer);
-        for (const auto& event : events) {
-            json outbound{
-                { "type", event.type },
-                { "peer", event.peerId },
-                { "sdp", event.sdp },
-                { "sdpMid", event.sdpMid },
-                { "candidate", event.candidate }
-            };
-            wsServer_->sendText(session, outbound.dump());
+        for (const auto& event : dispatchResult.outboundEvents) {
+            wsServer_->sendText(session, event.dump());
         }
     } catch (const std::exception& ex) {
         response = {
