@@ -1,4 +1,5 @@
 #include "App/ApplicationCore.h"
+#include "features/runtime/FeatureModuleRegistration.h"
 
 #include "managers/ModuleRegistry.h"
 
@@ -18,9 +19,15 @@ core::contracts::OperationStatus ApplicationApi::registerFeatures() {
         return core::contracts::OperationStatus::success();
     }
 
+    static std::once_flag featureModulesRegistrationFlag;
+    std::call_once(featureModulesRegistrationFlag, []() {
+        eds::server_new::features::runtime::registerBuiltInFeatureModules(
+            eds::server_new::features::runtime::FeatureRegistry::instance());
+    });
+
     auto modules = eds::server_new::features::runtime::FeatureRegistry::instance().instantiateModules();
     if (modules.empty()) {
-        return core::contracts::OperationStatus::failure("No feature modules were self-registered.");
+        return core::contracts::OperationStatus::failure("No feature modules were registered.");
     }
 
     for (auto& module : modules) {

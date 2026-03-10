@@ -93,6 +93,5 @@ void MediasoupFeatureModule::onSessionDisconnected(std::string_view peerId, std:
     }
 }
 
-REGISTER_FEATURE_MODULE(eds::server_new::features::mediasoup::MediasoupFeatureModule)
 
 } // namespace eds::server_new::features::mediasoup

@@ -66,6 +66,5 @@ eds::server_new::features::runtime::FeatureDispatchResult ConferenceFeatureModul
     return result;
 }
 
-REGISTER_FEATURE_MODULE(eds::server_new::features::conference::ConferenceFeatureModule)
 
 } // namespace eds::server_new::features::conference

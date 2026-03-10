@@ -63,22 +63,4 @@ private:
     std::vector<tFactory> factories_;
 };
 
-template<typename TFeatureModule>
-class AutoFeatureRegistrar {
-public:
-    AutoFeatureRegistrar() {
-        FeatureRegistry::instance().addFactory([]() {
-            return std::make_unique<TFeatureModule>();
-        });
-    }
-};
-
-#define EDS_CONCAT_IMPL(x, y) x##y
-#define EDS_CONCAT(x, y) EDS_CONCAT_IMPL(x, y)
-#define REGISTER_FEATURE_MODULE(FeatureType) \
-    namespace { \
-    const ::eds::server_new::features::runtime::AutoFeatureRegistrar<FeatureType> \
-    EDS_CONCAT(g_auto_feature_registrar_, __COUNTER__); \
-    }
-
 } // namespace eds::server_new::features::runtime
