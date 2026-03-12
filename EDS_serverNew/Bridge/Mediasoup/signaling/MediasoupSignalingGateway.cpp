@@ -146,7 +146,40 @@ void MediasoupSignalingGateway::onMessage(const std::string& text, void* session
         };
 
         for (const auto& event : dispatchResult.outboundEvents) {
-            wsServer_->sendText(session, event.dump());
+            auto outboundEvent = event;
+            const auto deliverIt = outboundEvent.find("deliverTo");
+            if (deliverIt == outboundEvent.end()) {
+                wsServer_->sendText(session, outboundEvent.dump());
+                continue;
+            }
+
+            if (deliverIt->is_null()) {
+                outboundEvent.erase("deliverTo");
+                wsServer_->sendText(session, outboundEvent.dump());
+                continue;
+            }
+
+            const auto serializedEvent = [&outboundEvent]() {
+                auto payload = outboundEvent;
+                payload.erase("deliverTo");
+                return payload.dump();
+            }();
+
+            if (deliverIt->is_string()) {
+                sendTextToPeer(deliverIt->get<std::string>(), serializedEvent);
+                continue;
+            }
+
+            if (deliverIt->is_array()) {
+                for (const auto& recipient : *deliverIt) {
+                    if (recipient.is_string()) {
+                        sendTextToPeer(recipient.get<std::string>(), serializedEvent);
+                    }
+                }
+                continue;
+            }
+
+            wsServer_->sendText(session, outboundEvent.dump());
         }
     } catch (const std::exception& ex) {
         response = {
@@ -173,6 +206,23 @@ std::string MediasoupSignalingGateway::resolveTrustedPeer(void* session) {
     sessionToPeer_.emplace(session, peer);
     peerToSession_.emplace(peer, session);
     return peer;
+}
+bool MediasoupSignalingGateway::sendTextToPeer(std::string_view peerId, const std::string& text) {
+    if (!wsServer_ || peerId.empty()) {
+        return false;
+    }
+
+    void* targetSession = nullptr;
+    {
+        std::lock_guard<std::mutex> lock(peersMutex_);
+        auto peerIt = peerToSession_.find(std::string(peerId));
+        if (peerIt == peerToSession_.end()) {
+            return false;
+        }
+        targetSession = peerIt->second;
+    }
+
+    return wsServer_->sendText(targetSession, text);
 }
 
 } // namespace eds::server_new::mediasoup::signaling

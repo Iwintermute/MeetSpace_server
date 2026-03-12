@@ -8,11 +8,19 @@
 #include <string>
 #include <string_view>
 #include <unordered_map>
+#include <vector>
 
 namespace eds::server_new::features::conference {
 
 class ConferenceStateStore {
 public:
+    struct ConferenceSnapshot {
+        std::string conferenceId;
+        std::string ownerPeerId;
+        bool isClosed = false;
+        std::uint64_t revision = 0;
+        std::vector<std::string> memberPeerIds;
+    };
     core::contracts::OperationStatus createConference(const ConferenceCommand& command);
     core::contracts::OperationStatus getConference(const ConferenceCommand& command) const;
     core::contracts::OperationStatus closeConference(const ConferenceCommand& command);
@@ -22,6 +30,8 @@ public:
     core::contracts::OperationStatus listMembers(const ConferenceCommand& command) const;
 
     bool isPeerInConference(std::string_view conferenceId, std::string_view peerId) const;
+    bool tryGetConferenceSnapshot(std::string_view conferenceId, ConferenceSnapshot& snapshot) const;
+    std::vector<std::string> listConferenceIdsForPeer(std::string_view peerId) const;
 
 private:
     struct ConferenceMemberState {

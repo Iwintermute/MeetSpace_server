@@ -5,7 +5,7 @@
             "type": "cmake",
             "label": "CMake: build",
             "command": "build",
-            "preset": "x64-release-vscode",
+            "preset": "x64-release",
             "group": "build",
             "problemMatcher": [],
             "detail": "Сборка Release версии"

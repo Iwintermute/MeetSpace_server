@@ -237,6 +237,38 @@ bool ConferenceStateStore::isPeerInConference(std::string_view conferenceId, std
     std::lock_guard<std::mutex> lock(mutex_);
     return hasMemberNoLock(conferenceId, peerId);
 }
+bool ConferenceStateStore::tryGetConferenceSnapshot(std::string_view conferenceId, ConferenceSnapshot& snapshot) const {
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    auto conferenceIt = conferences_.find(std::string(conferenceId));
+    if (conferenceIt == conferences_.end()) {
+        return false;
+    }
+
+    const auto& conference = conferenceIt->second;
+    snapshot.conferenceId = conference.conferenceId;
+    snapshot.ownerPeerId = conference.ownerPeerId;
+    snapshot.isClosed = conference.isClosed;
+    snapshot.revision = conference.revision;
+    snapshot.memberPeerIds.clear();
+    snapshot.memberPeerIds.reserve(conference.membersByPeer.size());
+    for (const auto& [memberPeerId, _] : conference.membersByPeer) {
+        snapshot.memberPeerIds.push_back(memberPeerId);
+    }
+    return true;
+}
+
+std::vector<std::string> ConferenceStateStore::listConferenceIdsForPeer(std::string_view peerId) const {
+    std::vector<std::string> result;
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    for (const auto& [conferenceId, conference] : conferences_) {
+        if (conference.membersByPeer.find(std::string(peerId)) != conference.membersByPeer.end()) {
+            result.push_back(conferenceId);
+        }
+    }
+    return result;
+}
 
 bool ConferenceStateStore::hasMemberNoLock(std::string_view conferenceId, std::string_view peerId) const {
     auto conferenceIt = conferences_.find(std::string(conferenceId));

@@ -2,11 +2,11 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Запуск Release (без отладки)",
+            "name": "CLI: Запуск Release (без отладки)",
             "type": "cppvsdbg",
             "request": "launch",
-            "program": "${command:cmake.launchTargetPath}",
-            "args": [],
+            "program": "${command:cmake.buildDirectory}/Cli/Cli.exe",
+            "args": ["127.0.0.1 9002", "--path /"],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
             "environment": [],
@@ -14,15 +14,40 @@
             "preLaunchTask": "CMake: build"  // Собираем перед запуском
         },
         {
-            "name": "Отладка Release (с отладкой)",
+            "name": "CLI: Отладка Release (с отладкой)",
             "type": "cppvsdbg",
             "request": "launch",
-            "program": "${command:cmake.launchTargetPath}",
-            "args": [],
+            "program": "${command:cmake.buildDirectory}/Cli/Cli.exe",
+            "args": ["127.0.0.1 9002", "--path /"],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
             "environment": [],
-            "console": "externalTerminal"
+            "console": "externalTerminal",
+            "preLaunchTask": "CMake: build"
+        },
+        {
+            "name": "Server: Запуск Release (без отладки)",
+            "type": "cppvsdbg",
+            "request": "launch",
+            "program": "${command:cmake.buildDirectory}/EDS_serverNew/eds_server_new_mediasoup_app.exe",
+            "args": ["--server"],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}",
+            "environment": [],
+            "console": "externalTerminal",
+            "preLaunchTask": "CMake: build"
+        },
+        {
+            "name": "Server: Отладка Release (с отладкой)",
+            "type": "cppvsdbg",
+            "request": "launch",
+            "program": "${command:cmake.buildDirectory}/EDS_serverNew/eds_server_new_mediasoup_app.exe",
+            "args": ["--server"],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}",
+            "environment": [],
+            "console": "externalTerminal",
+            "preLaunchTask": "CMake: build"
         }
     ]
 }

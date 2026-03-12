@@ -8,6 +8,7 @@
 #include <memory>
 #include <mutex>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 
 class ApplicationApi;
@@ -28,6 +29,7 @@ private:
     void onDisconnected(void* session);
     void onMessage(const std::string& text, void* session);
     std::string resolveTrustedPeer(void* session);
+    bool sendTextToPeer(std::string_view peerId, const std::string& text);
 
 private:
     ApplicationApi& app_;
