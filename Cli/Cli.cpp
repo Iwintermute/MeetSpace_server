@@ -1,16 +1,19 @@
-﻿#include <boost/beast/core.hpp>
-#include <boost/beast/websocket.hpp>
-#include <boost/asio/connect.hpp>
+﻿#include <boost/asio/connect.hpp>
 #include <boost/asio/ip/tcp.hpp>
-#include <boost/asio/ssl.hpp>
-#include <iostream>
-#include <string>
-#include <thread>
+#include <boost/beast/core.hpp>
+#include <boost/beast/websocket.hpp>
+
 #include <atomic>
+#include <chrono>
+#include <cstdint>
+#include <iomanip>
+#include <iostream>
+#include <memory>
 #include <mutex>
 #include <sstream>
-#include <iomanip>
-#include <chrono>
+#include <string>
+#include <string_view>
+#include <thread>
 
 #ifdef _WIN32
 #include <windows.h>
@@ -24,10 +27,64 @@ namespace websocket = beast::websocket;
 namespace net = boost::asio;
 using tcp = net::ip::tcp;
 
+namespace {
+
 std::atomic<bool> g_running{ true };
 std::unique_ptr<AudioStreamer> g_audioStreamer;
 std::mutex g_peerMutex;
 std::string g_assignedPeer;
+std::atomic<std::uint64_t> g_clientRequestCounter{ 0 };
+std::atomic<std::uint64_t> g_chatReceivedCounter{ 0 };
+std::atomic<std::uint64_t> g_chatBroadcastCounter{ 0 };
+std::atomic<std::uint64_t> g_chatDirectCounter{ 0 };
+
+constexpr const char* kDefaultSdpOffer =
+    "v=0\r\n"
+    "o=- 0 0 IN IP4 127.0.0.1\r\n"
+    "s=cli\r\n"
+    "t=0 0\r\n"
+    "a=group:BUNDLE 0\r\n"
+    "m=application 9 UDP/DTLS/SCTP webrtc-datachannel\r\n"
+    "c=IN IP4 0.0.0.0\r\n"
+    "a=mid:0\r\n"
+    "a=sctp-port:5000\r\n";
+
+namespace console {
+std::mutex g_consoleMutex;
+
+std::string buildTimestamp() {
+    const auto now = std::chrono::system_clock::now();
+    const auto time = std::chrono::system_clock::to_time_t(now);
+    const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()) % 1000;
+
+    std::tm tm{};
+#ifdef _WIN32
+    localtime_s(&tm, &time);
+#else
+    localtime_r(&time, &tm);
+#endif
+
+    std::ostringstream oss;
+    oss << "[" << std::put_time(&tm, "%H:%M:%S") << "." << std::setfill('0') << std::setw(3) << ms.count() << "] ";
+    return oss.str();
+}
+
+void writeLine(const std::string& message, int color = 7, bool error = false, bool withTimestamp = true) {
+    std::lock_guard<std::mutex> lock(g_consoleMutex);
+#ifdef _WIN32
+    const HANDLE hConsole = GetStdHandle(error ? STD_ERROR_HANDLE : STD_OUTPUT_HANDLE);
+    SetConsoleTextAttribute(hConsole, color);
+#endif
+    std::ostream& stream = error ? std::cerr : std::cout;
+    if (withTimestamp) {
+        stream << buildTimestamp();
+    }
+    stream << message << "\n";
+#ifdef _WIN32
+    SetConsoleTextAttribute(hConsole, 7);
+#endif
+}
+} // namespace console
 
 void setAssignedPeer(const std::string& peer) {
     std::lock_guard<std::mutex> lock(g_peerMutex);
@@ -37,6 +94,13 @@ void setAssignedPeer(const std::string& peer) {
 std::string getAssignedPeer() {
     std::lock_guard<std::mutex> lock(g_peerMutex);
     return g_assignedPeer;
+}
+
+std::string nextClientRequestId(std::string_view prefix) {
+    const auto now = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::system_clock::now().time_since_epoch()).count();
+    const auto sequence = g_clientRequestCounter.fetch_add(1) + 1;
+    return std::string(prefix) + "-" + std::to_string(now) + "-" + std::to_string(sequence);
 }
 
 nlohmann::json makeMediasoupRequest(const std::string& action, nlohmann::json context = nlohmann::json::object()) {
@@ -53,179 +117,361 @@ nlohmann::json makeMediasoupRequest(const std::string& action, nlohmann::json co
     };
 }
 
-void printColored(const std::string& text, int color) {
-#ifdef _WIN32
-    HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
-    SetConsoleTextAttribute(hConsole, color);
-    std::cout << text;
-    SetConsoleTextAttribute(hConsole, 7); // Возвращаем белый
-#else
-    std::cout << text;
-#endif
+std::string resolveConferenceAgent(const std::string& action) {
+    if (action == "create_conference" || action == "get_conference" || action == "close_conference") {
+        return "lifecycle";
+    }
+    return "membership";
 }
 
-void printTimestamp() {
-    auto now = std::chrono::system_clock::now();
-    auto time = std::chrono::system_clock::to_time_t(now);
-    auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-        now.time_since_epoch()) % 1000;
+nlohmann::json makeConferenceRequest(const std::string& action, nlohmann::json context = nlohmann::json::object()) {
+    const auto assignedPeer = getAssignedPeer();
+    if (!assignedPeer.empty() && !context.contains("peerId")) {
+        context["peerId"] = assignedPeer;
+    }
+    if (!context.contains("clientRequestId")) {
+        context["clientRequestId"] = nextClientRequestId("conference");
+    }
 
-    std::tm tm;
-    localtime_s(&tm, &time);
-
-    std::cout << "[";
-    std::cout << std::put_time(&tm, "%H:%M:%S");
-    std::cout << "." << std::setfill('0') << std::setw(3) << ms.count();
-    std::cout << "] ";
+    return nlohmann::json{
+        {"object", "conference"},
+        {"agent", resolveConferenceAgent(action)},
+        {"action", action},
+        {"ctx", std::move(context)}
+    };
 }
 
-void fail(beast::error_code ec, char const* what) {
-    printTimestamp();
-    std::cerr << "Error: " << what << ": " << ec.message() << "\n";
+nlohmann::json makeChatRequest(const std::string& action, nlohmann::json context = nlohmann::json::object()) {
+    const auto assignedPeer = getAssignedPeer();
+    if (!assignedPeer.empty() && !context.contains("peerId")) {
+        context["peerId"] = assignedPeer;
+    }
+    if (!context.contains("clientRequestId")) {
+        context["clientRequestId"] = nextClientRequestId("chat");
+    }
+
+    return nlohmann::json{
+        {"object", "chat"},
+        {"agent", "messaging"},
+        {"action", action},
+        {"ctx", std::move(context)}
+    };
+}
+
+void fail(beast::error_code ec, const char* what) {
+    console::writeLine(std::string("Error: ") + what + ": " + ec.message(), 12, true);
+}
+
+bool sendText(websocket::stream<beast::tcp_stream>& ws, const std::string& text) {
+    try {
+        ws.write(net::buffer(text));
+        console::writeLine("> " + text, 11);
+        return true;
+    }
+    catch (const std::exception& e) {
+        console::writeLine(std::string("write error: ") + e.what(), 12, true);
+        g_running = false;
+        return false;
+    }
+}
+
+bool sendJson(websocket::stream<beast::tcp_stream>& ws, const nlohmann::json& payload) {
+    return sendText(ws, payload.dump());
+}
+
+bool sendMediasoupAction(websocket::stream<beast::tcp_stream>& ws, const std::string& action, nlohmann::json context = nlohmann::json::object()) {
+    return sendJson(ws, makeMediasoupRequest(action, std::move(context)));
+}
+
+bool sendConferenceAction(websocket::stream<beast::tcp_stream>& ws, const std::string& action, nlohmann::json context = nlohmann::json::object()) {
+    return sendJson(ws, makeConferenceRequest(action, std::move(context)));
+}
+
+bool sendChatAction(websocket::stream<beast::tcp_stream>& ws, const std::string& action, nlohmann::json context = nlohmann::json::object()) {
+    return sendJson(ws, makeChatRequest(action, std::move(context)));
+}
+
+void sleepStep() {
+    std::this_thread::sleep_for(std::chrono::milliseconds(140));
+}
+
+bool runMediasoupFullCycle(websocket::stream<beast::tcp_stream>& ws, std::string roomId) {
+    if (roomId.empty()) {
+        roomId = nextClientRequestId("room");
+    }
+
+    console::writeLine("[test.mediasoup] start roomId=" + roomId, 10);
+    if (!sendMediasoupAction(ws, "create_room", nlohmann::json{ {"roomId", roomId} })) return false;
+    sleepStep();
+    if (!sendMediasoupAction(ws, "join_room", nlohmann::json{ {"roomId", roomId} })) return false;
+    sleepStep();
+    if (!sendMediasoupAction(ws, "open_transport", nlohmann::json{
+        {"roomId", roomId},
+        {"transportId", "transport-cli-01"}
+    })) return false;
+    sleepStep();
+    if (!sendMediasoupAction(ws, "produce", nlohmann::json{
+        {"roomId", roomId},
+        {"transportId", "transport-cli-01"},
+        {"producerId", "producer-audio-cli-01"},
+        {"kind", "audio"}
+    })) return false;
+    sleepStep();
+    if (!sendMediasoupAction(ws, "webrtc_offer", nlohmann::json{ {"sdp", std::string(kDefaultSdpOffer)} })) return false;
+    sleepStep();
+    if (!sendMediasoupAction(ws, "webrtc_ice", nlohmann::json{
+        {"sdpMid", "0"},
+        {"candidate", "candidate:0 1 UDP 2122252543 127.0.0.1 5000 typ host"}
+    })) return false;
+    sleepStep();
+    if (!sendMediasoupAction(ws, "webrtc_close")) return false;
+
+    console::writeLine("[test.mediasoup] scenario queued", 10);
+    return true;
+}
+
+bool runConferenceCycle(websocket::stream<beast::tcp_stream>& ws, std::string conferenceId) {
+    if (conferenceId.empty()) {
+        conferenceId = nextClientRequestId("conf");
+    }
+
+    console::writeLine("[test.conference] start conferenceId=" + conferenceId, 10);
+    if (!sendConferenceAction(ws, "create_conference", nlohmann::json{ {"conferenceId", conferenceId} })) return false;
+    sleepStep();
+    if (!sendConferenceAction(ws, "get_conference", nlohmann::json{ {"conferenceId", conferenceId} })) return false;
+    sleepStep();
+    if (!sendConferenceAction(ws, "join_conference", nlohmann::json{ {"conferenceId", conferenceId} })) return false;
+    sleepStep();
+    if (!sendConferenceAction(ws, "list_members", nlohmann::json{ {"conferenceId", conferenceId} })) return false;
+    sleepStep();
+    if (!sendConferenceAction(ws, "leave_conference", nlohmann::json{ {"conferenceId", conferenceId} })) return false;
+    sleepStep();
+    if (!sendConferenceAction(ws, "close_conference", nlohmann::json{ {"conferenceId", conferenceId} })) return false;
+    console::writeLine("[test.conference] scenario queued", 10);
+    return true;
+}
+
+bool runChatCycle(websocket::stream<beast::tcp_stream>& ws, std::string conferenceId, std::string text) {
+    if (conferenceId.empty()) {
+        conferenceId = nextClientRequestId("conf-chat");
+    }
+    if (text.empty()) {
+        text = "chat-test-broadcast";
+    }
+
+    console::writeLine("[test.chat] start conferenceId=" + conferenceId, 10);
+    if (!sendConferenceAction(ws, "create_conference", nlohmann::json{ {"conferenceId", conferenceId} })) return false;
+    sleepStep();
+    if (!sendConferenceAction(ws, "join_conference", nlohmann::json{ {"conferenceId", conferenceId} })) return false;
+    sleepStep();
+    if (!sendConferenceAction(ws, "list_members", nlohmann::json{ {"conferenceId", conferenceId} })) return false;
+    sleepStep();
+    if (!sendChatAction(ws, "send_message", nlohmann::json{
+        {"conferenceId", conferenceId},
+        {"text", text}
+    })) return false;
+    sleepStep();
+    if (!sendChatAction(ws, "send_message", nlohmann::json{
+        {"conferenceId", conferenceId},
+        {"targetPeerId", "ghost-peer"},
+        {"text", "chat-test-invalid-target"}
+    })) return false;
+
+    console::writeLine("[test.chat] scenario queued. Для проверки получения/бродкаста запустите второй CLI и выполните chat.send в ту же конференцию.", 14);
+    return true;
+}
+
+void printAudioStats() {
+    if (!g_audioStreamer) {
+        console::writeLine("[audio] streamer not initialized", 14);
+        return;
+    }
+
+    uint32_t sent = 0;
+    uint32_t received = 0;
+    uint32_t lost = 0;
+    uint64_t bytesSent = 0;
+    uint64_t bytesReceived = 0;
+    float jitter = 0.0f;
+    g_audioStreamer->getStats(sent, received, lost, bytesSent, bytesReceived, jitter);
+
+    std::ostringstream oss;
+    oss << "[audio.stats] state=" << g_audioStreamer->getStateString()
+        << " sent=" << sent << " recv=" << received
+        << " lost=" << lost
+        << " bytesSentKB=" << (bytesSent / 1024)
+        << " bytesRecvKB=" << (bytesReceived / 1024)
+        << " jitterMs=" << std::fixed << std::setprecision(2) << jitter;
+    console::writeLine(oss.str(), 11);
+}
+
+void showAudioDevices() {
+    console::writeLine("=== Input Devices ===", 11, false, false);
+    const auto inputs = AudioStreamer::getInputDevices();
+    for (const auto& dev : inputs) {
+        console::writeLine("  " + dev.first + ": " + dev.second, 7, false, false);
+    }
+
+    console::writeLine("=== Output Devices ===", 11, false, false);
+    const auto outputs = AudioStreamer::getOutputDevices();
+    for (const auto& dev : outputs) {
+        console::writeLine("  " + dev.first + ": " + dev.second, 7, false, false);
+    }
+}
+
+void printHelp(bool audioEnabled) {
+    console::writeLine("Команды:", 11, false, false);
+    console::writeLine("  help | ?                                      - справка", 7, false, false);
+    console::writeLine("  quit | exit | q                               - завершить CLI", 7, false, false);
+    console::writeLine("  send <json>                                   - отправить сырой JSON", 7, false, false);
+    console::writeLine("", 7, false, false);
+    console::writeLine("Автотесты:", 11, false, false);
+    console::writeLine("  test.mediasoup [roomId]                       - полный цикл подключения mediasoup", 7, false, false);
+    console::writeLine("  test.conference [conferenceId]                - create/get/join/list/leave/close", 7, false, false);
+    console::writeLine("  test.chat [conferenceId] [text]               - отправка + проверка бродкаста/ошибки target", 7, false, false);
+    console::writeLine("  test.chat.stats                               - счётчики полученных chat_message", 7, false, false);
+    console::writeLine("", 7, false, false);
+    console::writeLine("Ручные тесты mediasoup:", 11, false, false);
+    console::writeLine("  ms.create [roomId]", 7, false, false);
+    console::writeLine("  ms.join <roomId>", 7, false, false);
+    console::writeLine("  ms.transport <roomId> [transportId]", 7, false, false);
+    console::writeLine("  ms.produce <roomId> [transportId] [producerId] [kind]", 7, false, false);
+    console::writeLine("  ms.offer [sdp]", 7, false, false);
+    console::writeLine("  ms.ice [sdpMid] [candidate]", 7, false, false);
+    console::writeLine("  ms.close", 7, false, false);
+    console::writeLine("", 7, false, false);
+    console::writeLine("Ручные тесты conference:", 11, false, false);
+    console::writeLine("  conf.create [conferenceId]", 7, false, false);
+    console::writeLine("  conf.get <conferenceId>", 7, false, false);
+    console::writeLine("  conf.join <conferenceId>", 7, false, false);
+    console::writeLine("  conf.leave <conferenceId>", 7, false, false);
+    console::writeLine("  conf.close <conferenceId>", 7, false, false);
+    console::writeLine("  conf.members <conferenceId>", 7, false, false);
+    console::writeLine("", 7, false, false);
+    console::writeLine("Ручные тесты chat:", 11, false, false);
+    console::writeLine("  chat.send <conferenceId> <text>", 7, false, false);
+    console::writeLine("  chat.to <conferenceId> <peerId> <text>", 7, false, false);
+    console::writeLine("", 7, false, false);
+
+    if (audioEnabled) {
+        console::writeLine("Audio:", 11, false, false);
+        console::writeLine("  audio start", 7, false, false);
+        console::writeLine("  audio stop", 7, false, false);
+        console::writeLine("  audio playback start", 7, false, false);
+        console::writeLine("  audio playback stop", 7, false, false);
+        console::writeLine("  audio volume <0-200>", 7, false, false);
+        console::writeLine("  audio stats", 7, false, false);
+        console::writeLine("  audio config", 7, false, false);
+        console::writeLine("  audio devices", 7, false, false);
+        console::writeLine("", 7, false, false);
+    }
+
+    console::writeLine("Совместимость со старыми командами сохранена: testFlow, testConfCreate, testChat, Прокурка чата и др.", 14, false, false);
 }
 
 void audioEventHandler(const AudioEvent& event) {
-    printTimestamp();
-
     switch (event.type) {
     case AudioEventType::STREAM_STARTED:
-        printColored("[AUDIO] ", 10); // Зеленый
-        std::cout << event.message << "\n";
+        console::writeLine("[audio] " + event.message, 10);
         break;
-
     case AudioEventType::STREAM_STOPPED:
-        printColored("[AUDIO] ", 14); // Желтый
-        std::cout << event.message << "\n";
+        console::writeLine("[audio] " + event.message, 14);
         break;
-
     case AudioEventType::BUFFER_OVERFLOW:
-    case AudioEventType::BUFFER_UNDERRUN:
-        printColored("[AUDIO] ", 12); // Красный
-        std::cout << event.message;
+    case AudioEventType::BUFFER_UNDERRUN: {
+        std::ostringstream oss;
+        oss << "[audio] " << event.message;
         if (event.data > 0) {
-            std::cout << " (" << event.data << " packets)";
+            oss << " (" << event.data << " packets)";
         }
-        std::cout << "\n";
+        console::writeLine(oss.str(), 12);
         break;
-
+    }
     case AudioEventType::ENCODING_ERROR:
     case AudioEventType::DECODING_ERROR:
     case AudioEventType::DEVICE_ERROR:
-        printColored("[AUDIO ERROR] ", 12); // Красный
-        std::cout << event.message << "\n";
+        console::writeLine("[audio.error] " + event.message, 12, true);
         break;
-
     case AudioEventType::VOLUME_CHANGED:
-        printColored("[AUDIO] ", 10); // Зеленый
-        std::cout << "Volume: " << event.data << "%\n";
+        console::writeLine("[audio] volume=" + std::to_string(event.data) + "%", 10);
         break;
-
     default:
-        printColored("[AUDIO] ", 13); // Пурпурный
-        std::cout << event.message << "\n";
+        console::writeLine("[audio] " + event.message, 13);
         break;
     }
 }
 
-void do_read(websocket::stream<beast::tcp_stream>& ws) {
+void doRead(websocket::stream<beast::tcp_stream>& ws) {
     beast::flat_buffer buffer;
 
     while (g_running) {
         try {
             ws.next_layer().expires_after(std::chrono::milliseconds(250));
             ws.read(buffer);
-            auto msg = beast::buffers_to_string(buffer.data());
+            const auto msg = beast::buffers_to_string(buffer.data());
 
-            // Парсим JSON сообщение
             try {
-                auto json = nlohmann::json::parse(msg);
-
-                // Обработка сообщений от сервера
+                const auto json = nlohmann::json::parse(msg);
                 if (json.contains("type")) {
-                    const auto type = json["type"].get<std::string>();
+                    const auto type = json.value("type", std::string{});
 
                     if (type == "audio_data" && g_audioStreamer) {
                         g_audioStreamer->processIncomingAudio(json);
                     }
                     else {
-                        if ((type == "peer_assigned" || type == "dispatch_result") && json.contains("peer")) {
+                        if ((type == "peer_assigned" || type == "dispatch_result") && json.contains("peer") && json["peer"].is_string()) {
                             setAssignedPeer(json["peer"].get<std::string>());
                         }
 
-                        printTimestamp();
-                        std::cout << "< " << msg << std::endl;
+                        if (type == "chat_message") {
+                            g_chatReceivedCounter.fetch_add(1);
+                            const auto targetPeer = json.value("targetPeerId", std::string{});
+                            if (targetPeer.empty()) {
+                                g_chatBroadcastCounter.fetch_add(1);
+                            }
+                            else {
+                                g_chatDirectCounter.fetch_add(1);
+                            }
+                        }
+
+                        console::writeLine("< " + msg, 7);
                     }
                 }
                 else {
-                    printTimestamp();
-                    std::cout << "< " << msg << std::endl;
+                    console::writeLine("< " + msg, 7);
                 }
             }
             catch (...) {
-                // Если не JSON, выводим как обычное сообщение
-                printTimestamp();
-                std::cout << "< " << msg << std::endl;
+                console::writeLine("< " + msg, 7);
             }
 
             buffer.consume(buffer.size());
         }
-        catch (beast::system_error const& se) {
+        catch (const beast::system_error& se) {
             if (se.code() == beast::error::timeout) {
                 if (!g_running.load()) {
                     break;
                 }
                 continue;
             }
-            if (se.code() == websocket::error::closed ||
-                se.code() == net::error::eof ||
-                se.code() == net::error::operation_aborted) {
-                printTimestamp();
-                std::cout << "[ws] connection closed\n";
+            if (se.code() == websocket::error::closed
+                || se.code() == net::error::eof
+                || se.code() == net::error::operation_aborted
+                || se.code() == net::error::interrupted) {
+                console::writeLine("[ws] connection closed", 14);
                 break;
             }
             fail(se.code(), "read");
             break;
         }
-        catch (std::exception const& e) {
-            printTimestamp();
-            std::cerr << "read exception: " << e.what() << "\n";
+        catch (const std::exception& e) {
+            console::writeLine(std::string("read exception: ") + e.what(), 12, true);
             break;
         }
     }
 }
 
-void printStats() {
-    if (g_audioStreamer) {
-        uint32_t sent, received, lost;
-        uint64_t bytesSent, bytesReceived;
-        float jitter;
-
-        g_audioStreamer->getStats(sent, received, lost, bytesSent, bytesReceived, jitter);
-
-        printTimestamp();
-        printColored("[STATS] ", 11); // Голубой
-        std::cout << "State: " << g_audioStreamer->getStateString();
-        std::cout << " | Sent: " << sent << " pkts (" << bytesSent / 1024 << " KB)";
-        std::cout << " | Recv: " << received << " pkts (" << bytesReceived / 1024 << " KB)";
-        std::cout << " | Lost: " << lost << " pkts";
-        std::cout << " | Jitter: " << std::fixed << std::setprecision(2) << jitter << " ms\n";
-    }
-}
-
-void showAudioDevices() {
-    std::cout << "\n=== Input Devices ===\n";
-    auto inputs = AudioStreamer::getInputDevices();
-    for (const auto& dev : inputs) {
-        std::cout << "  " << dev.first << ": " << dev.second << "\n";
-    }
-
-    std::cout << "\n=== Output Devices ===\n";
-    auto outputs = AudioStreamer::getOutputDevices();
-    for (const auto& dev : outputs) {
-        std::cout << "  " << dev.first << ": " << dev.second << "\n";
-    }
-    std::cout << "\n";
-}
+} // namespace
 
 int main(int argc, char** argv) {
 #ifdef _WIN32
@@ -234,36 +480,31 @@ int main(int argc, char** argv) {
 #endif
 
     if (argc < 3) {
-        std::cerr << "Usage: " << argv[0] << " <host> <port> [options]\n";
-        std::cerr << "Options:\n";
-        std::cerr << "  --path <value>    WebSocket handshake path (default: /)\n";
-        std::cerr << "  --audio           Enable audio streaming\n";
-        std::cerr << "  --both            Enable both capture and playback\n";
-        std::cerr << "  --capture-only    Enable only audio capture\n";
-        std::cerr << "  --playback-only   Enable only audio playback\n";
-        std::cerr << "  --devices         Show available audio devices\n";
-        std::cerr << "  --rate <hz>       Set sample rate (default: 48000)\n";
-        std::cerr << "  --bitrate <kbps>  Set Opus bitrate (default: 64)\n";
-        std::cerr << "Example:\n";
-        std::cerr << "  " << argv[0] << " 127.0.0.1 9002 --path /\n";
-        std::cerr << "  " << argv[0] << " localhost 9002 --both --rate 44100\n";
+        console::writeLine(std::string("Usage: ") + argv[0] + " <host> <port> [options]", 12, true, false);
+        console::writeLine("Options:", 12, true, false);
+        console::writeLine("  --path <value>    WebSocket handshake path (default: /)", 12, true, false);
+        console::writeLine("  --audio           Enable audio streaming", 12, true, false);
+        console::writeLine("  --both            Enable both capture and playback", 12, true, false);
+        console::writeLine("  --capture-only    Enable only audio capture", 12, true, false);
+        console::writeLine("  --playback-only   Enable only audio playback", 12, true, false);
+        console::writeLine("  --devices         Show available audio devices", 12, true, false);
+        console::writeLine("  --rate <hz>       Set sample rate (default: 48000)", 12, true, false);
+        console::writeLine("  --bitrate <kbps>  Set Opus bitrate (default: 64)", 12, true, false);
         return 1;
     }
 
     std::string host = argv[1];
-    auto const  port = argv[2];
+    const auto port = argv[2];
     std::string wsPath = "/";
-
     bool enableAudio = false;
     bool enableCapture = false;
     bool enablePlayback = false;
-    bool showDevices = false;
+    bool showDevicesOnly = false;
     int sampleRate = 48000;
     int bitrate = 64000;
 
-    // Парсим аргументы
-    for (int i = 3; i < argc; i++) {
-        std::string arg = argv[i];
+    for (int i = 3; i < argc; ++i) {
+        const std::string arg = argv[i];
         if (arg == "--audio") {
             enableAudio = true;
             enableCapture = true;
@@ -276,15 +517,13 @@ int main(int argc, char** argv) {
         else if (arg == "--capture-only") {
             enableAudio = true;
             enableCapture = true;
-            enablePlayback = false;
         }
         else if (arg == "--playback-only") {
             enableAudio = true;
-            enableCapture = false;
             enablePlayback = true;
         }
         else if (arg == "--devices") {
-            showDevices = true;
+            showDevicesOnly = true;
         }
         else if (arg == "--rate" && i + 1 < argc) {
             sampleRate = std::stoi(argv[++i]);
@@ -300,7 +539,7 @@ int main(int argc, char** argv) {
         }
     }
 
-    if (showDevices) {
+    if (showDevicesOnly) {
         showAudioDevices();
         return 0;
     }
@@ -308,45 +547,34 @@ int main(int argc, char** argv) {
     try {
         net::io_context ioc{ 1 };
         tcp::resolver resolver{ ioc };
-        auto const results = resolver.resolve(host, port);
+        const auto results = resolver.resolve(host, port);
 
         beast::tcp_stream stream{ ioc };
         stream.expires_after(std::chrono::seconds(30));
         stream.connect(results);
 
         websocket::stream<beast::tcp_stream> ws{ std::move(stream) };
-
         ws.set_option(websocket::stream_base::decorator(
             [](websocket::request_type& req) {
-                req.set(beast::http::field::user_agent, "AudioStreamer/1.0");
+                req.set(beast::http::field::user_agent, "EduSpaceCli/2.0");
             }));
 
         ws.next_layer().expires_never();
         ws.handshake(host, wsPath);
+        console::writeLine("[connected] " + host + ":" + port, 10);
 
-        printTimestamp();
-        std::cout << "[connected] " << host << ":" << port << "\n";
-
-        // Инициализация аудио если требуется
         if (enableAudio) {
-            printTimestamp();
-            std::cout << "[audio] Initializing audio streamer...\n";
-
+            console::writeLine("[audio] initializing...", 11);
             g_audioStreamer = std::make_unique<AudioStreamer>(ws);
 
-            // Настройка конфигурации
             AudioConfig config;
             config.sampleRate = sampleRate;
             config.bitrate = bitrate;
-            config.frameSize = sampleRate / 50; // 20ms frames
-
+            config.frameSize = sampleRate / 50;
             g_audioStreamer->setEventCallback(audioEventHandler);
 
             if (g_audioStreamer->initialize(config)) {
-                printTimestamp();
-                std::cout << "[audio] Initialized successfully\n";
-
-                // Автоматический запуск в зависимости от режима
+                console::writeLine("[audio] initialized", 10);
                 if (enableCapture) {
                     g_audioStreamer->startCapture();
                 }
@@ -355,61 +583,26 @@ int main(int argc, char** argv) {
                 }
             }
             else {
-                printTimestamp();
-                std::cerr << "[audio] Failed to initialize\n";
+                console::writeLine("[audio] failed to initialize", 12, true);
                 g_audioStreamer.reset();
             }
         }
 
-        std::cout << "\nCommands:\n";
-        std::cout << "  send <json>          - отправить сообщение\n";
-        if (enableAudio) {
-            std::cout << "\nAudio Commands:\n";
-            std::cout << "  audio start          - начать захват аудио\n";
-            std::cout << "  audio stop           - остановить захват аудио\n";
-            std::cout << "  audio playback start - начать воспроизведение\n";
-            std::cout << "  audio playback stop  - остановить воспроизведение\n";
-            std::cout << "  audio volume <0-200> - установить громкость (%)\n";
-            std::cout << "  audio stats          - показать статистику\n";
-            std::cout << "  audio config         - показать конфигурацию\n";
-            std::cout << "  audio devices        - показать доступные устройства\n";
-        }
-        std::cout << "\nTest Commands:\n";
-        std::cout << "  testCreate [roomId]                 - отправить mediasoup/create_room\n";
-        std::cout << "  testJoin <roomId>                   - отправить mediasoup/join_room\n";
-        std::cout << "  testOffer [sdp]                     - отправить mediasoup/webrtc_offer\n";
-        std::cout << "  testIce [sdpMid] [candidate]        - отправить mediasoup/webrtc_ice\n";
-        std::cout << "  testClose                           - отправить mediasoup/webrtc_close\n";
-        std::cout << "  testProkyrka [roomId]               - create_room -> join_room\n";
-        std::cout << "  testFlow [roomId]                   - create_room -> join_room -> offer -> ice -> close\n";
-        std::cout << "\nOther:\n";
-        std::cout << "  quit / exit / q      - завершить\n";
-        std::cout << "  help / ?             - эта справка\n\n";
-
-        // Запускаем поток чтения
-        std::thread reader([&ws] { do_read(ws); });
+        printHelp(enableAudio);
+        std::thread reader([&ws] { doRead(ws); });
 
         std::string line;
-        auto sendText = [&ws](const std::string& text) -> bool {
-            try {
-                ws.write(net::buffer(text));
-                printTimestamp();
-                std::cout << "> " << text << "\n";
-                return true;
-            }
-            catch (const std::exception& e) {
-                std::cerr << "write error: " << e.what() << "\n";
-                g_running = false;
-                return false;
-            }
-        };
-
-        auto sendJson = [&sendText](const nlohmann::json& payload) -> bool {
-            return sendText(payload.dump());
-        };
-
         while (g_running && std::getline(std::cin, line)) {
-            if (line.empty()) continue;
+            if (line.empty()) {
+                continue;
+            }
+
+            if (line == "Прокурка чата") {
+                if (!runChatCycle(ws, {}, "Прокурка чата: broadcast")) {
+                    g_running = false;
+                }
+                continue;
+            }
 
             std::istringstream iss(line);
             std::string cmd;
@@ -419,31 +612,65 @@ int main(int argc, char** argv) {
                 g_running = false;
                 break;
             }
-            else if (cmd == "help" || cmd == "?") {
-                std::cout << "Type 'help' for commands...\n";
+            if (cmd == "help" || cmd == "?") {
+                printHelp(enableAudio);
                 continue;
             }
-            else if (cmd == "send") {
+            if (cmd == "send") {
                 std::string rest;
                 std::getline(iss >> std::ws, rest);
                 if (rest.empty()) {
-                    std::cout << "Usage: send {\"type\":\"hello\"}\n";
+                    console::writeLine("Usage: send {\"object\":\"conference\",\"action\":\"get_conference\",\"ctx\":{\"conferenceId\":\"id\"}}", 14);
                     continue;
                 }
-                if (!sendText(rest)) {
-                    g_running = false;
+                if (!sendText(ws, rest)) {
                     break;
                 }
+                continue;
             }
-            else if (enableAudio && cmd == "audio") {
-                std::string subcmd;
-                iss >> subcmd;
+            if (cmd == "test.mediasoup" || cmd == "testFlow") {
+                std::string roomId;
+                iss >> roomId;
+                if (!runMediasoupFullCycle(ws, roomId)) {
+                    break;
+                }
+                continue;
+            }
+            if (cmd == "test.conference") {
+                std::string conferenceId;
+                iss >> conferenceId;
+                if (!runConferenceCycle(ws, conferenceId)) {
+                    break;
+                }
+                continue;
+            }
+            if (cmd == "test.chat" || cmd == "testChatSmoke") {
+                std::string conferenceId;
+                iss >> conferenceId;
+                std::string text;
+                std::getline(iss >> std::ws, text);
+                if (!runChatCycle(ws, conferenceId, text)) {
+                    break;
+                }
+                continue;
+            }
+            if (cmd == "test.chat.stats") {
+                std::ostringstream stats;
+                stats << "[test.chat.stats] received=" << g_chatReceivedCounter.load()
+                      << " broadcast=" << g_chatBroadcastCounter.load()
+                      << " direct=" << g_chatDirectCounter.load();
+                console::writeLine(stats.str(), 11);
+                continue;
+            }
 
+            if (enableAudio && cmd == "audio") {
                 if (!g_audioStreamer) {
-                    std::cout << "Audio not initialized\n";
+                    console::writeLine("Audio not initialized", 14);
                     continue;
                 }
 
+                std::string subcmd;
+                iss >> subcmd;
                 if (subcmd == "start") {
                     g_audioStreamer->startCapture();
                 }
@@ -459,201 +686,250 @@ int main(int argc, char** argv) {
                     else if (playcmd == "stop") {
                         g_audioStreamer->stopPlayback();
                     }
+                    else {
+                        console::writeLine("Usage: audio playback <start|stop>", 14);
+                    }
                 }
                 else if (subcmd == "volume") {
-                    int vol;
+                    int vol = 0;
                     if (iss >> vol) {
                         g_audioStreamer->setVolume(vol / 100.0f);
                     }
+                    else {
+                        console::writeLine("Usage: audio volume <0-200>", 14);
+                    }
                 }
                 else if (subcmd == "stats") {
-                    printStats();
+                    printAudioStats();
                 }
                 else if (subcmd == "config") {
-                    auto cfg = g_audioStreamer->getConfig();
-                    std::cout << "Sample Rate: " << cfg.sampleRate << " Hz\n";
-                    std::cout << "Channels: " << cfg.channels << "\n";
-                    std::cout << "Frame Size: " << cfg.frameSize << " samples\n";
-                    std::cout << "Bitrate: " << cfg.bitrate / 1000 << " kbps\n";
-                    std::cout << "Volume: " << static_cast<int>(cfg.volume * 100) << "%\n";
+                    const auto cfg = g_audioStreamer->getConfig();
+                    console::writeLine("[audio.config] sampleRate=" + std::to_string(cfg.sampleRate), 11);
+                    console::writeLine("[audio.config] channels=" + std::to_string(cfg.channels), 11);
+                    console::writeLine("[audio.config] frameSize=" + std::to_string(cfg.frameSize), 11);
+                    console::writeLine("[audio.config] bitrate=" + std::to_string(cfg.bitrate), 11);
+                    console::writeLine("[audio.config] volume=" + std::to_string(static_cast<int>(cfg.volume * 100)) + "%", 11);
                 }
                 else if (subcmd == "devices") {
                     showAudioDevices();
                 }
+                else {
+                    console::writeLine("Unknown audio command", 14);
+                }
+                continue;
             }
-            else if (cmd == "testCreate") {
+
+            if (cmd == "ms.create" || cmd == "testCreate") {
                 std::string roomId;
                 std::getline(iss >> std::ws, roomId);
-                if (roomId.empty()) {
-                    roomId = "room-cli";
-                }
-                const auto payload = makeMediasoupRequest("create_room", nlohmann::json{
-                    {"roomId", roomId}
-                });
-                if (!sendJson(payload)) {
-                    break;
-                }
+                if (roomId.empty()) roomId = "room-cli";
+                if (!sendMediasoupAction(ws, "create_room", nlohmann::json{ {"roomId", roomId} })) break;
+                continue;
             }
-            else if (cmd == "testJoin") {
+            if (cmd == "ms.join" || cmd == "testJoin") {
                 std::string roomId;
                 iss >> roomId;
                 if (roomId.empty()) {
-                    std::cout << "Usage: testJoin <roomId>\n";
+                    console::writeLine("Usage: ms.join <roomId>", 14);
                     continue;
                 }
-                const auto payload = makeMediasoupRequest("join_room", nlohmann::json{
-                    {"roomId", roomId}
-                });
-                if (!sendJson(payload)) {
-                    break;
-                }
+                if (!sendMediasoupAction(ws, "join_room", nlohmann::json{ {"roomId", roomId} })) break;
+                continue;
             }
-            else if (cmd == "testOffer") {
+            if (cmd == "ms.transport") {
+                std::string roomId;
+                std::string transportId;
+                iss >> roomId >> transportId;
+                if (roomId.empty()) {
+                    console::writeLine("Usage: ms.transport <roomId> [transportId]", 14);
+                    continue;
+                }
+                if (transportId.empty()) transportId = "transport-cli-01";
+                if (!sendMediasoupAction(ws, "open_transport", nlohmann::json{
+                    {"roomId", roomId},
+                    {"transportId", transportId}
+                })) break;
+                continue;
+            }
+            if (cmd == "ms.produce") {
+                std::string roomId;
+                std::string transportId;
+                std::string producerId;
+                std::string kind;
+                iss >> roomId >> transportId >> producerId >> kind;
+                if (roomId.empty()) {
+                    console::writeLine("Usage: ms.produce <roomId> [transportId] [producerId] [kind]", 14);
+                    continue;
+                }
+                if (transportId.empty()) transportId = "transport-cli-01";
+                if (producerId.empty()) producerId = "producer-audio-cli-01";
+                if (kind.empty()) kind = "audio";
+                if (!sendMediasoupAction(ws, "produce", nlohmann::json{
+                    {"roomId", roomId},
+                    {"transportId", transportId},
+                    {"producerId", producerId},
+                    {"kind", kind}
+                })) break;
+                continue;
+            }
+            if (cmd == "ms.offer" || cmd == "testOffer") {
                 std::string sdp;
                 std::getline(iss >> std::ws, sdp);
-                if (sdp.empty()) {
-                    sdp = "v=0\r\no=- 0 0 IN IP4 127.0.0.1\r\ns=cli\r\nt=0 0\r\na=group:BUNDLE 0\r\nm=application 9 UDP/DTLS/SCTP webrtc-datachannel\r\nc=IN IP4 0.0.0.0\r\na=mid:0\r\na=sctp-port:5000\r\n";
-                }
-
-                const auto payload = makeMediasoupRequest("webrtc_offer", nlohmann::json{
-                    {"sdp", sdp}
-                });
-                if (!sendJson(payload)) {
-                    break;
-                }
+                if (sdp.empty()) sdp = kDefaultSdpOffer;
+                if (!sendMediasoupAction(ws, "webrtc_offer", nlohmann::json{ {"sdp", sdp} })) break;
+                continue;
             }
-            else if (cmd == "testIce") {
+            if (cmd == "ms.ice" || cmd == "testIce") {
                 std::string sdpMid;
                 iss >> sdpMid;
-
                 std::string candidate;
                 std::getline(iss >> std::ws, candidate);
-
-                if (sdpMid.empty()) {
-                    sdpMid = "0";
-                }
-                if (candidate.empty()) {
-                    candidate = "candidate:0 1 UDP 2122252543 127.0.0.1 5000 typ host";
-                }
-
-                const auto payload = makeMediasoupRequest("webrtc_ice", nlohmann::json{
+                if (sdpMid.empty()) sdpMid = "0";
+                if (candidate.empty()) candidate = "candidate:0 1 UDP 2122252543 127.0.0.1 5000 typ host";
+                if (!sendMediasoupAction(ws, "webrtc_ice", nlohmann::json{
                     {"sdpMid", sdpMid},
                     {"candidate", candidate}
-                });
-                if (!sendJson(payload)) {
-                    break;
-                }
+                })) break;
+                continue;
             }
-            else if (cmd == "testClose") {
-                const auto payload = makeMediasoupRequest("webrtc_close");
-                if (!sendJson(payload)) {
-                    break;
-                }
+            if (cmd == "ms.close" || cmd == "testClose") {
+                if (!sendMediasoupAction(ws, "webrtc_close")) break;
+                continue;
             }
-            else if (cmd == "testProkyrka") {
+
+            if (cmd == "conf.create" || cmd == "testConfCreate") {
+                std::string conferenceId;
+                std::getline(iss >> std::ws, conferenceId);
+                if (conferenceId.empty()) conferenceId = "conference-cli";
+                if (!sendConferenceAction(ws, "create_conference", nlohmann::json{ {"conferenceId", conferenceId} })) break;
+                continue;
+            }
+            if (cmd == "conf.get" || cmd == "testConfGet") {
+                std::string conferenceId;
+                iss >> conferenceId;
+                if (conferenceId.empty()) {
+                    console::writeLine("Usage: conf.get <conferenceId>", 14);
+                    continue;
+                }
+                if (!sendConferenceAction(ws, "get_conference", nlohmann::json{ {"conferenceId", conferenceId} })) break;
+                continue;
+            }
+            if (cmd == "conf.join" || cmd == "testConfJoin") {
+                std::string conferenceId;
+                iss >> conferenceId;
+                if (conferenceId.empty()) {
+                    console::writeLine("Usage: conf.join <conferenceId>", 14);
+                    continue;
+                }
+                if (!sendConferenceAction(ws, "join_conference", nlohmann::json{ {"conferenceId", conferenceId} })) break;
+                continue;
+            }
+            if (cmd == "conf.leave" || cmd == "testConfLeave") {
+                std::string conferenceId;
+                iss >> conferenceId;
+                if (conferenceId.empty()) {
+                    console::writeLine("Usage: conf.leave <conferenceId>", 14);
+                    continue;
+                }
+                if (!sendConferenceAction(ws, "leave_conference", nlohmann::json{ {"conferenceId", conferenceId} })) break;
+                continue;
+            }
+            if (cmd == "conf.close" || cmd == "testConfClose") {
+                std::string conferenceId;
+                iss >> conferenceId;
+                if (conferenceId.empty()) {
+                    console::writeLine("Usage: conf.close <conferenceId>", 14);
+                    continue;
+                }
+                if (!sendConferenceAction(ws, "close_conference", nlohmann::json{ {"conferenceId", conferenceId} })) break;
+                continue;
+            }
+            if (cmd == "conf.members" || cmd == "testConfMembers") {
+                std::string conferenceId;
+                iss >> conferenceId;
+                if (conferenceId.empty()) {
+                    console::writeLine("Usage: conf.members <conferenceId>", 14);
+                    continue;
+                }
+                if (!sendConferenceAction(ws, "list_members", nlohmann::json{ {"conferenceId", conferenceId} })) break;
+                continue;
+            }
+
+            if (cmd == "chat.send" || cmd == "testChat") {
+                std::string conferenceId;
+                iss >> conferenceId;
+                std::string text;
+                std::getline(iss >> std::ws, text);
+                if (conferenceId.empty() || text.empty()) {
+                    console::writeLine("Usage: chat.send <conferenceId> <text>", 14);
+                    continue;
+                }
+                if (!sendChatAction(ws, "send_message", nlohmann::json{
+                    {"conferenceId", conferenceId},
+                    {"text", text}
+                })) break;
+                continue;
+            }
+            if (cmd == "chat.to" || cmd == "testChatTo") {
+                std::string conferenceId;
+                std::string targetPeerId;
+                iss >> conferenceId >> targetPeerId;
+                std::string text;
+                std::getline(iss >> std::ws, text);
+                if (conferenceId.empty() || targetPeerId.empty() || text.empty()) {
+                    console::writeLine("Usage: chat.to <conferenceId> <peerId> <text>", 14);
+                    continue;
+                }
+                if (!sendChatAction(ws, "send_message", nlohmann::json{
+                    {"conferenceId", conferenceId},
+                    {"targetPeerId", targetPeerId},
+                    {"text", text}
+                })) break;
+                continue;
+            }
+
+            if (cmd == "testProkyrka") {
                 std::string roomId;
                 iss >> roomId;
-                if (roomId.empty()) {
-                    roomId = "room-cli";
-                }
-
-                const auto createPayload = makeMediasoupRequest("create_room", nlohmann::json{
-                    {"roomId", roomId}
-                });
-                if (!sendJson(createPayload)) {
-                    break;
-                }
-
-                std::this_thread::sleep_for(std::chrono::milliseconds(120));
-                const auto joinPayload = makeMediasoupRequest("join_room", nlohmann::json{
-                    {"roomId", roomId}
-                });
-                if (!sendJson(joinPayload)) {
-                    break;
-                }
+                if (roomId.empty()) roomId = "room-cli";
+                if (!sendMediasoupAction(ws, "create_room", nlohmann::json{ {"roomId", roomId} })) break;
+                sleepStep();
+                if (!sendMediasoupAction(ws, "join_room", nlohmann::json{ {"roomId", roomId} })) break;
+                continue;
             }
-            else if (cmd == "testFlow") {
-                std::string roomId;
-                iss >> roomId;
-                if (roomId.empty()) {
-                    roomId = "room-cli";
-                }
 
-                const auto createPayload = makeMediasoupRequest("create_room", nlohmann::json{
-                    {"roomId", roomId}
-                });
-                if (!sendJson(createPayload)) {
-                    break;
-                }
-
-                std::this_thread::sleep_for(std::chrono::milliseconds(120));
-                const auto joinPayload = makeMediasoupRequest("join_room", nlohmann::json{
-                    {"roomId", roomId}
-                });
-                if (!sendJson(joinPayload)) {
-                    break;
-                }
-
-                std::this_thread::sleep_for(std::chrono::milliseconds(120));
-                const auto offerPayload = makeMediasoupRequest("webrtc_offer", nlohmann::json{
-                    {"sdp", "v=0\r\no=- 0 0 IN IP4 127.0.0.1\r\ns=cli\r\nt=0 0\r\na=group:BUNDLE 0\r\nm=application 9 UDP/DTLS/SCTP webrtc-datachannel\r\nc=IN IP4 0.0.0.0\r\na=mid:0\r\na=sctp-port:5000\r\n"}
-                });
-                if (!sendJson(offerPayload)) {
-                    break;
-                }
-
-                std::this_thread::sleep_for(std::chrono::milliseconds(120));
-                const auto icePayload = makeMediasoupRequest("webrtc_ice", nlohmann::json{
-                    {"sdpMid", "0"},
-                    {"candidate", "candidate:0 1 UDP 2122252543 127.0.0.1 5000 typ host"}
-                });
-                if (!sendJson(icePayload)) {
-                    break;
-                }
-
-                std::this_thread::sleep_for(std::chrono::milliseconds(120));
-                const auto closePayload = makeMediasoupRequest("webrtc_close");
-                if (!sendJson(closePayload)) {
-                    break;
-                }
-            }
-            else {
-                std::cout << "Unknown command. Type 'help' for commands.\n";
-            }
+            console::writeLine("Unknown command. Type 'help' for commands.", 14);
         }
 
         g_running = false;
-
-        // Останавливаем аудио перед закрытием
         if (g_audioStreamer) {
             g_audioStreamer->shutdown();
         }
 
         try {
+            beast::error_code cancelEc;
+            ws.next_layer().socket().cancel(cancelEc);
+
             if (reader.joinable()) {
                 reader.join();
             }
 
-            beast::error_code closeEc;
-            if (ws.is_open()) {
-                ws.close(websocket::close_code::normal, closeEc);
-            }
+            beast::error_code socketCloseEc;
+            ws.next_layer().socket().close(socketCloseEc);
         }
         catch (const std::exception& shutdownError) {
-            printTimestamp();
-            std::cerr << "[shutdown] " << shutdownError.what() << "\n";
+            console::writeLine(std::string("[shutdown] ") + shutdownError.what(), 12, true);
         }
     }
-    catch (beast::system_error const& se) {
+    catch (const beast::system_error& se) {
         fail(se.code(), "main");
+        return 1;
     }
-    catch (std::exception const& e) {
-        printTimestamp();
-        std::cerr << "Exception: " << e.what() << "\n";
+    catch (const std::exception& e) {
+        console::writeLine(std::string("Exception: ") + e.what(), 12, true);
         return 1;
     }
 
-    printTimestamp();
-    std::cout << "[disconnected]\n";
+    console::writeLine("[disconnected]", 14);
     return 0;
 }
