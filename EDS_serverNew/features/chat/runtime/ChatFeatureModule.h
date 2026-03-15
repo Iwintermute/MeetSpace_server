@@ -4,6 +4,7 @@
 #include "features/chat/runtime/ChatStateStore.h"
 #include "features/runtime/FeatureEventBus.h"
 #include "features/runtime/FeatureRegistry.h"
+#include "modules/BaseModule.h"
 
 #include <boost/signals2/connection.hpp>
 #include <memory>
@@ -11,9 +12,9 @@
 
 namespace eds::server_new::features::chat {
 
-class ChatFeatureModule final : public eds::server_new::features::runtime::IFeatureModule {
+class ChatFeatureModule final : public BaseModule, public eds::server_new::features::runtime::IFeatureModule {
 public:
-    ChatFeatureModule() = default;
+    ChatFeatureModule();
     ~ChatFeatureModule() override = default;
 
     std::string_view objectType() const override;
@@ -22,6 +23,10 @@ public:
     eds::server_new::features::runtime::FeatureDispatchResult dispatch(
         const eds::server_new::features::runtime::FeatureDispatchRequest& request,
         core::runtime::MessageDispatcher& dispatcher) override;
+
+private:
+    bool onInitialize() override;
+    void onShutdown() override;
 
 private:
     bool registered_ = false;

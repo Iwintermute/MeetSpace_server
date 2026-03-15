@@ -31,6 +31,15 @@ MediasoupSignalingAgent::MediasoupSignalingAgent(
     registerActionOrThrow(*this, std::string(kActionJoinRoom), [stateStore = stateStore_, rtcBridge = rtcBridge_]() {
         return std::make_unique<JoinRoomAction>(stateStore, rtcBridge);
     });
+    registerActionOrThrow(*this, std::string(kActionLeaveRoom), [stateStore = stateStore_, rtcBridge = rtcBridge_]() {
+        return std::make_unique<LeaveRoomAction>(stateStore, rtcBridge);
+    });
+    registerActionOrThrow(*this, std::string(kActionConnectSession), [stateStore = stateStore_, rtcBridge = rtcBridge_]() {
+        return std::make_unique<JoinRoomAction>(stateStore, rtcBridge);
+    });
+    registerActionOrThrow(*this, std::string(kActionDisconnectSession), [stateStore = stateStore_, rtcBridge = rtcBridge_]() {
+        return std::make_unique<LeaveRoomAction>(stateStore, rtcBridge);
+    });
     registerActionOrThrow(*this, std::string(kActionOpenTransport), [stateStore = stateStore_, rtcBridge = rtcBridge_]() {
         return std::make_unique<OpenTransportAction>(stateStore, rtcBridge);
     });

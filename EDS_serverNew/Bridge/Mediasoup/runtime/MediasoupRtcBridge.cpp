@@ -1,6 +1,7 @@
 #include "Bridge/Mediasoup/runtime/MediasoupRtcBridge.h"
 
 #include "EDS_server/rtc/cRtcManager.h"
+#include "EDS_server/rtc/cRtcPeer.h"
 
 #include <nlohmann/json.hpp>
 
@@ -28,6 +29,16 @@ MediasoupRtcBridge::MediasoupRtcBridge()
           })) {
     if (rtcManager_) {
         rtcManager_->fnInit();
+        rtcManager_->fnSetOnPeerBinary([this](const std::string& peerId, const std::vector<uint8_t>& data) {
+            tOnPeerBinary callback;
+            {
+                std::lock_guard<std::mutex> lock(mutex_);
+                callback = onPeerBinary_;
+            }
+            if (callback) {
+                callback(peerId, data);
+            }
+        });
     }
 }
 
@@ -100,6 +111,33 @@ void MediasoupRtcBridge::onSessionDisconnected(std::string_view peerId, std::uin
 
     rtcManager_->fnOnWsDisconnected(reinterpret_cast<void*>(sessionHandle));
     cleanupSessionMapping(peerId, sessionHandle);
+}
+
+void MediasoupRtcBridge::setOnPeerBinary(tOnPeerBinary callback) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    onPeerBinary_ = std::move(callback);
+}
+
+core::contracts::OperationStatus MediasoupRtcBridge::sendBinaryToPeer(
+    std::string_view targetPeerId,
+    const std::vector<uint8_t>& data) {
+    if (!rtcManager_) {
+        return core::contracts::OperationStatus::failure("RTC manager is not initialized.");
+    }
+    if (targetPeerId.empty()) {
+        return core::contracts::OperationStatus::failure("targetPeerId must not be empty.");
+    }
+    if (data.empty()) {
+        return core::contracts::OperationStatus::failure("binary payload must not be empty.");
+    }
+
+    const auto targetPeer = rtcManager_->fnGetPeer(std::string(targetPeerId));
+    if (!targetPeer || !targetPeer->fnIsReady()) {
+        return core::contracts::OperationStatus::failure("target peer RTC channel is not ready.");
+    }
+
+    targetPeer->fnSendBinary(data);
+    return core::contracts::OperationStatus::success();
 }
 
 std::vector<MediasoupSignalingEvent> MediasoupRtcBridge::consumeEventsForPeer(std::string_view peerId) {

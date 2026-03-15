@@ -103,7 +103,12 @@ bool AudioStreamer::initializeOpus() {
 
 // Запуск захвата аудио
 bool AudioStreamer::startCapture() {
-    if (state != StreamerState::IDLE && state != StreamerState::STOPPED) {
+    if (captureStream != nullptr) {
+        return true;
+    }
+
+    const auto currentState = state.load();
+    if (currentState == StreamerState::INITIALIZING || currentState == StreamerState::ERR) {
         triggerEvent(AudioEventType::DEVICE_ERROR, "Invalid state for capture start");
         return false;
     }
@@ -132,9 +137,11 @@ bool AudioStreamer::startCapture() {
 
     // Запуск потоков обработки
     threadsRunning = true;
-    encodeThread = std::make_unique<std::thread>(&AudioStreamer::encodeLoop, this);
+    if (!encodeThread || !encodeThread->joinable()) {
+        encodeThread = std::make_unique<std::thread>(&AudioStreamer::encodeLoop, this);
+    }
 
-    state = StreamerState::CAPTURING;
+    state = (playbackStream != nullptr) ? StreamerState::STREAMING : StreamerState::CAPTURING;
     triggerEvent(AudioEventType::STREAM_STARTED, "Capture started");
 
     return true;
@@ -142,7 +149,12 @@ bool AudioStreamer::startCapture() {
 
 // Запуск воспроизведения
 bool AudioStreamer::startPlayback() {
-    if (state != StreamerState::IDLE && state != StreamerState::STOPPED) {
+    if (playbackStream != nullptr) {
+        return true;
+    }
+
+    const auto currentState = state.load();
+    if (currentState == StreamerState::INITIALIZING || currentState == StreamerState::ERR) {
         triggerEvent(AudioEventType::DEVICE_ERROR, "Invalid state for playback start");
         return false;
     }
@@ -171,10 +183,14 @@ bool AudioStreamer::startPlayback() {
 
     // Запуск потоков обработки
     threadsRunning = true;
-    decodeThread = std::make_unique<std::thread>(&AudioStreamer::decodeLoop, this);
-    jitterBufferThread = std::make_unique<std::thread>(&AudioStreamer::jitterBufferLoop, this);
+    if (!decodeThread || !decodeThread->joinable()) {
+        decodeThread = std::make_unique<std::thread>(&AudioStreamer::decodeLoop, this);
+    }
+    if (!jitterBufferThread || !jitterBufferThread->joinable()) {
+        jitterBufferThread = std::make_unique<std::thread>(&AudioStreamer::jitterBufferLoop, this);
+    }
 
-    state = StreamerState::PLAYING;
+    state = (captureStream != nullptr) ? StreamerState::STREAMING : StreamerState::PLAYING;
     triggerEvent(AudioEventType::STREAM_STARTED, "Playback started");
 
     return true;
@@ -385,34 +401,23 @@ void AudioStreamer::processJitterBuffer() {
 // Отправка аудио пакета
 void AudioStreamer::sendAudioPacket(const std::vector<uint8_t>& encodedData) {
     try {
-        // Создаем заголовок с метаданными
-        struct AudioHeader {
-            uint32_t sequence;
-            uint64_t timestamp;
-            uint32_t sample_rate;
-            uint16_t channels;
-            uint16_t frame_size;
-            uint16_t data_size;  // добавим размер данных
-        } header;
-
-        header.sequence = sequenceNumber++;
-        header.timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
+        const auto sequence = sequenceNumber++;
+        const auto timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
             std::chrono::system_clock::now().time_since_epoch()).count();
-        header.sample_rate = config.sampleRate;
-        header.channels = config.channels;
-        header.frame_size = config.frameSize;
-        header.data_size = encodedData.size();
 
-        // Формируем бинарный пакет: заголовок + аудиоданные
-        std::vector<uint8_t> packet;
-        packet.resize(sizeof(header) + encodedData.size());
+        nlohmann::json payload{
+            { "type", "audio_data" },
+            { "sequence", sequence },
+            { "timestamp", timestamp },
+            { "sampleRate", config.sampleRate },
+            { "channels", config.channels },
+            { "frameSize", config.frameSize },
+            { "data", encodedData }
+        };
 
-        memcpy(packet.data(), &header, sizeof(header));
-        memcpy(packet.data() + sizeof(header), encodedData.data(), encodedData.size());
-
-        // Отправляем как бинарный фрейм
-        ws.binary(true);
-        ws.write(net::buffer(packet));
+        ws.binary(false);
+        const auto serialized = payload.dump();
+        ws.write(net::buffer(serialized));
 
         packetsSent++;
         bytesSent += encodedData.size();
@@ -427,12 +432,28 @@ void AudioStreamer::sendAudioPacket(const std::vector<uint8_t>& encodedData) {
 void AudioStreamer::processIncomingAudio(const nlohmann::json& message) {
     try {
         AudioPacket packet;
-        packet.sequence = message["sequence"];
-        packet.timestamp = message["timestamp"];
+        packet.sequence = message.value("sequence", 0u);
+        packet.timestamp = message.value("timestamp", 0ull);
 
-        if (message.contains("data") && message["data"].is_binary()) {
-            auto binary = message["data"].get_binary();
-            packet.data = binary;
+        if (message.contains("data")) {
+            if (message["data"].is_binary()) {
+                auto binary = message["data"].get_binary();
+                packet.data = binary;
+            }
+            else if (message["data"].is_array()) {
+                packet.data.reserve(message["data"].size());
+                for (const auto& item : message["data"]) {
+                    if (item.is_number_unsigned()) {
+                        packet.data.push_back(static_cast<uint8_t>(item.get<uint32_t>()));
+                    }
+                    else if (item.is_number_integer()) {
+                        packet.data.push_back(static_cast<uint8_t>(item.get<int32_t>()));
+                    }
+                }
+            }
+        }
+        if (packet.data.empty()) {
+            return;
         }
 
         {
@@ -463,9 +484,8 @@ void AudioStreamer::stopCapture() {
         Pa_CloseStream(captureStream);
         captureStream = nullptr;
     }
-
-    if (state == StreamerState::CAPTURING || state == StreamerState::STREAMING) {
-        state = StreamerState::IDLE;
+    if (state == StreamerState::CAPTURING || state == StreamerState::STREAMING || state == StreamerState::PLAYING) {
+        state = (playbackStream != nullptr) ? StreamerState::PLAYING : StreamerState::IDLE;
     }
 
     triggerEvent(AudioEventType::STREAM_STOPPED, "Capture stopped");
@@ -478,9 +498,8 @@ void AudioStreamer::stopPlayback() {
         Pa_CloseStream(playbackStream);
         playbackStream = nullptr;
     }
-
-    if (state == StreamerState::PLAYING || state == StreamerState::STREAMING) {
-        state = StreamerState::IDLE;
+    if (state == StreamerState::PLAYING || state == StreamerState::STREAMING || state == StreamerState::CAPTURING) {
+        state = (captureStream != nullptr) ? StreamerState::CAPTURING : StreamerState::IDLE;
     }
 
     triggerEvent(AudioEventType::STREAM_STOPPED, "Playback stopped");

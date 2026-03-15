@@ -7,6 +7,9 @@
 #include <utility>
 
 namespace eds::server_new::features::chat {
+ChatFeatureModule::ChatFeatureModule()
+    : BaseModule("ChatFeatureModule", static_cast<core::contracts::ModuleId>(-1)) {
+}
 
 std::string_view ChatFeatureModule::objectType() const {
     return kChatRouteObject;
@@ -90,6 +93,13 @@ eds::server_new::features::runtime::FeatureDispatchResult ChatFeatureModule::dis
         result.outboundEvents.push_back(std::move(event));
     }
     return result;
+}
+
+bool ChatFeatureModule::onInitialize() {
+    return true;
+}
+
+void ChatFeatureModule::onShutdown() {
 }
 
 } // namespace eds::server_new::features::chat

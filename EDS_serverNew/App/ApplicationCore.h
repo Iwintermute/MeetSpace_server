@@ -33,7 +33,8 @@ public:
 private:
     std::shared_ptr<core::contracts::IModuleRegistry> CoreRegistry;//Реестр модулей
     core::runtime::MessageDispatcher dispatcher_;
-    std::unordered_map<std::string, std::unique_ptr<eds::server_new::features::runtime::IFeatureModule>> featureModules_;
+    std::unordered_map<std::string, eds::server_new::features::runtime::IFeatureModule*> featureModules_;
+    std::unordered_map<std::string, core::contracts::ModuleId> featureModuleIds_;
     mutable std::mutex featuresMutex_;
     bool featuresRegistered_ = false;
 };

@@ -47,6 +47,13 @@ public:
         std::shared_ptr<MediasoupRtcBridge> rtcBridge);
     core::contracts::OperationStatus execute(const core::contracts::IMessage& message) override;
 };
+class LeaveRoomAction final : public MediasoupActionBase {
+public:
+    LeaveRoomAction(
+        std::shared_ptr<MediasoupStateStore> stateStore,
+        std::shared_ptr<MediasoupRtcBridge> rtcBridge);
+    core::contracts::OperationStatus execute(const core::contracts::IMessage& message) override;
+};
 
 class OpenTransportAction final : public MediasoupActionBase {
 public:

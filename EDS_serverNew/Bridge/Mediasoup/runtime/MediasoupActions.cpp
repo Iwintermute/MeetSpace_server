@@ -68,6 +68,24 @@ core::contracts::OperationStatus JoinRoomAction::execute(const core::contracts::
     }
     return stateStore_->joinRoom(typedMessage->payload());
 }
+LeaveRoomAction::LeaveRoomAction(
+    std::shared_ptr<MediasoupStateStore> stateStore,
+    std::shared_ptr<MediasoupRtcBridge> rtcBridge)
+    : MediasoupActionBase("LeaveRoomAction", std::move(stateStore), std::move(rtcBridge)) {
+}
+
+core::contracts::OperationStatus LeaveRoomAction::execute(const core::contracts::IMessage& message) {
+    if (!stateStore_) {
+        return core::contracts::OperationStatus::failure("Mediasoup state store is not configured.");
+    }
+
+    const core::contracts::TypedMessage<MediasoupCommand>* typedMessage = nullptr;
+    const auto readStatus = readCommand(message, typedMessage);
+    if (!readStatus.ok) {
+        return readStatus;
+    }
+    return stateStore_->leaveRoom(typedMessage->payload());
+}
 
 OpenTransportAction::OpenTransportAction(
     std::shared_ptr<MediasoupStateStore> stateStore,

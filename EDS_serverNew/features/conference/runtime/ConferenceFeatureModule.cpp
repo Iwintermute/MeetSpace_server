@@ -6,6 +6,9 @@
 #include <utility>
 
 namespace eds::server_new::features::conference {
+ConferenceFeatureModule::ConferenceFeatureModule()
+    : BaseModule("ConferenceFeatureModule", static_cast<core::contracts::ModuleId>(-1)) {
+}
 
 std::string_view ConferenceFeatureModule::objectType() const {
     return kConferenceRouteObject;
@@ -116,6 +119,12 @@ bool ConferenceFeatureModule::shouldPublishConferenceSnapshot(std::string_view a
         || actionType == kActionCloseConference
         || actionType == kActionJoinConference
         || actionType == kActionLeaveConference;
+}
+bool ConferenceFeatureModule::onInitialize() {
+    return true;
+}
+
+void ConferenceFeatureModule::onShutdown() {
 }
 
 

@@ -7,9 +7,24 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # Collect all source files recursively
 file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS "*.cpp")
 file(GLOB_RECURSE HEADERS CONFIGURE_DEPENDS "*.h" "*.hpp")
+file(GLOB_RECURSE MEDIASOUP_BRIDGE_SOURCES CONFIGURE_DEPENDS
+  "Bridge/Mediasoup/runtime/*.cpp"
+  "Bridge/Mediasoup/service/*.cpp"
+)
+file(GLOB_RECURSE MEDIASOUP_BRIDGE_HEADERS CONFIGURE_DEPENDS
+  "Bridge/Mediasoup/runtime/*.h"
+  "Bridge/Mediasoup/runtime/*.hpp"
+  "Bridge/Mediasoup/service/*.h"
+  "Bridge/Mediasoup/service/*.hpp"
+)
+list(REMOVE_ITEM SOURCES ${MEDIASOUP_BRIDGE_SOURCES})
+list(REMOVE_ITEM HEADERS ${MEDIASOUP_BRIDGE_HEADERS})
 list(REMOVE_ITEM SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/main.cpp")
 
 set(TARGET_FILE "eds_server_new_arch")
+set(MEDIASOUP_BRIDGE_TARGET "eds_mediasoup_bridge")
+
+add_library(${MEDIASOUP_BRIDGE_TARGET} STATIC ${MEDIASOUP_BRIDGE_SOURCES} ${MEDIASOUP_BRIDGE_HEADERS})
 
 # New architecture target (rewrite in progress)
 add_library(${TARGET_FILE} STATIC ${SOURCES} ${HEADERS})
@@ -32,10 +47,14 @@ if(EXISTS "${_eduspace_legacy_server_dir}/rtc/cRtcManager.cpp")
     "${_eduspace_legacy_server_dir}/rtc/cRtcPeer.cpp"
     "${_eduspace_legacy_server_dir}/utils/cLogger.cpp"
   )
-  target_sources(${TARGET_FILE} PRIVATE ${_eduspace_rtc_sources})
+  target_sources(${MEDIASOUP_BRIDGE_TARGET} PRIVATE ${_eduspace_rtc_sources})
 endif()
 
 # Include directories
+target_include_directories(${MEDIASOUP_BRIDGE_TARGET} PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${_eduspace_legacy_server_dir}
+)
 target_include_directories(${TARGET_FILE} PRIVATE 
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${_eduspace_legacy_server_dir}
@@ -44,12 +63,21 @@ target_include_directories(${TARGET_FILE} PRIVATE
 if(NOT TARGET eduspace_core)
   message(FATAL_ERROR "Target eduspace_core is required. Ensure Core is configured in the root CMakeLists.")
 endif()
+target_link_libraries(${MEDIASOUP_BRIDGE_TARGET} PRIVATE
+    eduspace_core
+)
 target_link_libraries(${TARGET_FILE} PRIVATE
     eduspace_core
+    ${MEDIASOUP_BRIDGE_TARGET}
 )
 
 find_package(OpenSSL REQUIRED)
 find_package(LibDataChannel CONFIG REQUIRED)
+target_link_libraries(${MEDIASOUP_BRIDGE_TARGET} PRIVATE
+  LibDataChannel::LibDataChannel
+  OpenSSL::SSL
+  OpenSSL::Crypto
+)
 target_link_libraries(${TARGET_FILE} PRIVATE
   LibDataChannel::LibDataChannel
   OpenSSL::SSL
@@ -88,6 +116,8 @@ else()
 endif()
 
 if(WIN32)
+  target_compile_definitions(${MEDIASOUP_BRIDGE_TARGET} PUBLIC _WIN32_WINNT=0x0A00)
+  target_link_libraries(${MEDIASOUP_BRIDGE_TARGET} PRIVATE ws2_32 mswsock)
   target_compile_definitions(${TARGET_FILE} PUBLIC _WIN32_WINNT=0x0A00)
   target_link_libraries(${TARGET_FILE} PRIVATE ws2_32 mswsock)
 endif()
@@ -98,6 +128,7 @@ target_include_directories(eds_server_new_mediasoup_app PRIVATE
 )
 target_link_libraries(eds_server_new_mediasoup_app PRIVATE
     ${TARGET_FILE}
+    ${MEDIASOUP_BRIDGE_TARGET}
     eduspace_core
 )
 

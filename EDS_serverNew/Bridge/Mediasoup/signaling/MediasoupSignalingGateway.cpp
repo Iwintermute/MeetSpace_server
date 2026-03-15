@@ -7,13 +7,20 @@
 #include <iostream>
 #include <nlohmann/json.hpp>
 #include <thread>
+#include <unordered_set>
 
 namespace eds::server_new::mediasoup::signaling {
 using json = nlohmann::json;
 
-MediasoupSignalingGateway::MediasoupSignalingGateway(ApplicationApi& app, unsigned short wsPort)
+MediasoupSignalingGateway::MediasoupSignalingGateway(
+    ApplicationApi& app,
+    unsigned short wsPort,
+    bool allowDirectMediasoupDebug,
+    bool debugMode)
     : app_(app),
-      wsPort_(wsPort) {
+      wsPort_(wsPort),
+      allowDirectMediasoupDebug_(allowDirectMediasoupDebug),
+      debugMode_(debugMode) {
 }
 
 MediasoupSignalingGateway::~MediasoupSignalingGateway() {
@@ -46,8 +53,19 @@ bool MediasoupSignalingGateway::start() {
         ioContext_.stop();
         return false;
     }
+    if (!featureEventBus_) {
+        featureEventBus_ = eds::server_new::features::runtime::FeatureEventBus::instance();
+    }
+    if (!audioSessionLifecycleSubscription_.connected() && featureEventBus_) {
+        audioSessionLifecycleSubscription_ =
+            featureEventBus_->subscribe<eds::server_new::features::events::AudioSessionLifecycleEvent>(
+                [this](const auto& event) { onAudioSessionLifecycleEvent(event); });
+    }
 
     running_.store(true);
+    if (debugMode_) {
+        std::cout << "[mediasoup][debug][signaling] gateway started on port " << wsPort_ << ".\n";
+    }
     return true;
 }
 
@@ -60,9 +78,19 @@ void MediasoupSignalingGateway::stop() {
         wsServer_->stop();
         wsServer_.reset();
     }
+    audioSessionLifecycleSubscription_.disconnect();
     ioContext_.stop();
 
     std::lock_guard<std::mutex> lock(peersMutex_);
+    if (debugMode_) {
+        std::cout << "[mediasoup][debug][signaling] gateway stopped. total_messages="
+                  << receivedMessages_.load()
+                  << ", total_forwarded_events="
+                  << forwardedEvents_.load()
+                  << ", active_peers="
+                  << peerToSession_.size()
+                  << "\n";
+    }
     sessionToPeer_.clear();
     peerToSession_.clear();
 }
@@ -78,6 +106,13 @@ void MediasoupSignalingGateway::onConnected(void* session) {
     if (!wsServer_) {
         return;
     }
+    if (debugMode_) {
+        std::cout << "[mediasoup][debug][signaling] connected session="
+                  << reinterpret_cast<std::uintptr_t>(session)
+                  << ", trustedPeer="
+                  << trustedPeer
+                  << "\n";
+    }
 
     json assign{
         { "type", "peer_assigned" },
@@ -92,6 +127,13 @@ void MediasoupSignalingGateway::onDisconnected(void* session) {
     if (iterator == sessionToPeer_.end()) {
         return;
     }
+    if (debugMode_) {
+        std::cout << "[mediasoup][debug][signaling] disconnected session="
+                  << reinterpret_cast<std::uintptr_t>(session)
+                  << ", trustedPeer="
+                  << iterator->second
+                  << "\n";
+    }
     app_.notifyFeatureSessionDisconnected(iterator->second, reinterpret_cast<std::uintptr_t>(session));
 
     peerToSession_.erase(iterator->second);
@@ -102,20 +144,54 @@ void MediasoupSignalingGateway::onMessage(const std::string& text, void* session
     if (!wsServer_) {
         return;
     }
+    const auto messageNo = receivedMessages_.fetch_add(1) + 1;
 
     json response;
     try {
         const auto trustedPeer = resolveTrustedPeer(session);
         const auto request = json::parse(text);
-        const auto objectType = request.value("object", std::string(kRouteObject));
+        const auto objectType = request.value("object", std::string{});
         const auto agentType = request.value("agent", std::string{});
         const auto actionType = request.value("action", std::string{});
+        const bool directMediasoupRequested = objectType == std::string(kRouteObject);
+        if (debugMode_) {
+            std::cout << "[mediasoup][debug][signaling] inbound#" << messageNo
+                      << " session=" << reinterpret_cast<std::uintptr_t>(session)
+                      << " peer=" << trustedPeer
+                      << " object=" << objectType
+                      << " agent=" << agentType
+                      << " action=" << actionType
+                      << " payload_bytes=" << text.size()
+                      << "\n";
+        }
 
         if (actionType.empty()) {
             response = {
                 { "type", "dispatch_result" },
                 { "ok", false },
                 { "message", "action must not be empty." }
+            };
+            wsServer_->sendText(session, response.dump());
+            return;
+        }
+        if (objectType.empty()) {
+            response = {
+                { "type", "dispatch_result" },
+                { "ok", false },
+                { "message", "object must not be empty." }
+            };
+            wsServer_->sendText(session, response.dump());
+            return;
+        }
+        if (directMediasoupRequested && !allowDirectMediasoupDebug_) {
+            response = {
+                { "type", "dispatch_result" },
+                { "object", objectType },
+                { "agent", agentType },
+                { "action", actionType },
+                { "peer", trustedPeer },
+                { "ok", false },
+                { "message", "Direct mediasoup commands are disabled. This path is test-only; production flow must use feature orchestration." }
             };
             wsServer_->sendText(session, response.dump());
             return;
@@ -135,6 +211,17 @@ void MediasoupSignalingGateway::onMessage(const std::string& text, void* session
         const auto effectiveAgent = dispatchResult.effectiveAgent.empty()
             ? agentType
             : dispatchResult.effectiveAgent;
+        if (debugMode_) {
+            std::cout << "[mediasoup][debug][signaling] dispatch_result"
+                      << " peer=" << trustedPeer
+                      << " object=" << objectType
+                      << " agent=" << effectiveAgent
+                      << " action=" << actionType
+                      << " ok=" << (status.ok ? "true" : "false")
+                      << " events=" << dispatchResult.outboundEvents.size()
+                      << " message=\"" << status.message << "\""
+                      << "\n";
+        }
         response = {
             { "type", "dispatch_result" },
             { "object", objectType },
@@ -144,18 +231,36 @@ void MediasoupSignalingGateway::onMessage(const std::string& text, void* session
             { "ok", status.ok },
             { "message", status.message }
         };
+        if (directMediasoupRequested) {
+            response["note"] = "Direct mediasoup mode is enabled for isolated tests only.";
+        }
 
         for (const auto& event : dispatchResult.outboundEvents) {
             auto outboundEvent = event;
+            const auto eventType = outboundEvent.value("type", std::string("unknown"));
             const auto deliverIt = outboundEvent.find("deliverTo");
             if (deliverIt == outboundEvent.end()) {
                 wsServer_->sendText(session, outboundEvent.dump());
+                if (debugMode_) {
+                    forwardedEvents_.fetch_add(1);
+                    std::cout << "[mediasoup][debug][signaling] outbound_event"
+                              << " target=current_peer"
+                              << " event_type=" << eventType
+                              << "\n";
+                }
                 continue;
             }
 
             if (deliverIt->is_null()) {
                 outboundEvent.erase("deliverTo");
                 wsServer_->sendText(session, outboundEvent.dump());
+                if (debugMode_) {
+                    forwardedEvents_.fetch_add(1);
+                    std::cout << "[mediasoup][debug][signaling] outbound_event"
+                              << " target=current_peer"
+                              << " event_type=" << eventType
+                              << "\n";
+                }
                 continue;
             }
 
@@ -166,20 +271,51 @@ void MediasoupSignalingGateway::onMessage(const std::string& text, void* session
             }();
 
             if (deliverIt->is_string()) {
-                sendTextToPeer(deliverIt->get<std::string>(), serializedEvent);
+                const auto targetPeer = deliverIt->get<std::string>();
+                const auto delivered = sendTextToPeer(targetPeer, serializedEvent);
+                if (debugMode_) {
+                    if (delivered) {
+                        forwardedEvents_.fetch_add(1);
+                    }
+                    std::cout << "[mediasoup][debug][signaling] outbound_event"
+                              << " target=" << targetPeer
+                              << " event_type=" << eventType
+                              << " delivered=" << (delivered ? "true" : "false")
+                              << "\n";
+                }
                 continue;
             }
 
             if (deliverIt->is_array()) {
                 for (const auto& recipient : *deliverIt) {
-                    if (recipient.is_string()) {
-                        sendTextToPeer(recipient.get<std::string>(), serializedEvent);
+                    if (!recipient.is_string()) {
+                        continue;
+                    }
+                    const auto targetPeer = recipient.get<std::string>();
+                    const auto delivered = sendTextToPeer(targetPeer, serializedEvent);
+                    if (debugMode_) {
+                        if (delivered) {
+                            forwardedEvents_.fetch_add(1);
+                        }
+                        std::cout << "[mediasoup][debug][signaling] outbound_event"
+                                  << " target=" << targetPeer
+                                  << " event_type=" << eventType
+                                  << " delivered=" << (delivered ? "true" : "false")
+                                  << "\n";
                     }
                 }
                 continue;
             }
 
             wsServer_->sendText(session, outboundEvent.dump());
+            if (debugMode_) {
+                forwardedEvents_.fetch_add(1);
+                std::cout << "[mediasoup][debug][signaling] outbound_event"
+                          << " target=current_peer"
+                          << " event_type=" << eventType
+                          << " note=invalid_deliverTo"
+                          << "\n";
+            }
         }
     } catch (const std::exception& ex) {
         response = {
@@ -190,6 +326,52 @@ void MediasoupSignalingGateway::onMessage(const std::string& text, void* session
     }
 
     wsServer_->sendText(session, response.dump());
+}
+void MediasoupSignalingGateway::onAudioSessionLifecycleEvent(
+    const eds::server_new::features::events::AudioSessionLifecycleEvent& event) {
+    if (!running_.load() || !wsServer_) {
+        return;
+    }
+    if (!event.started && !event.ended) {
+        return;
+    }
+
+    std::unordered_set<std::string> recipients;
+    for (const auto& peerId : event.notifyPeerIds) {
+        if (!peerId.empty()) {
+            recipients.insert(peerId);
+        }
+    }
+    if (recipients.empty()) {
+        return;
+    }
+
+    const json payload{
+        { "type", "audio_session_lifecycle" },
+        { "object", std::string(kRouteObject) },
+        { "roomId", event.roomId },
+        { "actorPeerId", event.actorPeerId },
+        { "started", event.started },
+        { "ended", event.ended },
+        { "reason", event.reason },
+        { "memberPeerIds", event.memberPeerIds }
+    };
+    const auto serialized = payload.dump();
+    if (debugMode_) {
+        std::cout << "[mediasoup][debug][signaling] audio_session_lifecycle"
+                  << " room=" << event.roomId
+                  << " actor=" << event.actorPeerId
+                  << " started=" << (event.started ? "true" : "false")
+                  << " ended=" << (event.ended ? "true" : "false")
+                  << " recipients=" << recipients.size()
+                  << "\n";
+    }
+    for (const auto& peerId : recipients) {
+        const auto delivered = sendTextToPeer(peerId, serialized);
+        if (debugMode_ && delivered) {
+            forwardedEvents_.fetch_add(1);
+        }
+    }
 }
 
 std::string MediasoupSignalingGateway::resolveTrustedPeer(void* session) {
@@ -217,12 +399,24 @@ bool MediasoupSignalingGateway::sendTextToPeer(std::string_view peerId, const st
         std::lock_guard<std::mutex> lock(peersMutex_);
         auto peerIt = peerToSession_.find(std::string(peerId));
         if (peerIt == peerToSession_.end()) {
+            if (debugMode_) {
+                std::cout << "[mediasoup][debug][signaling] sendTextToPeer skipped: target peer not found: "
+                          << peerId
+                          << "\n";
+            }
             return false;
         }
         targetSession = peerIt->second;
     }
-
-    return wsServer_->sendText(targetSession, text);
+    const auto sent = wsServer_->sendText(targetSession, text);
+    if (debugMode_ && !sent) {
+        std::cout << "[mediasoup][debug][signaling] sendTextToPeer failed: target="
+                  << peerId
+                  << " session="
+                  << reinterpret_cast<std::uintptr_t>(targetSession)
+                  << "\n";
+    }
+    return sent;
 }
 
 } // namespace eds::server_new::mediasoup::signaling

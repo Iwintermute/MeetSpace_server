@@ -1,17 +1,19 @@
 #pragma once
 
-#include "Bridge/Mediasoup/runtime/MediasoupFeatureManager.h"
-#include "Bridge/Mediasoup/runtime/MediasoupRtcBridge.h"
-#include "Bridge/Mediasoup/runtime/MediasoupStateStore.h"
+#include "Bridge/Mediasoup/service/IMediaTransportService.h"
+#include "features/runtime/FeatureEventBus.h"
 #include "features/runtime/FeatureRegistry.h"
+#include "modules/BaseModule.h"
 
 #include <memory>
+#include <string_view>
+#include <vector>
 
 namespace eds::server_new::features::mediasoup {
 
-class MediasoupFeatureModule final : public eds::server_new::features::runtime::IFeatureModule {
+class MediasoupFeatureModule final : public BaseModule, public eds::server_new::features::runtime::IFeatureModule {
 public:
-    MediasoupFeatureModule() = default;
+    MediasoupFeatureModule();
     ~MediasoupFeatureModule() override = default;
 
     std::string_view objectType() const override;
@@ -23,10 +25,17 @@ public:
     void onSessionDisconnected(std::string_view peerId, std::uintptr_t sessionHandle) override;
 
 private:
+    bool onInitialize() override;
+    void onShutdown() override;
+    void publishTransportEvents(const std::vector<eds::server_new::mediasoup::service::MediaTransportEvent>& events);
+    core::contracts::OperationStatus resolveIntent(
+        std::string_view actionType,
+        eds::server_new::mediasoup::service::MediaTransportIntent& intent) const;
+
+private:
     bool registered_ = false;
-    std::shared_ptr<eds::server_new::mediasoup::MediasoupFeatureManager> manager_;
-    std::shared_ptr<eds::server_new::mediasoup::MediasoupStateStore> stateStore_;
-    std::shared_ptr<eds::server_new::mediasoup::MediasoupRtcBridge> rtcBridge_;
+    std::shared_ptr<eds::server_new::mediasoup::service::IMediaTransportService> transportService_;
+    std::shared_ptr<eds::server_new::features::runtime::FeatureEventBus> eventBus_;
 };
 
 } // namespace eds::server_new::features::mediasoup

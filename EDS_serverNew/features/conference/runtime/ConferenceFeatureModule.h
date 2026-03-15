@@ -4,6 +4,7 @@
 #include "features/conference/runtime/ConferenceStateStore.h"
 #include "features/runtime/FeatureEventBus.h"
 #include "features/runtime/FeatureRegistry.h"
+#include "modules/BaseModule.h"
 #include <cstdint>
 
 #include <memory>
@@ -11,9 +12,9 @@
 
 namespace eds::server_new::features::conference {
 
-class ConferenceFeatureModule final : public eds::server_new::features::runtime::IFeatureModule {
+class ConferenceFeatureModule final : public BaseModule, public eds::server_new::features::runtime::IFeatureModule {
 public:
-    ConferenceFeatureModule() = default;
+    ConferenceFeatureModule();
     ~ConferenceFeatureModule() override = default;
 
     std::string_view objectType() const override;
@@ -23,6 +24,10 @@ public:
         const eds::server_new::features::runtime::FeatureDispatchRequest& request,
         core::runtime::MessageDispatcher& dispatcher) override;
     void onSessionDisconnected(std::string_view peerId, std::uintptr_t sessionHandle) override;
+
+private:
+    bool onInitialize() override;
+    void onShutdown() override;
 
 private:
     void publishConferenceSnapshot(std::string_view conferenceId);

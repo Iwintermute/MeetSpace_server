@@ -42,7 +42,59 @@ core::contracts::OperationStatus MediasoupStateStore::joinRoom(const MediasoupCo
         return core::contracts::OperationStatus::failure("Room not found: " + command.roomId);
     }
 
-    roomIt->second.peers.insert(command.peerId);
+    const auto peerCountBeforeJoin = roomIt->second.peers.size();
+    const auto inserted = roomIt->second.peers.insert(command.peerId).second;
+    if (inserted && peerCountBeforeJoin == 0) {
+        SessionLifecycleNotification notification;
+        notification.roomId = command.roomId;
+        notification.actorPeerId = command.peerId;
+        notification.started = true;
+        notification.reason = "joined";
+        notification.memberPeerIds = collectPeersNoLock(command.roomId);
+        notification.notifyPeerIds = notification.memberPeerIds;
+        queueNotificationNoLock(command.peerId, std::move(notification));
+    }
+
+    return core::contracts::OperationStatus::success();
+}
+
+core::contracts::OperationStatus MediasoupStateStore::leaveRoom(const MediasoupCommand& command) {
+    const auto roomValidation = requireField(!command.roomId.empty(), "roomId");
+    if (!roomValidation.ok) {
+        return roomValidation;
+    }
+    const auto peerValidation = requireField(!command.peerId.empty(), "peerId");
+    if (!peerValidation.ok) {
+        return peerValidation;
+    }
+
+    std::lock_guard<std::mutex> lock(mutex_);
+    auto roomIt = rooms_.find(command.roomId);
+    if (roomIt == rooms_.end()) {
+        return core::contracts::OperationStatus::failure("Room not found: " + command.roomId);
+    }
+
+    auto peerIt = roomIt->second.peers.find(command.peerId);
+    if (peerIt == roomIt->second.peers.end()) {
+        return core::contracts::OperationStatus::failure("Peer is not joined to room.");
+    }
+
+    const auto peerCountBeforeLeave = roomIt->second.peers.size();
+    roomIt->second.peers.erase(peerIt);
+    clearPeerRuntimeNoLock(command.roomId, command.peerId);
+
+    const auto peerCountAfterLeave = roomIt->second.peers.size();
+    if (peerCountBeforeLeave > 0 && peerCountAfterLeave == 0) {
+        SessionLifecycleNotification notification;
+        notification.roomId = command.roomId;
+        notification.actorPeerId = command.peerId;
+        notification.ended = true;
+        notification.reason = "left";
+        notification.memberPeerIds = collectPeersNoLock(command.roomId);
+        notification.notifyPeerIds.push_back(command.peerId);
+        queueNotificationNoLock(command.peerId, std::move(notification));
+    }
+
     return core::contracts::OperationStatus::success();
 }
 
@@ -142,12 +194,127 @@ core::contracts::OperationStatus MediasoupStateStore::consume(const MediasoupCom
     return core::contracts::OperationStatus::success();
 }
 
+std::vector<std::string> MediasoupStateStore::listOtherPeersInSameRoom(std::string_view peerId) const {
+    std::vector<std::string> recipients;
+    if (peerId.empty()) {
+        return recipients;
+    }
+
+    std::lock_guard<std::mutex> lock(mutex_);
+    for (const auto& [roomId, roomState] : rooms_) {
+        static_cast<void>(roomId);
+        if (roomState.peers.find(std::string(peerId)) == roomState.peers.end()) {
+            continue;
+        }
+        recipients.reserve(roomState.peers.size());
+        for (const auto& memberPeerId : roomState.peers) {
+            if (memberPeerId != peerId) {
+                recipients.push_back(memberPeerId);
+            }
+        }
+        break;
+    }
+    return recipients;
+}
+
+void MediasoupStateStore::disconnectPeer(
+    std::string_view peerId,
+    std::vector<SessionLifecycleNotification>& notifications) {
+    if (peerId.empty()) {
+        return;
+    }
+
+    std::lock_guard<std::mutex> lock(mutex_);
+    for (auto& [roomId, roomState] : rooms_) {
+        auto peerIt = roomState.peers.find(std::string(peerId));
+        if (peerIt == roomState.peers.end()) {
+            continue;
+        }
+
+        const auto peerCountBeforeLeave = roomState.peers.size();
+        roomState.peers.erase(peerIt);
+        clearPeerRuntimeNoLock(roomId, peerId);
+
+        const auto peerCountAfterLeave = roomState.peers.size();
+        if (peerCountBeforeLeave > 0 && peerCountAfterLeave == 0) {
+            SessionLifecycleNotification notification;
+            notification.roomId = roomId;
+            notification.actorPeerId = std::string(peerId);
+            notification.ended = true;
+            notification.reason = "disconnected";
+            notification.memberPeerIds = collectPeersNoLock(roomId);
+            notification.notifyPeerIds = notification.memberPeerIds;
+            notifications.push_back(std::move(notification));
+        }
+    }
+
+    pendingNotificationsByActor_.erase(std::string(peerId));
+}
+
+std::vector<MediasoupStateStore::SessionLifecycleNotification> MediasoupStateStore::consumeLifecycleNotificationsForPeer(
+    std::string_view actorPeerId) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    auto iterator = pendingNotificationsByActor_.find(std::string(actorPeerId));
+    if (iterator == pendingNotificationsByActor_.end()) {
+        return {};
+    }
+
+    auto notifications = std::move(iterator->second);
+    pendingNotificationsByActor_.erase(iterator);
+    return notifications;
+}
+
 bool MediasoupStateStore::hasPeerInRoomNoLock(std::string_view roomId, std::string_view peerId) const {
     auto roomIt = rooms_.find(std::string(roomId));
     if (roomIt == rooms_.end()) {
         return false;
     }
     return roomIt->second.peers.find(std::string(peerId)) != roomIt->second.peers.end();
+}
+
+std::vector<std::string> MediasoupStateStore::collectPeersNoLock(std::string_view roomId) const {
+    std::vector<std::string> peers;
+    auto roomIt = rooms_.find(std::string(roomId));
+    if (roomIt == rooms_.end()) {
+        return peers;
+    }
+
+    peers.reserve(roomIt->second.peers.size());
+    for (const auto& peerId : roomIt->second.peers) {
+        peers.push_back(peerId);
+    }
+    return peers;
+}
+
+void MediasoupStateStore::clearPeerRuntimeNoLock(std::string_view roomId, std::string_view peerId) {
+    std::unordered_set<std::string> removedTransportIds;
+
+    for (auto transportIt = transports_.begin(); transportIt != transports_.end();) {
+        if (transportIt->second.roomId == roomId && transportIt->second.peerId == peerId) {
+            removedTransportIds.insert(transportIt->first);
+            transportIt = transports_.erase(transportIt);
+            continue;
+        }
+        ++transportIt;
+    }
+
+    for (auto producerIt = producers_.begin(); producerIt != producers_.end();) {
+        const bool sameRoomAndPeer =
+            producerIt->second.roomId == roomId && producerIt->second.peerId == peerId;
+        const bool transportRemoved =
+            removedTransportIds.find(producerIt->second.transportId) != removedTransportIds.end();
+        if (sameRoomAndPeer || transportRemoved) {
+            producerIt = producers_.erase(producerIt);
+            continue;
+        }
+        ++producerIt;
+    }
+}
+
+void MediasoupStateStore::queueNotificationNoLock(
+    std::string_view actorPeerId,
+    SessionLifecycleNotification notification) {
+    pendingNotificationsByActor_[std::string(actorPeerId)].push_back(std::move(notification));
 }
 
 } // namespace eds::server_new::mediasoup

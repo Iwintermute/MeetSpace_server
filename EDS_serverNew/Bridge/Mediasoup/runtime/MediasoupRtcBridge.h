@@ -4,6 +4,7 @@
 #include "contracts/Primitives.h"
 
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -27,6 +28,7 @@ struct MediasoupSignalingEvent {
 
 class MediasoupRtcBridge {
 public:
+    using tOnPeerBinary = std::function<void(std::string_view, const std::vector<uint8_t>&)>;
     MediasoupRtcBridge();
     ~MediasoupRtcBridge();
 
@@ -34,6 +36,10 @@ public:
     core::contracts::OperationStatus handleIce(const MediasoupCommand& command);
     core::contracts::OperationStatus handleClose(const MediasoupCommand& command);
     void onSessionDisconnected(std::string_view peerId, std::uintptr_t sessionHandle);
+    void setOnPeerBinary(tOnPeerBinary callback);
+    core::contracts::OperationStatus sendBinaryToPeer(
+        std::string_view targetPeerId,
+        const std::vector<uint8_t>& data);
 
     std::vector<MediasoupSignalingEvent> consumeEventsForPeer(std::string_view peerId);
 
@@ -50,6 +56,7 @@ private:
     std::unordered_map<std::string, std::uintptr_t> sessionByPeer_;
     std::unordered_map<std::uintptr_t, std::string> peerBySession_;
     std::unordered_map<std::string, std::vector<MediasoupSignalingEvent>> pendingEventsByPeer_;
+    tOnPeerBinary onPeerBinary_;
 };
 
 } // namespace eds::server_new::mediasoup

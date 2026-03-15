@@ -29,6 +29,9 @@ core::contracts::OperationStatus ApplicationApi::registerFeatures() {
     if (modules.empty()) {
         return core::contracts::OperationStatus::failure("No feature modules were registered.");
     }
+    if (!CoreRegistry) {
+        return core::contracts::OperationStatus::failure("Module registry is not configured.");
+    }
 
     for (auto& module : modules) {
         if (!module) {
@@ -47,8 +50,20 @@ core::contracts::OperationStatus ApplicationApi::registerFeatures() {
         if (!status.ok) {
             return status;
         }
+        auto moduleId = CoreRegistry->registerModule(std::unique_ptr<core::contracts::IModule>(module.release()));
+        if (moduleId == 0) {
+            return core::contracts::OperationStatus::failure(
+                "Failed to register feature module in module registry: " + objectKey);
+        }
 
-        featureModules_.emplace(std::move(objectKey), std::move(module));
+        auto* registeredModule = dynamic_cast<eds::server_new::features::runtime::IFeatureModule*>(CoreRegistry->getModule(moduleId));
+        if (!registeredModule) {
+            return core::contracts::OperationStatus::failure(
+                "Registered module does not implement IFeatureModule: " + objectKey);
+        }
+
+        featureModules_.emplace(objectKey, registeredModule);
+        featureModuleIds_.emplace(std::move(objectKey), moduleId);
     }
 
     featuresRegistered_ = true;
@@ -172,13 +187,11 @@ bool ApplicationApi::init() {
     if (!CoreRegistry) {
         return false;
     }
-
-    if (!CoreRegistry->initializeAll()) {
+    const auto featuresStatus = registerFeatures();
+    if (!featuresStatus.ok) {
         return false;
     }
-
-    const auto featuresStatus = registerFeatures();
-    return featuresStatus.ok;
+    return CoreRegistry->initializeAll();
 }
 
 bool ApplicationApi::start() {

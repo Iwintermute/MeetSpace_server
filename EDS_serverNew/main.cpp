@@ -1,4 +1,5 @@
 #include "App/ApplicationCore.h"
+#include "Bridge/Mediasoup/runtime/MediasoupDebugConfig.h"
 #include "Bridge/Mediasoup/signaling/MediasoupSignalingGateway.h"
 #include "Bridge/Mediasoup/runtime/MediasoupCommand.h"
 
@@ -31,20 +32,67 @@ bool dispatch(
 
 int main(int argc, char** argv) {
     constexpr unsigned short kDefaultWsPort = 9002;
+    bool runServer = false;
+    bool allowDirectMediasoupDebug = false;
+    bool debugMode = false;
+    for (int i = 1; i < argc; ++i) {
+        const std::string arg = argv[i];
+        if (arg == "--server") {
+            runServer = true;
+            continue;
+        }
+        if (arg == "--allow-direct-mediasoup") {
+            allowDirectMediasoupDebug = true;
+            continue;
+        }
+        if (arg == "--debug") {
+            debugMode = true;
+            continue;
+        }
+        std::cerr << "Unknown argument: " << arg << "\n";
+        std::cerr << "Supported flags: --server, --allow-direct-mediasoup, --debug\n";
+        return 1;
+    }
+    if (!runServer && allowDirectMediasoupDebug) {
+        std::cerr << "--allow-direct-mediasoup requires --server mode.\n";
+        return 1;
+    }
+    if (!runServer && debugMode) {
+        std::cerr << "--debug requires --server mode.\n";
+        return 1;
+    }
+
+    eds::server_new::mediasoup::debug::setServerDebugEnabled(debugMode);
     ApplicationApi app;
     if (!app.init()) {
         std::cerr << "Failed to initialize application.\n";
         return 1;
     }
 
-    if (argc > 1 && std::string(argv[1]) == "--server") {
-        eds::server_new::mediasoup::signaling::MediasoupSignalingGateway gateway(app, kDefaultWsPort);
+    if (runServer) {
+        eds::server_new::mediasoup::signaling::MediasoupSignalingGateway gateway(
+            app,
+            kDefaultWsPort,
+            allowDirectMediasoupDebug,
+            debugMode);
         if (!gateway.start()) {
             std::cerr << "Failed to start Mediasoup signaling gateway.\n";
             return 1;
         }
 
         std::cout << "[mediasoup] signaling gateway started on ws://0.0.0.0:" << kDefaultWsPort << '\n';
+        if (debugMode) {
+            std::cout << "[mediasoup] debug mode is enabled: packet relay tracing and traffic stats are active.\n";
+        } else {
+            std::cout << "[mediasoup] debug mode is disabled.\n";
+        }
+        if (allowDirectMediasoupDebug) {
+            std::cout << "[mediasoup] direct command mode is enabled for tests only. "
+                         "Target architecture should use media transport through feature orchestration.\n";
+        } else {
+            std::cout << "[mediasoup] direct command mode is disabled. "
+                         "Use feature-level orchestration to access media transport.\n";
+        }
         gateway.wait();
         return 0;
     }

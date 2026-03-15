@@ -1,6 +1,7 @@
 #pragma once
 
 #include "contracts/Primitives.h"
+#include "interfaces/iModule.h"
 #include "runtime/MessageDispatcher.h"
 
 #include <cstdint>
@@ -30,7 +31,7 @@ struct FeatureDispatchResult {
     std::vector<nlohmann::json> outboundEvents;
 };
 
-class IFeatureModule {
+class IFeatureModule : public virtual iModule {
 public:
     virtual ~IFeatureModule() = default;
 

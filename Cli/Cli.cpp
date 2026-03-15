@@ -4,6 +4,7 @@
 #include <boost/beast/websocket.hpp>
 
 #include <atomic>
+#include <algorithm>
 #include <chrono>
 #include <cstdint>
 #include <iomanip>
@@ -14,6 +15,7 @@
 #include <string>
 #include <string_view>
 #include <thread>
+#include <vector>
 
 #ifdef _WIN32
 #include <windows.h>
@@ -34,9 +36,18 @@ std::unique_ptr<AudioStreamer> g_audioStreamer;
 std::mutex g_peerMutex;
 std::string g_assignedPeer;
 std::atomic<std::uint64_t> g_clientRequestCounter{ 0 };
+std::atomic<std::uint64_t> g_chatSendAttemptCounter{ 0 };
+std::atomic<std::uint64_t> g_chatSendAcceptedCounter{ 0 };
+std::atomic<std::uint64_t> g_chatSendRejectedCounter{ 0 };
 std::atomic<std::uint64_t> g_chatReceivedCounter{ 0 };
 std::atomic<std::uint64_t> g_chatBroadcastCounter{ 0 };
 std::atomic<std::uint64_t> g_chatDirectCounter{ 0 };
+std::atomic<std::uint64_t> g_audioLifecycleStartedCounter{ 0 };
+std::atomic<std::uint64_t> g_audioLifecycleEndedCounter{ 0 };
+std::atomic<std::uint64_t> g_audioLifecycleUnknownCounter{ 0 };
+std::mutex g_chatContextMutex;
+std::string g_activeConferenceId;
+std::vector<std::string> g_cachedConferencePeers;
 
 constexpr const char* kDefaultSdpOffer =
     "v=0\r\n"
@@ -94,6 +105,87 @@ void setAssignedPeer(const std::string& peer) {
 std::string getAssignedPeer() {
     std::lock_guard<std::mutex> lock(g_peerMutex);
     return g_assignedPeer;
+}
+
+void setActiveConference(std::string conferenceId, bool verbose = true) {
+    if (conferenceId.empty()) {
+        return;
+    }
+    const auto conferenceToPrint = conferenceId;
+
+    bool changed = false;
+    {
+        std::lock_guard<std::mutex> lock(g_chatContextMutex);
+        if (g_activeConferenceId != conferenceId) {
+            g_activeConferenceId = std::move(conferenceId);
+            g_cachedConferencePeers.clear();
+            changed = true;
+        }
+    }
+
+    if (changed && verbose) {
+        console::writeLine("[chat.context] active conference=" + conferenceToPrint, 10);
+    }
+}
+
+std::string getActiveConference() {
+    std::lock_guard<std::mutex> lock(g_chatContextMutex);
+    return g_activeConferenceId;
+}
+
+void setKnownConferencePeers(std::vector<std::string> peers) {
+    peers.erase(
+        std::remove_if(peers.begin(), peers.end(), [](const auto& item) { return item.empty(); }),
+        peers.end());
+    std::sort(peers.begin(), peers.end());
+    peers.erase(std::unique(peers.begin(), peers.end()), peers.end());
+
+    std::lock_guard<std::mutex> lock(g_chatContextMutex);
+    g_cachedConferencePeers = std::move(peers);
+}
+
+void rememberKnownConferencePeer(const std::string& peerId) {
+    if (peerId.empty()) {
+        return;
+    }
+    std::lock_guard<std::mutex> lock(g_chatContextMutex);
+    if (std::find(g_cachedConferencePeers.begin(), g_cachedConferencePeers.end(), peerId) == g_cachedConferencePeers.end()) {
+        g_cachedConferencePeers.push_back(peerId);
+    }
+}
+
+std::vector<std::string> getKnownConferencePeers() {
+    std::lock_guard<std::mutex> lock(g_chatContextMutex);
+    return g_cachedConferencePeers;
+}
+
+void printKnownConferencePeers() {
+    const auto peers = getKnownConferencePeers();
+    if (peers.empty()) {
+        console::writeLine("[chat.peers] cache is empty. Use chat.members to refresh.", 14);
+        return;
+    }
+
+    std::ostringstream line;
+    line << "[chat.peers] ";
+    for (std::size_t index = 0; index < peers.size(); ++index) {
+        if (index > 0) {
+            line << ", ";
+        }
+        line << peers[index];
+    }
+    console::writeLine(line.str(), 11);
+}
+
+void printChatContextStatus() {
+    const auto conferenceId = getActiveConference();
+    if (conferenceId.empty()) {
+        console::writeLine("[chat.context] active conference is not set", 14);
+    }
+    else {
+        console::writeLine("[chat.context] active conference=" + conferenceId, 11);
+    }
+    printKnownConferencePeers();
 }
 
 std::string nextClientRequestId(std::string_view prefix) {
@@ -188,11 +280,148 @@ bool sendConferenceAction(websocket::stream<beast::tcp_stream>& ws, const std::s
 }
 
 bool sendChatAction(websocket::stream<beast::tcp_stream>& ws, const std::string& action, nlohmann::json context = nlohmann::json::object()) {
+    if (action == "send_message") {
+        g_chatSendAttemptCounter.fetch_add(1);
+    }
     return sendJson(ws, makeChatRequest(action, std::move(context)));
 }
 
 void sleepStep() {
     std::this_thread::sleep_for(std::chrono::milliseconds(140));
+}
+
+bool containsAnyToken(const std::string& text, std::string_view tokenA, std::string_view tokenB) {
+    return text.find(tokenA) != std::string::npos || text.find(tokenB) != std::string::npos;
+}
+
+void accountAudioLifecycleFromRawMessage(const std::string& message) {
+    const bool hasLifecycleType = containsAnyToken(
+        message,
+        "\"type\":\"audio_session_lifecycle\"",
+        "\"type\": \"audio_session_lifecycle\"");
+    if (!hasLifecycleType) {
+        return;
+    }
+
+    const bool started = containsAnyToken(message, "\"started\":true", "\"started\": true");
+    const bool ended = containsAnyToken(message, "\"ended\":true", "\"ended\": true");
+    if (started) {
+        g_audioLifecycleStartedCounter.fetch_add(1);
+    }
+    if (ended) {
+        g_audioLifecycleEndedCounter.fetch_add(1);
+    }
+    if (!started && !ended) {
+        g_audioLifecycleUnknownCounter.fetch_add(1);
+    }
+}
+
+bool updatePeersFromConferenceMembersPayload(const nlohmann::json& payload) {
+    if (!payload.is_object()) {
+        return false;
+    }
+
+    const auto conferenceId = payload.value("conferenceId", std::string{});
+    if (!conferenceId.empty()) {
+        setActiveConference(conferenceId, false);
+    }
+
+    if (!payload.contains("members") || !payload["members"].is_array()) {
+        return false;
+    }
+
+    std::vector<std::string> peers;
+    for (const auto& item : payload["members"]) {
+        if (item.is_object()) {
+            const auto peerId = item.value("peerId", std::string{});
+            if (!peerId.empty()) {
+                peers.push_back(peerId);
+            }
+        }
+        else if (item.is_string()) {
+            peers.push_back(item.get<std::string>());
+        }
+    }
+
+    setKnownConferencePeers(std::move(peers));
+    return true;
+}
+
+bool tryUpdatePeersFromDispatchResult(const nlohmann::json& dispatchResult) {
+    if (!dispatchResult.is_object()) {
+        return false;
+    }
+    if (dispatchResult.value("type", std::string{}) != "dispatch_result") {
+        return false;
+    }
+    if (dispatchResult.value("object", std::string{}) != "conference") {
+        return false;
+    }
+    if (dispatchResult.value("action", std::string{}) != "list_members") {
+        return false;
+    }
+    if (!dispatchResult.value("ok", false)) {
+        return false;
+    }
+    if (!dispatchResult.contains("message")) {
+        return false;
+    }
+
+    try {
+        nlohmann::json payload = nlohmann::json::object();
+        if (dispatchResult["message"].is_string()) {
+            payload = nlohmann::json::parse(dispatchResult["message"].get<std::string>());
+        }
+        else if (dispatchResult["message"].is_object()) {
+            payload = dispatchResult["message"];
+        }
+        else {
+            return false;
+        }
+
+        if (updatePeersFromConferenceMembersPayload(payload)) {
+            printKnownConferencePeers();
+            return true;
+        }
+    }
+    catch (...) {
+    }
+
+    return false;
+}
+
+bool requestConferenceMembers(
+    websocket::stream<beast::tcp_stream>& ws,
+    const std::string& conferenceId) {
+    if (conferenceId.empty()) {
+        return false;
+    }
+    return sendConferenceAction(ws, "list_members", nlohmann::json{ {"conferenceId", conferenceId} });
+}
+
+bool sendMessageToActiveConference(
+    websocket::stream<beast::tcp_stream>& ws,
+    const std::string& text,
+    const std::string& targetPeerId = std::string{}) {
+    const auto conferenceId = getActiveConference();
+    if (conferenceId.empty()) {
+        console::writeLine("[chat.context] active conference is not set. Use chat.join/chat.create first.", 14);
+        return true;
+    }
+    if (text.empty()) {
+        return true;
+    }
+
+    nlohmann::json payload{
+        {"conferenceId", conferenceId},
+        {"text", text}
+    };
+    if (!targetPeerId.empty()) {
+        payload["targetPeerId"] = targetPeerId;
+        rememberKnownConferencePeer(targetPeerId);
+    }
+
+    return sendChatAction(ws, "send_message", std::move(payload));
 }
 
 bool runMediasoupFullCycle(websocket::stream<beast::tcp_stream>& ws, std::string roomId) {
@@ -280,6 +509,89 @@ bool runChatCycle(websocket::stream<beast::tcp_stream>& ws, std::string conferen
     console::writeLine("[test.chat] scenario queued. Для проверки получения/бродкаста запустите второй CLI и выполните chat.send в ту же конференцию.", 14);
     return true;
 }
+bool runAudioCheckCycle(websocket::stream<beast::tcp_stream>& ws, std::string roomId) {
+    if (roomId.empty()) {
+        roomId = nextClientRequestId("room-audio");
+    }
+    const auto transportId = nextClientRequestId("transport-audio");
+    const auto producerId = nextClientRequestId("producer-audio");
+
+    console::writeLine("[test.audio] start roomId=" + roomId, 10);
+    if (!sendMediasoupAction(ws, "create_room", nlohmann::json{ {"roomId", roomId} })) return false;
+    sleepStep();
+    if (!sendMediasoupAction(ws, "join_room", nlohmann::json{ {"roomId", roomId} })) return false;
+    sleepStep();
+    if (!sendMediasoupAction(ws, "open_transport", nlohmann::json{
+        {"roomId", roomId},
+        {"transportId", transportId}
+    })) return false;
+    sleepStep();
+    if (!sendMediasoupAction(ws, "produce", nlohmann::json{
+        {"roomId", roomId},
+        {"transportId", transportId},
+        {"producerId", producerId},
+        {"kind", "audio"}
+    })) return false;
+    sleepStep();
+    if (!sendMediasoupAction(ws, "leave_room", nlohmann::json{ {"roomId", roomId} })) return false;
+
+    console::writeLine("[test.audio] scenario queued. Проверьте test.audio.stats для событий audio_session_lifecycle.", 10);
+    return true;
+}
+
+bool runFullScenario(
+    websocket::stream<beast::tcp_stream>& ws,
+    std::string roomId,
+    std::string conferenceId,
+    std::string text) {
+    console::writeLine("[test.full] start mediasoup + conference + chat", 10);
+    if (!runMediasoupFullCycle(ws, std::move(roomId))) {
+        return false;
+    }
+    sleepStep();
+    if (!runConferenceCycle(ws, std::move(conferenceId))) {
+        return false;
+    }
+    sleepStep();
+    if (!runChatCycle(ws, {}, std::move(text))) {
+        return false;
+    }
+    console::writeLine("[test.full] scenario queued", 10);
+    return true;
+}
+void resetChatStats() {
+    g_chatSendAttemptCounter.store(0);
+    g_chatSendAcceptedCounter.store(0);
+    g_chatSendRejectedCounter.store(0);
+    g_chatReceivedCounter.store(0);
+    g_chatBroadcastCounter.store(0);
+    g_chatDirectCounter.store(0);
+}
+
+void printChatStats() {
+    std::ostringstream stats;
+    stats << "[test.chat.stats] sent=" << g_chatSendAttemptCounter.load()
+          << " accepted=" << g_chatSendAcceptedCounter.load()
+          << " rejected=" << g_chatSendRejectedCounter.load()
+          << " received=" << g_chatReceivedCounter.load()
+          << " broadcast=" << g_chatBroadcastCounter.load()
+          << " direct=" << g_chatDirectCounter.load();
+    console::writeLine(stats.str(), 11);
+}
+
+void resetAudioLifecycleStats() {
+    g_audioLifecycleStartedCounter.store(0);
+    g_audioLifecycleEndedCounter.store(0);
+    g_audioLifecycleUnknownCounter.store(0);
+}
+
+void printAudioLifecycleStats() {
+    std::ostringstream stats;
+    stats << "[test.audio.stats] started=" << g_audioLifecycleStartedCounter.load()
+          << " ended=" << g_audioLifecycleEndedCounter.load()
+          << " unknown=" << g_audioLifecycleUnknownCounter.load();
+    console::writeLine(stats.str(), 11);
+}
 
 void printAudioStats() {
     if (!g_audioStreamer) {
@@ -329,9 +641,13 @@ void printHelp(bool audioEnabled) {
     console::writeLine("  test.mediasoup [roomId]                       - полный цикл подключения mediasoup", 7, false, false);
     console::writeLine("  test.conference [conferenceId]                - create/get/join/list/leave/close", 7, false, false);
     console::writeLine("  test.chat [conferenceId] [text]               - отправка + проверка бродкаста/ошибки target", 7, false, false);
-    console::writeLine("  test.chat.stats                               - счётчики полученных chat_message", 7, false, false);
+    console::writeLine("  test.full [roomId] [conferenceId] [text]      - единый сценарий mediasoup+conference+chat", 7, false, false);
+    console::writeLine("  test.chat.stats [reset] | chat.stats [reset]  - счётчики отправки/получения chat", 7, false, false);
+    console::writeLine("  test.audio [roomId]                           - проверка audio lifecycle (direct mediasoup test mode)", 7, false, false);
+    console::writeLine("  test.audio.stats [reset]                      - счётчики audio_session_lifecycle", 7, false, false);
     console::writeLine("", 7, false, false);
     console::writeLine("Ручные тесты mediasoup:", 11, false, false);
+    console::writeLine("  direct ms.* доступен только для тестов при --allow-direct-mediasoup на сервере", 14, false, false);
     console::writeLine("  ms.create [roomId]", 7, false, false);
     console::writeLine("  ms.join <roomId>", 7, false, false);
     console::writeLine("  ms.transport <roomId> [transportId]", 7, false, false);
@@ -351,6 +667,14 @@ void printHelp(bool audioEnabled) {
     console::writeLine("Ручные тесты chat:", 11, false, false);
     console::writeLine("  chat.send <conferenceId> <text>", 7, false, false);
     console::writeLine("  chat.to <conferenceId> <peerId> <text>", 7, false, false);
+    console::writeLine("  chat.create [conferenceId]                      - создать и выбрать активную конференцию", 7, false, false);
+    console::writeLine("  chat.join <conferenceId>                        - войти и выбрать активную конференцию", 7, false, false);
+    console::writeLine("  chat.use <conferenceId>                         - вручную выбрать активную конференцию", 7, false, false);
+    console::writeLine("  chat.members [conferenceId]                     - обновить кэш участников", 7, false, false);
+    console::writeLine("  chat.peers                                      - показать кэш известных peerId", 7, false, false);
+    console::writeLine("  chat.active                                     - показать активную конференцию", 7, false, false);
+    console::writeLine("  msg <text>                                      - broadcast в активную конференцию", 7, false, false);
+    console::writeLine("  msg.to <peerId> <text>                          - direct message в активной конференции", 7, false, false);
     console::writeLine("", 7, false, false);
 
     if (audioEnabled) {
@@ -359,6 +683,8 @@ void printHelp(bool audioEnabled) {
         console::writeLine("  audio stop", 7, false, false);
         console::writeLine("  audio playback start", 7, false, false);
         console::writeLine("  audio playback stop", 7, false, false);
+        console::writeLine("  audio both start|stop", 7, false, false);
+        console::writeLine("  audio status", 7, false, false);
         console::writeLine("  audio volume <0-200>", 7, false, false);
         console::writeLine("  audio stats", 7, false, false);
         console::writeLine("  audio config", 7, false, false);
@@ -425,12 +751,49 @@ void doRead(websocket::stream<beast::tcp_stream>& ws) {
 
                         if (type == "chat_message") {
                             g_chatReceivedCounter.fetch_add(1);
+                            const auto conferenceId = json.value("conferenceId", std::string{});
+                            if (!conferenceId.empty()) {
+                                setActiveConference(conferenceId, false);
+                            }
+                            const auto senderPeerId = json.value("senderPeerId", json.value("from", std::string{}));
+                            if (!senderPeerId.empty()) {
+                                rememberKnownConferencePeer(senderPeerId);
+                            }
                             const auto targetPeer = json.value("targetPeerId", std::string{});
                             if (targetPeer.empty()) {
                                 g_chatBroadcastCounter.fetch_add(1);
                             }
                             else {
                                 g_chatDirectCounter.fetch_add(1);
+                                rememberKnownConferencePeer(targetPeer);
+                            }
+                        }
+                        else if (type == "dispatch_result") {
+                            const auto objectType = json.value("object", std::string{});
+                            const auto actionType = json.value("action", std::string{});
+                            if (objectType == "chat" && actionType == "send_message") {
+                                if (json.value("ok", false)) {
+                                    g_chatSendAcceptedCounter.fetch_add(1);
+                                }
+                                else {
+                                    g_chatSendRejectedCounter.fetch_add(1);
+                                }
+                            }
+                            if (objectType == "conference" && actionType == "list_members") {
+                                tryUpdatePeersFromDispatchResult(json);
+                            }
+                        }
+                        else if (type == "audio_session_lifecycle") {
+                            const bool started = json.value("started", false);
+                            const bool ended = json.value("ended", false);
+                            if (started) {
+                                g_audioLifecycleStartedCounter.fetch_add(1);
+                            }
+                            if (ended) {
+                                g_audioLifecycleEndedCounter.fetch_add(1);
+                            }
+                            if (!started && !ended) {
+                                g_audioLifecycleUnknownCounter.fetch_add(1);
                             }
                         }
 
@@ -442,6 +805,7 @@ void doRead(websocket::stream<beast::tcp_stream>& ws) {
                 }
             }
             catch (...) {
+                accountAudioLifecycleFromRawMessage(msg);
                 console::writeLine("< " + msg, 7);
             }
 
@@ -483,7 +847,7 @@ int main(int argc, char** argv) {
         console::writeLine(std::string("Usage: ") + argv[0] + " <host> <port> [options]", 12, true, false);
         console::writeLine("Options:", 12, true, false);
         console::writeLine("  --path <value>    WebSocket handshake path (default: /)", 12, true, false);
-        console::writeLine("  --audio           Enable audio streaming", 12, true, false);
+        console::writeLine("  --audio           Enable audio capture + playback", 12, true, false);
         console::writeLine("  --both            Enable both capture and playback", 12, true, false);
         console::writeLine("  --capture-only    Enable only audio capture", 12, true, false);
         console::writeLine("  --playback-only   Enable only audio playback", 12, true, false);
@@ -508,6 +872,7 @@ int main(int argc, char** argv) {
         if (arg == "--audio") {
             enableAudio = true;
             enableCapture = true;
+            enablePlayback = true;
         }
         else if (arg == "--both") {
             enableAudio = true;
@@ -603,6 +968,10 @@ int main(int argc, char** argv) {
                 }
                 continue;
             }
+            if (line == "статистика сообщений") {
+                printChatStats();
+                continue;
+            }
 
             std::istringstream iss(line);
             std::string cmd;
@@ -624,6 +993,97 @@ int main(int argc, char** argv) {
                     continue;
                 }
                 if (!sendText(ws, rest)) {
+                    break;
+                }
+                continue;
+            }
+            if (cmd == "chat.create") {
+                std::string conferenceId;
+                std::getline(iss >> std::ws, conferenceId);
+                if (conferenceId.empty()) {
+                    conferenceId = nextClientRequestId("conf-live");
+                }
+                if (!sendConferenceAction(ws, "create_conference", nlohmann::json{ {"conferenceId", conferenceId} })) {
+                    break;
+                }
+                setActiveConference(conferenceId);
+                if (!requestConferenceMembers(ws, conferenceId)) {
+                    break;
+                }
+                continue;
+            }
+            if (cmd == "chat.join") {
+                std::string conferenceId;
+                iss >> conferenceId;
+                if (conferenceId.empty()) {
+                    console::writeLine("Usage: chat.join <conferenceId>", 14);
+                    continue;
+                }
+                if (!sendConferenceAction(ws, "join_conference", nlohmann::json{ {"conferenceId", conferenceId} })) {
+                    break;
+                }
+                setActiveConference(conferenceId);
+                if (!requestConferenceMembers(ws, conferenceId)) {
+                    break;
+                }
+                continue;
+            }
+            if (cmd == "chat.use") {
+                std::string conferenceId;
+                iss >> conferenceId;
+                if (conferenceId.empty()) {
+                    console::writeLine("Usage: chat.use <conferenceId>", 14);
+                    continue;
+                }
+                setActiveConference(conferenceId);
+                continue;
+            }
+            if (cmd == "chat.members") {
+                std::string conferenceId;
+                iss >> conferenceId;
+                if (conferenceId.empty()) {
+                    conferenceId = getActiveConference();
+                }
+                if (conferenceId.empty()) {
+                    console::writeLine("Usage: chat.members [conferenceId]", 14);
+                    continue;
+                }
+                setActiveConference(conferenceId, false);
+                if (!requestConferenceMembers(ws, conferenceId)) {
+                    break;
+                }
+                continue;
+            }
+            if (cmd == "chat.peers") {
+                printKnownConferencePeers();
+                continue;
+            }
+            if (cmd == "chat.active") {
+                printChatContextStatus();
+                continue;
+            }
+            if (cmd == "msg") {
+                std::string text;
+                std::getline(iss >> std::ws, text);
+                if (text.empty()) {
+                    console::writeLine("Usage: msg <text>", 14);
+                    continue;
+                }
+                if (!sendMessageToActiveConference(ws, text)) {
+                    break;
+                }
+                continue;
+            }
+            if (cmd == "msg.to") {
+                std::string targetPeerId;
+                iss >> targetPeerId;
+                std::string text;
+                std::getline(iss >> std::ws, text);
+                if (targetPeerId.empty() || text.empty()) {
+                    console::writeLine("Usage: msg.to <peerId> <text>", 14);
+                    continue;
+                }
+                if (!sendMessageToActiveConference(ws, text, targetPeerId)) {
                     break;
                 }
                 continue;
@@ -654,12 +1114,43 @@ int main(int argc, char** argv) {
                 }
                 continue;
             }
-            if (cmd == "test.chat.stats") {
-                std::ostringstream stats;
-                stats << "[test.chat.stats] received=" << g_chatReceivedCounter.load()
-                      << " broadcast=" << g_chatBroadcastCounter.load()
-                      << " direct=" << g_chatDirectCounter.load();
-                console::writeLine(stats.str(), 11);
+            if (cmd == "test.full") {
+                std::string roomId;
+                std::string conferenceId;
+                iss >> roomId >> conferenceId;
+                std::string text;
+                std::getline(iss >> std::ws, text);
+                if (!runFullScenario(ws, roomId, conferenceId, text)) {
+                    break;
+                }
+                continue;
+            }
+            if (cmd == "test.audio" || cmd == "testAudio") {
+                std::string roomId;
+                iss >> roomId;
+                if (!runAudioCheckCycle(ws, roomId)) {
+                    break;
+                }
+                continue;
+            }
+            if (cmd == "test.chat.stats" || cmd == "chat.stats") {
+                std::string option;
+                iss >> option;
+                if (option == "reset" || option == "clear") {
+                    resetChatStats();
+                    console::writeLine("[test.chat.stats] counters reset", 10);
+                }
+                printChatStats();
+                continue;
+            }
+            if (cmd == "test.audio.stats") {
+                std::string option;
+                iss >> option;
+                if (option == "reset" || option == "clear") {
+                    resetAudioLifecycleStats();
+                    console::writeLine("[test.audio.stats] counters reset", 10);
+                }
+                printAudioLifecycleStats();
                 continue;
             }
 
@@ -689,6 +1180,26 @@ int main(int argc, char** argv) {
                     else {
                         console::writeLine("Usage: audio playback <start|stop>", 14);
                     }
+                }
+                else if (subcmd == "both") {
+                    std::string bothCmd;
+                    iss >> bothCmd;
+                    if (bothCmd == "start") {
+                        g_audioStreamer->startCapture();
+                        g_audioStreamer->startPlayback();
+                    }
+                    else if (bothCmd == "stop") {
+                        g_audioStreamer->stopCapture();
+                        g_audioStreamer->stopPlayback();
+                    }
+                    else {
+                        console::writeLine("Usage: audio both <start|stop>", 14);
+                    }
+                }
+                else if (subcmd == "status") {
+                    std::ostringstream oss;
+                    oss << "[audio.status] state=" << g_audioStreamer->getStateString();
+                    console::writeLine(oss.str(), 11);
                 }
                 else if (subcmd == "volume") {
                     int vol = 0;
@@ -802,6 +1313,8 @@ int main(int argc, char** argv) {
                 std::getline(iss >> std::ws, conferenceId);
                 if (conferenceId.empty()) conferenceId = "conference-cli";
                 if (!sendConferenceAction(ws, "create_conference", nlohmann::json{ {"conferenceId", conferenceId} })) break;
+                setActiveConference(conferenceId);
+                if (!requestConferenceMembers(ws, conferenceId)) break;
                 continue;
             }
             if (cmd == "conf.get" || cmd == "testConfGet") {
@@ -822,6 +1335,8 @@ int main(int argc, char** argv) {
                     continue;
                 }
                 if (!sendConferenceAction(ws, "join_conference", nlohmann::json{ {"conferenceId", conferenceId} })) break;
+                setActiveConference(conferenceId);
+                if (!requestConferenceMembers(ws, conferenceId)) break;
                 continue;
             }
             if (cmd == "conf.leave" || cmd == "testConfLeave") {
@@ -848,10 +1363,14 @@ int main(int argc, char** argv) {
                 std::string conferenceId;
                 iss >> conferenceId;
                 if (conferenceId.empty()) {
-                    console::writeLine("Usage: conf.members <conferenceId>", 14);
+                    conferenceId = getActiveConference();
+                }
+                if (conferenceId.empty()) {
+                    console::writeLine("Usage: conf.members [conferenceId]", 14);
                     continue;
                 }
-                if (!sendConferenceAction(ws, "list_members", nlohmann::json{ {"conferenceId", conferenceId} })) break;
+                setActiveConference(conferenceId, false);
+                if (!requestConferenceMembers(ws, conferenceId)) break;
                 continue;
             }
 
@@ -864,6 +1383,7 @@ int main(int argc, char** argv) {
                     console::writeLine("Usage: chat.send <conferenceId> <text>", 14);
                     continue;
                 }
+                setActiveConference(conferenceId, false);
                 if (!sendChatAction(ws, "send_message", nlohmann::json{
                     {"conferenceId", conferenceId},
                     {"text", text}
@@ -880,6 +1400,8 @@ int main(int argc, char** argv) {
                     console::writeLine("Usage: chat.to <conferenceId> <peerId> <text>", 14);
                     continue;
                 }
+                setActiveConference(conferenceId, false);
+                rememberKnownConferencePeer(targetPeerId);
                 if (!sendChatAction(ws, "send_message", nlohmann::json{
                     {"conferenceId", conferenceId},
                     {"targetPeerId", targetPeerId},
@@ -888,7 +1410,7 @@ int main(int argc, char** argv) {
                 continue;
             }
 
-            if (cmd == "testProkyrka") {
+            if (cmd == "testProkyrka" || cmd == "testProkurka") {
                 std::string roomId;
                 iss >> roomId;
                 if (roomId.empty()) roomId = "room-cli";
