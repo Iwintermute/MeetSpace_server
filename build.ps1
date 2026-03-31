@@ -69,6 +69,7 @@ if ([string]::IsNullOrWhiteSpace($BuildDir)) {
         $BuildDir = Join-Path $PSScriptRoot ("out/build/{0}-mediasoup" -f $Preset)
     }
 }
+
 if ([string]::IsNullOrWhiteSpace($Target)) {
     $Target = if ($env:EDUSPACE_TARGET) { $env:EDUSPACE_TARGET } else { "eds_server_new_mediasoup_app" }
 }
@@ -181,7 +182,13 @@ Write-Host "Using VCPKG_ROOT: $resolvedVcpkgRoot"
 
 Import-MsvcEnvironment -VsDevCmdPath $vsDevCmd
 $env:VCPKG_ROOT = $resolvedVcpkgRoot
+
+$env:SUPABASE_URL = "https://mtbbcaykjomycovrxdya.supabase.co"
+$env:SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im10YmJjYXlram9teWNvdnJ4ZHlhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ5MDkyODUsImV4cCI6MjA5MDQ4NTI4NX0.AKhEpGPBoiLDfUqAu1-MUgvDDrYlw_M0N_wHdXS9Cx4"
+
 Write-Host "Re-applied VCPKG_ROOT after VsDevCmd: $env:VCPKG_ROOT"
+Write-Host "Using SUPABASE_URL: $env:SUPABASE_URL"
+Write-Host "SUPABASE_ANON_KEY is set."
 
 if (-not $BuildOnly) {
     $configureArgs = @(

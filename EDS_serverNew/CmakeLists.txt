@@ -20,8 +20,25 @@ set(MEDIASOUP_BRIDGE_HEADERS
   "${CMAKE_CURRENT_SOURCE_DIR}/Bridge/Mediasoup/service/MediasoupTransportService.h"
   "${CMAKE_CURRENT_SOURCE_DIR}/Bridge/Mediasoup/service/MediasoupSfuEngine.h"
 )
+set(MEDIASOUP_LEGACY_RUNTIME_SOURCES
+  "${CMAKE_CURRENT_SOURCE_DIR}/Bridge/Mediasoup/runtime/MediasoupActions.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/Bridge/Mediasoup/runtime/MediasoupFeatureManager.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/Bridge/Mediasoup/runtime/MediasoupRtcBridge.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/Bridge/Mediasoup/runtime/MediasoupSignalingAgent.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/Bridge/Mediasoup/runtime/MediasoupStateStore.cpp"
+)
+
+set(MEDIASOUP_LEGACY_RUNTIME_HEADERS
+  "${CMAKE_CURRENT_SOURCE_DIR}/Bridge/Mediasoup/runtime/MediasoupActions.h"
+  "${CMAKE_CURRENT_SOURCE_DIR}/Bridge/Mediasoup/runtime/MediasoupFeatureManager.h"
+  "${CMAKE_CURRENT_SOURCE_DIR}/Bridge/Mediasoup/runtime/MediasoupRtcBridge.h"
+  "${CMAKE_CURRENT_SOURCE_DIR}/Bridge/Mediasoup/runtime/MediasoupSignalingAgent.h"
+  "${CMAKE_CURRENT_SOURCE_DIR}/Bridge/Mediasoup/runtime/MediasoupStateStore.h"
+)
 list(REMOVE_ITEM SOURCES ${MEDIASOUP_BRIDGE_SOURCES})
 list(REMOVE_ITEM HEADERS ${MEDIASOUP_BRIDGE_HEADERS})
+list(REMOVE_ITEM SOURCES ${MEDIASOUP_LEGACY_RUNTIME_SOURCES})
+list(REMOVE_ITEM HEADERS ${MEDIASOUP_LEGACY_RUNTIME_HEADERS})
 list(REMOVE_ITEM SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/main.cpp")
 
 set(TARGET_FILE "eds_server_new_arch")
