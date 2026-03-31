@@ -7,15 +7,18 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # Collect all source files recursively
 file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS "*.cpp")
 file(GLOB_RECURSE HEADERS CONFIGURE_DEPENDS "*.h" "*.hpp")
-file(GLOB_RECURSE MEDIASOUP_BRIDGE_SOURCES CONFIGURE_DEPENDS
-  "Bridge/Mediasoup/runtime/*.cpp"
-  "Bridge/Mediasoup/service/*.cpp"
+set(MEDIASOUP_BRIDGE_SOURCES
+  "${CMAKE_CURRENT_SOURCE_DIR}/Bridge/Mediasoup/runtime/MediasoupDebugConfig.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/Bridge/Mediasoup/service/MediasoupTransportService.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/Bridge/Mediasoup/service/MediasoupSfuEngine.cpp"
 )
-file(GLOB_RECURSE MEDIASOUP_BRIDGE_HEADERS CONFIGURE_DEPENDS
-  "Bridge/Mediasoup/runtime/*.h"
-  "Bridge/Mediasoup/runtime/*.hpp"
-  "Bridge/Mediasoup/service/*.h"
-  "Bridge/Mediasoup/service/*.hpp"
+set(MEDIASOUP_BRIDGE_HEADERS
+  "${CMAKE_CURRENT_SOURCE_DIR}/Bridge/Mediasoup/runtime/MediasoupDebugConfig.h"
+  "${CMAKE_CURRENT_SOURCE_DIR}/Bridge/Mediasoup/service/IMediaEngine.h"
+  "${CMAKE_CURRENT_SOURCE_DIR}/Bridge/Mediasoup/service/IMediaTransportService.h"
+  "${CMAKE_CURRENT_SOURCE_DIR}/Bridge/Mediasoup/service/MediaTransportTypes.h"
+  "${CMAKE_CURRENT_SOURCE_DIR}/Bridge/Mediasoup/service/MediasoupTransportService.h"
+  "${CMAKE_CURRENT_SOURCE_DIR}/Bridge/Mediasoup/service/MediasoupSfuEngine.h"
 )
 list(REMOVE_ITEM SOURCES ${MEDIASOUP_BRIDGE_SOURCES})
 list(REMOVE_ITEM HEADERS ${MEDIASOUP_BRIDGE_HEADERS})
@@ -39,25 +42,13 @@ if(_eduspace_word_generator_cpp)
   target_sources(${TARGET_FILE} PRIVATE "${_eduspace_word_generator_cpp}")
 endif()
 
-set(_eduspace_rtc_sources "")
-set(_eduspace_legacy_server_dir "${CMAKE_SOURCE_DIR}/EDS_server")
-if(EXISTS "${_eduspace_legacy_server_dir}/rtc/cRtcManager.cpp")
-  list(APPEND _eduspace_rtc_sources
-    "${_eduspace_legacy_server_dir}/rtc/cRtcManager.cpp"
-    "${_eduspace_legacy_server_dir}/rtc/cRtcPeer.cpp"
-    "${_eduspace_legacy_server_dir}/utils/cLogger.cpp"
-  )
-  target_sources(${MEDIASOUP_BRIDGE_TARGET} PRIVATE ${_eduspace_rtc_sources})
-endif()
 
 # Include directories
 target_include_directories(${MEDIASOUP_BRIDGE_TARGET} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
-    ${_eduspace_legacy_server_dir}
 )
 target_include_directories(${TARGET_FILE} PRIVATE 
     ${CMAKE_CURRENT_SOURCE_DIR}
-    ${_eduspace_legacy_server_dir}
 )
 
 if(NOT TARGET eduspace_core)
@@ -72,14 +63,11 @@ target_link_libraries(${TARGET_FILE} PRIVATE
 )
 
 find_package(OpenSSL REQUIRED)
-find_package(LibDataChannel CONFIG REQUIRED)
 target_link_libraries(${MEDIASOUP_BRIDGE_TARGET} PRIVATE
-  LibDataChannel::LibDataChannel
   OpenSSL::SSL
   OpenSSL::Crypto
 )
 target_link_libraries(${TARGET_FILE} PRIVATE
-  LibDataChannel::LibDataChannel
   OpenSSL::SSL
   OpenSSL::Crypto
 )
@@ -109,6 +97,8 @@ foreach(_candidate IN LISTS _eduspace_vcpkg_include_candidates)
   endif()
 endforeach()
 if(_eduspace_boost_include)
+  target_include_directories(${MEDIASOUP_BRIDGE_TARGET} PUBLIC "${_eduspace_boost_include}")
+  target_compile_definitions(${MEDIASOUP_BRIDGE_TARGET} PUBLIC BOOST_ERROR_CODE_HEADER_ONLY)
   target_include_directories(${TARGET_FILE} PUBLIC "${_eduspace_boost_include}")
   target_compile_definitions(${TARGET_FILE} PUBLIC BOOST_ERROR_CODE_HEADER_ONLY)
 else()

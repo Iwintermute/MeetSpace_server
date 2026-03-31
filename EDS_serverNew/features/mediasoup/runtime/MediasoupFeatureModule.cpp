@@ -50,7 +50,6 @@ core::contracts::OperationStatus MediasoupFeatureModule::ensureRegistered(core::
     if (!transportService_) {
         transportService_ = std::make_shared<eds::server_new::mediasoup::service::MediasoupTransportService>(
             nullptr,
-            nullptr,
             eds::server_new::mediasoup::debug::isServerDebugEnabled());
     }
     if (!eventBus_) {
