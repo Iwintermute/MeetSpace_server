@@ -27,6 +27,20 @@ eds::server_new::features::events::AudioSessionLifecycleEvent toAudioSessionLife
     return event;
 }
 
+std::string extractJsonPayloadField(const nlohmann::json& context, std::string_view fieldName) {
+    const auto iterator = context.find(std::string(fieldName));
+    if (iterator == context.end() || iterator->is_null()) {
+        return {};
+    }
+    if (iterator->is_string()) {
+        return iterator->get<std::string>();
+    }
+    if (iterator->is_object() || iterator->is_array()) {
+        return iterator->dump();
+    }
+    return {};
+}
+
 } // namespace
 
 MediasoupFeatureModule::MediasoupFeatureModule()
@@ -87,6 +101,16 @@ eds::server_new::features::runtime::FeatureDispatchResult MediasoupFeatureModule
     command.sdp = request.context.value("sdp", std::string{});
     command.sdpMid = request.context.value("sdpMid", std::string{});
     command.candidate = request.context.value("candidate", std::string{});
+    command.dtlsParameters = extractJsonPayloadField(request.context, "dtlsParameters");
+    command.rtpParameters = extractJsonPayloadField(request.context, "rtpParameters");
+    command.rtpCapabilities = extractJsonPayloadField(request.context, "rtpCapabilities");
+    command.injectTestRtp = request.context.value("injectTestRtp", false);
+    const auto testRtpIt = request.context.find("testRtp");
+    if (testRtpIt != request.context.end() && testRtpIt->is_object()) {
+        command.testRtpPacketCount = testRtpIt->value("packetCount", 0);
+        command.testRtpPayloadSize = testRtpIt->value("payloadSize", 0);
+        command.testRtpTimestampStep = testRtpIt->value("timestampStep", 0);
+    }
     command.correlationId = request.context.value(
         "correlationId",
         request.context.value("clientRequestId", request.context.value("messageId", std::string{})));
@@ -185,6 +209,10 @@ core::contracts::OperationStatus MediasoupFeatureModule::resolveIntent(
     }
     if (actionType == eds::server_new::mediasoup::kActionWebrtcIce) {
         intent = MediaTransportIntent::ApplyIce;
+        return core::contracts::OperationStatus::success();
+    }
+    if (actionType == eds::server_new::mediasoup::kActionStats) {
+        intent = MediaTransportIntent::ReadStats;
         return core::contracts::OperationStatus::success();
     }
     if (actionType == eds::server_new::mediasoup::kActionWebrtcClose) {

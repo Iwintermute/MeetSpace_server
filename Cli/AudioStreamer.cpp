@@ -19,6 +19,7 @@ AudioStreamer::AudioStreamer(websocket::stream<beast::tcp_stream>& websocket)
     , bytesReceived(0)
     , currentJitter(0.0f)
     , sequenceNumber(0)
+    , signalingTransportWarningShown(false)
     , lastPlayedSequence(0)
 {
     // Инициализация буферов
@@ -37,6 +38,7 @@ AudioStreamer::~AudioStreamer() {
 bool AudioStreamer::initialize(const AudioConfig& cfg) {
     state = StreamerState::INITIALIZING;
     config = cfg;
+    signalingTransportWarningShown.store(false);
 
     // Изменяем размеры буферов под новую конфигурацию
     captureBuffer.resize(config.frameSize * config.channels);
@@ -400,6 +402,15 @@ void AudioStreamer::processJitterBuffer() {
 
 // Отправка аудио пакета
 void AudioStreamer::sendAudioPacket(const std::vector<uint8_t>& encodedData) {
+    if (!config.allowLegacySignalingAudio) {
+        const auto wasShown = signalingTransportWarningShown.exchange(true);
+        if (!wasShown) {
+            triggerEvent(
+                AudioEventType::DEVICE_ERROR,
+                "Legacy audio_data over signaling websocket is disabled. Use mediasoup WebRTC media transport.");
+        }
+        return;
+    }
     try {
         const auto sequence = sequenceNumber++;
         const auto timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -430,6 +441,9 @@ void AudioStreamer::sendAudioPacket(const std::vector<uint8_t>& encodedData) {
 
 // Обработка входящего аудио
 void AudioStreamer::processIncomingAudio(const nlohmann::json& message) {
+    if (!config.allowLegacySignalingAudio) {
+        return;
+    }
     try {
         AudioPacket packet;
         packet.sequence = message.value("sequence", 0u);

@@ -130,13 +130,22 @@ int main(int argc, char** argv) {
     bool runServer = false;
     bool allowDirectMediasoupDebug = false;
     bool debugMode = false;
-    bool devAutostartBackend = false;
+    bool devAutostartBackend = true;
     std::string devBackendCommand;
     std::string devBackendUrl;
     int devReadyTimeoutMs = 20000;
     int devStopTimeoutMs = 5000;
     for (int i = 1; i < argc; ++i) {
         const std::string arg = argv[i];
+
+        if (arg == "-d"){//Базовый аргумент запуска отладки
+            runServer = true;
+            debugMode = true;
+            devAutostartBackend = true;
+            devBackendCommand = "";
+            devBackendUrl = "";
+            break;
+        }
         if (arg == "--server") {
             runServer = true;
             continue;
@@ -237,6 +246,19 @@ int main(int argc, char** argv) {
     if (!runServer && (!devBackendCommand.empty() || !devBackendUrl.empty())) {
         std::cerr << "--mediasoup-backend-* options require --server mode.\n";
         return 1;
+    }
+
+    if (runServer) {
+        if (devBackendUrl.empty()) {
+            devBackendUrl = readEnvVar("EDUSPACE_MEDIASOUP_BACKEND_URL");
+        }
+        if (!devBackendUrl.empty()) {
+            std::string setEnvError;
+            if (!setEnvVar("EDUSPACE_MEDIASOUP_BACKEND_URL", devBackendUrl, setEnvError)) {
+                std::cerr << "[mediasoup][bootstrap] " << setEnvError << "\n";
+                return 1;
+            }
+        }
     }
 
     eds::server_new::mediasoup::debug::setServerDebugEnabled(debugMode);

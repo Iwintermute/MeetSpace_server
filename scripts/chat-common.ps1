@@ -1,3 +1,6 @@
+if ($null -eq $script:CliIoBuffers) {
+    $script:CliIoBuffers = [hashtable]::Synchronized(@{})
+}
 function Get-ChatRepoRoot {
     param(
         [Parameter(Mandatory = $true)]
@@ -73,7 +76,22 @@ function Start-CliClient {
     $process.StartInfo.UseShellExecute = $false
     $process.StartInfo.CreateNoWindow = $true
     [void]$process.Start()
+
+    $script:CliIoBuffers[$process.Id] = [pscustomobject]@{
+        StdOutTask = $process.StandardOutput.ReadToEndAsync()
+        StdErrTask = $process.StandardError.ReadToEndAsync()
+    }
+
     return $process
+}
+
+
+function Start-SleepWithCliDrain {
+    param(
+        [int]$DelayMs,
+        [System.Diagnostics.Process[]]$Processes
+    )
+    Start-Sleep -Milliseconds $DelayMs
 }
 
 function Send-CliCommand {
@@ -103,12 +121,16 @@ function Wait-CliExit {
         [int]$TimeoutMs = 8000
     )
 
-    $exited = $Process.WaitForExit($TimeoutMs)
-    if (-not $exited -and -not $Process.HasExited) {
+    $waitResult = $Process.WaitForExit($TimeoutMs)
+    if (-not $waitResult -and -not $Process.HasExited) {
         $Process.Kill()
         $Process.WaitForExit(2000) | Out-Null
     }
-    return $exited
+
+    if ($Process.HasExited) {
+        $Process.WaitForExit()
+    }
+    return $Process.HasExited
 }
 
 function Read-CliOutput {
@@ -116,6 +138,23 @@ function Read-CliOutput {
         [Parameter(Mandatory = $true)]
         [System.Diagnostics.Process]$Process
     )
+
+    $entry = $script:CliIoBuffers[$Process.Id]
+    if ($null -ne $entry) {
+        $stdoutText = ""
+        $stderrText = ""
+        try {
+            $stdoutText = $entry.StdOutTask.GetAwaiter().GetResult()
+        } catch {
+            $stdoutText = ""
+        }
+        try {
+            $stderrText = $entry.StdErrTask.GetAwaiter().GetResult()
+        } catch {
+            $stderrText = ""
+        }
+        return ($stdoutText + "`n" + $stderrText)
+    }
 
     return ($Process.StandardOutput.ReadToEnd() + "`n" + $Process.StandardError.ReadToEnd())
 }
@@ -135,6 +174,10 @@ function Stop-ProcessSafe {
             $Process.WaitForExit(2000) | Out-Null
         } catch {
         }
+    }
+
+    if ($null -ne $script:CliIoBuffers) {
+        [void]$script:CliIoBuffers.Remove($Process.Id)
     }
 }
 

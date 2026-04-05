@@ -71,6 +71,7 @@ private:
     static std::string defaultBackendUrl();
     static std::string resolveOperationName(MediaTransportIntent intent);
     static bool isMediasoupEngineName(std::string_view value);
+    void refreshBackendEndpointNoLock();
 
     core::contracts::OperationStatus ensureConnectedNoLock();
     core::contracts::OperationStatus verifyMediasoupBackendNoLock();

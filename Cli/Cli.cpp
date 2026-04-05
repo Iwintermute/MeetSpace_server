@@ -45,9 +45,13 @@ std::atomic<std::uint64_t> g_chatDirectCounter{ 0 };
 std::atomic<std::uint64_t> g_audioLifecycleStartedCounter{ 0 };
 std::atomic<std::uint64_t> g_audioLifecycleEndedCounter{ 0 };
 std::atomic<std::uint64_t> g_audioLifecycleUnknownCounter{ 0 };
+std::atomic<bool> g_legacyAudioPayloadWarningShown{ false };
 std::mutex g_chatContextMutex;
 std::string g_activeConferenceId;
 std::vector<std::string> g_cachedConferencePeers;
+std::mutex g_mediasoupContextMutex;
+std::string g_activeMediasoupRoomId;
+std::string g_activeMediasoupTransportId;
 
 constexpr const char* kDefaultSdpOffer =
     "v=0\r\n"
@@ -186,6 +190,32 @@ void printChatContextStatus() {
         console::writeLine("[chat.context] active conference=" + conferenceId, 11);
     }
     printKnownConferencePeers();
+}
+
+void setActiveMediasoupRoom(std::string roomId) {
+    if (roomId.empty()) {
+        return;
+    }
+    std::lock_guard<std::mutex> lock(g_mediasoupContextMutex);
+    g_activeMediasoupRoomId = std::move(roomId);
+}
+
+std::string getActiveMediasoupRoom() {
+    std::lock_guard<std::mutex> lock(g_mediasoupContextMutex);
+    return g_activeMediasoupRoomId;
+}
+
+void setActiveMediasoupTransport(std::string transportId) {
+    if (transportId.empty()) {
+        return;
+    }
+    std::lock_guard<std::mutex> lock(g_mediasoupContextMutex);
+    g_activeMediasoupTransportId = std::move(transportId);
+}
+
+std::string getActiveMediasoupTransport() {
+    std::lock_guard<std::mutex> lock(g_mediasoupContextMutex);
+    return g_activeMediasoupTransportId;
 }
 
 std::string nextClientRequestId(std::string_view prefix) {
@@ -428,6 +458,10 @@ bool runMediasoupFullCycle(websocket::stream<beast::tcp_stream>& ws, std::string
     if (roomId.empty()) {
         roomId = nextClientRequestId("room");
     }
+    const std::string transportId = "transport-cli-01";
+    const std::string producerId = "producer-audio-cli-01";
+    setActiveMediasoupRoom(roomId);
+    setActiveMediasoupTransport(transportId);
 
     console::writeLine("[test.mediasoup] start roomId=" + roomId, 10);
     if (!sendMediasoupAction(ws, "create_room", nlohmann::json{ {"roomId", roomId} })) return false;
@@ -436,24 +470,33 @@ bool runMediasoupFullCycle(websocket::stream<beast::tcp_stream>& ws, std::string
     sleepStep();
     if (!sendMediasoupAction(ws, "open_transport", nlohmann::json{
         {"roomId", roomId},
-        {"transportId", "transport-cli-01"}
+        {"transportId", transportId}
     })) return false;
     sleepStep();
     if (!sendMediasoupAction(ws, "produce", nlohmann::json{
         {"roomId", roomId},
-        {"transportId", "transport-cli-01"},
-        {"producerId", "producer-audio-cli-01"},
+        {"transportId", transportId},
+        {"producerId", producerId},
         {"kind", "audio"}
     })) return false;
     sleepStep();
-    if (!sendMediasoupAction(ws, "webrtc_offer", nlohmann::json{ {"sdp", std::string(kDefaultSdpOffer)} })) return false;
+    if (!sendMediasoupAction(ws, "webrtc_offer", nlohmann::json{
+        {"roomId", roomId},
+        {"transportId", transportId},
+        {"sdp", std::string(kDefaultSdpOffer)}
+    })) return false;
     sleepStep();
     if (!sendMediasoupAction(ws, "webrtc_ice", nlohmann::json{
+        {"roomId", roomId},
+        {"transportId", transportId},
         {"sdpMid", "0"},
         {"candidate", "candidate:0 1 UDP 2122252543 127.0.0.1 5000 typ host"}
     })) return false;
     sleepStep();
-    if (!sendMediasoupAction(ws, "webrtc_close")) return false;
+    if (!sendMediasoupAction(ws, "webrtc_close", nlohmann::json{
+        {"roomId", roomId},
+        {"transportId", transportId}
+    })) return false;
 
     console::writeLine("[test.mediasoup] scenario queued", 10);
     return true;
@@ -515,6 +558,8 @@ bool runAudioCheckCycle(websocket::stream<beast::tcp_stream>& ws, std::string ro
     }
     const auto transportId = nextClientRequestId("transport-audio");
     const auto producerId = nextClientRequestId("producer-audio");
+    setActiveMediasoupRoom(roomId);
+    setActiveMediasoupTransport(transportId);
 
     console::writeLine("[test.audio] start roomId=" + roomId, 10);
     if (!sendMediasoupAction(ws, "create_room", nlohmann::json{ {"roomId", roomId} })) return false;
@@ -652,8 +697,9 @@ void printHelp(bool audioEnabled) {
     console::writeLine("  ms.join <roomId>", 7, false, false);
     console::writeLine("  ms.transport <roomId> [transportId]", 7, false, false);
     console::writeLine("  ms.produce <roomId> [transportId] [producerId] [kind]", 7, false, false);
-    console::writeLine("  ms.offer [sdp]", 7, false, false);
-    console::writeLine("  ms.ice [sdpMid] [candidate]", 7, false, false);
+    console::writeLine("  ms.consume <roomId> <transportId> <producerId>", 7, false, false);
+    console::writeLine("  ms.offer [transportId] [sdp]", 7, false, false);
+    console::writeLine("  ms.ice [transportId] [sdpMid] [candidate]", 7, false, false);
     console::writeLine("  ms.close", 7, false, false);
     console::writeLine("", 7, false, false);
     console::writeLine("Ручные тесты conference:", 11, false, false);
@@ -742,7 +788,17 @@ void doRead(websocket::stream<beast::tcp_stream>& ws) {
                     const auto type = json.value("type", std::string{});
 
                     if (type == "audio_data" && g_audioStreamer) {
-                        g_audioStreamer->processIncomingAudio(json);
+                        const auto audioConfig = g_audioStreamer->getConfig();
+                        if (audioConfig.allowLegacySignalingAudio) {
+                            g_audioStreamer->processIncomingAudio(json);
+                        }
+                        else {
+                            if (!g_legacyAudioPayloadWarningShown.exchange(true)) {
+                                console::writeLine(
+                                    "[audio.warning] audio_data from signaling websocket ignored. Use mediasoup WebRTC media transport.",
+                                    14);
+                            }
+                        }
                     }
                     else {
                         if ((type == "peer_assigned" || type == "dispatch_result") && json.contains("peer") && json["peer"].is_string()) {
@@ -854,6 +910,7 @@ int main(int argc, char** argv) {
         console::writeLine("  --devices         Show available audio devices", 12, true, false);
         console::writeLine("  --rate <hz>       Set sample rate (default: 48000)", 12, true, false);
         console::writeLine("  --bitrate <kbps>  Set Opus bitrate (default: 64)", 12, true, false);
+        console::writeLine("  --allow-legacy-signaling-audio  Allow deprecated audio_data over signaling websocket", 12, true, false);
         return 1;
     }
 
@@ -864,6 +921,7 @@ int main(int argc, char** argv) {
     bool enableCapture = false;
     bool enablePlayback = false;
     bool showDevicesOnly = false;
+    bool allowLegacySignalingAudio = false;
     int sampleRate = 48000;
     int bitrate = 64000;
 
@@ -902,6 +960,9 @@ int main(int argc, char** argv) {
                 wsPath = "/" + wsPath;
             }
         }
+        else if (arg == "--allow-legacy-signaling-audio") {
+            allowLegacySignalingAudio = true;
+        }
     }
 
     if (showDevicesOnly) {
@@ -936,7 +997,13 @@ int main(int argc, char** argv) {
             config.sampleRate = sampleRate;
             config.bitrate = bitrate;
             config.frameSize = sampleRate / 50;
+            config.allowLegacySignalingAudio = allowLegacySignalingAudio;
             g_audioStreamer->setEventCallback(audioEventHandler);
+            if (!allowLegacySignalingAudio) {
+                console::writeLine(
+                    "[audio] signaling websocket transport disabled. Audio must use mediasoup WebRTC media path.",
+                    14);
+            }
 
             if (g_audioStreamer->initialize(config)) {
                 console::writeLine("[audio] initialized", 10);
@@ -1234,6 +1301,7 @@ int main(int argc, char** argv) {
                 std::string roomId;
                 std::getline(iss >> std::ws, roomId);
                 if (roomId.empty()) roomId = "room-cli";
+                setActiveMediasoupRoom(roomId);
                 if (!sendMediasoupAction(ws, "create_room", nlohmann::json{ {"roomId", roomId} })) break;
                 continue;
             }
@@ -1244,6 +1312,7 @@ int main(int argc, char** argv) {
                     console::writeLine("Usage: ms.join <roomId>", 14);
                     continue;
                 }
+                setActiveMediasoupRoom(roomId);
                 if (!sendMediasoupAction(ws, "join_room", nlohmann::json{ {"roomId", roomId} })) break;
                 continue;
             }
@@ -1256,6 +1325,8 @@ int main(int argc, char** argv) {
                     continue;
                 }
                 if (transportId.empty()) transportId = "transport-cli-01";
+                setActiveMediasoupRoom(roomId);
+                setActiveMediasoupTransport(transportId);
                 if (!sendMediasoupAction(ws, "open_transport", nlohmann::json{
                     {"roomId", roomId},
                     {"transportId", transportId}
@@ -1275,6 +1346,8 @@ int main(int argc, char** argv) {
                 if (transportId.empty()) transportId = "transport-cli-01";
                 if (producerId.empty()) producerId = "producer-audio-cli-01";
                 if (kind.empty()) kind = "audio";
+                setActiveMediasoupRoom(roomId);
+                setActiveMediasoupTransport(transportId);
                 if (!sendMediasoupAction(ws, "produce", nlohmann::json{
                     {"roomId", roomId},
                     {"transportId", transportId},
@@ -1283,28 +1356,106 @@ int main(int argc, char** argv) {
                 })) break;
                 continue;
             }
-            if (cmd == "ms.offer" || cmd == "testOffer") {
-                std::string sdp;
-                std::getline(iss >> std::ws, sdp);
-                if (sdp.empty()) sdp = kDefaultSdpOffer;
-                if (!sendMediasoupAction(ws, "webrtc_offer", nlohmann::json{ {"sdp", sdp} })) break;
-                continue;
-            }
-            if (cmd == "ms.ice" || cmd == "testIce") {
-                std::string sdpMid;
-                iss >> sdpMid;
-                std::string candidate;
-                std::getline(iss >> std::ws, candidate);
-                if (sdpMid.empty()) sdpMid = "0";
-                if (candidate.empty()) candidate = "candidate:0 1 UDP 2122252543 127.0.0.1 5000 typ host";
-                if (!sendMediasoupAction(ws, "webrtc_ice", nlohmann::json{
-                    {"sdpMid", sdpMid},
-                    {"candidate", candidate}
+            if (cmd == "ms.consume") {
+                std::string roomId;
+                std::string transportId;
+                std::string producerId;
+                iss >> roomId >> transportId >> producerId;
+                if (roomId.empty() || transportId.empty() || producerId.empty()) {
+                    console::writeLine("Usage: ms.consume <roomId> <transportId> <producerId>", 14);
+                    continue;
+                }
+                setActiveMediasoupRoom(roomId);
+                setActiveMediasoupTransport(transportId);
+                if (!sendMediasoupAction(ws, "consume", nlohmann::json{
+                    {"roomId", roomId},
+                    {"transportId", transportId},
+                    {"producerId", producerId}
                 })) break;
                 continue;
             }
+            if (cmd == "ms.offer" || cmd == "testOffer") {
+                std::string transportToken;
+                iss >> transportToken;
+                std::string sdp;
+                if (!transportToken.empty() && transportToken.rfind("v=", 0) == 0) {
+                    sdp = transportToken;
+                    std::string tail;
+                    std::getline(iss >> std::ws, tail);
+                    if (!tail.empty()) {
+                        sdp += "\n" + tail;
+                    }
+                    transportToken.clear();
+                } else {
+                    std::getline(iss >> std::ws, sdp);
+                }
+                auto transportId = transportToken;
+                if (transportId.empty()) {
+                    transportId = getActiveMediasoupTransport();
+                }
+                if (transportId.empty()) {
+                    console::writeLine("Usage: ms.offer [transportId] [sdp]. Open transport first via ms.transport.", 14);
+                    continue;
+                }
+                setActiveMediasoupTransport(transportId);
+                if (sdp.empty()) sdp = kDefaultSdpOffer;
+                nlohmann::json payload{
+                    {"transportId", transportId},
+                    {"sdp", sdp}
+                };
+                const auto roomId = getActiveMediasoupRoom();
+                if (!roomId.empty()) {
+                    payload["roomId"] = roomId;
+                }
+                if (!sendMediasoupAction(ws, "webrtc_offer", std::move(payload))) break;
+                continue;
+            }
+            if (cmd == "ms.ice" || cmd == "testIce") {
+                std::string transportToken;
+                iss >> transportToken;
+                std::string sdpMid;
+                if (transportToken == "0" || transportToken == "1" || transportToken.rfind("candidate:", 0) == 0) {
+                    sdpMid = transportToken;
+                    transportToken.clear();
+                } else {
+                    iss >> sdpMid;
+                }
+                std::string candidate;
+                std::getline(iss >> std::ws, candidate);
+                auto transportId = transportToken;
+                if (transportId.empty()) {
+                    transportId = getActiveMediasoupTransport();
+                }
+                if (transportId.empty()) {
+                    console::writeLine("Usage: ms.ice [transportId] [sdpMid] [candidate]. Open transport first via ms.transport.", 14);
+                    continue;
+                }
+                setActiveMediasoupTransport(transportId);
+                if (sdpMid.empty()) sdpMid = "0";
+                if (candidate.empty()) candidate = "candidate:0 1 UDP 2122252543 127.0.0.1 5000 typ host";
+                nlohmann::json payload{
+                    {"transportId", transportId},
+                    {"sdpMid", sdpMid},
+                    {"candidate", candidate}
+                };
+                const auto roomId = getActiveMediasoupRoom();
+                if (!roomId.empty()) {
+                    payload["roomId"] = roomId;
+                }
+                if (!sendMediasoupAction(ws, "webrtc_ice", std::move(payload))) break;
+                continue;
+            }
             if (cmd == "ms.close" || cmd == "testClose") {
-                if (!sendMediasoupAction(ws, "webrtc_close")) break;
+                nlohmann::json payload = nlohmann::json::object();
+                const auto roomId = getActiveMediasoupRoom();
+                const auto transportId = getActiveMediasoupTransport();
+                if (!roomId.empty()) {
+                    payload["roomId"] = roomId;
+                }
+                if (!transportId.empty()) {
+                    payload["transportId"] = transportId;
+                }
+                if (!sendMediasoupAction(ws, "webrtc_close", std::move(payload))) break;
                 continue;
             }
 

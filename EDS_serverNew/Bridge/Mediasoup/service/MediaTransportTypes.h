@@ -16,6 +16,7 @@ enum class MediaTransportIntent {
     ConsumeTrack,
     ApplyOffer,
     ApplyIce,
+    ReadStats,
     CloseSession
 };
 
@@ -66,6 +67,13 @@ struct MediaTransportCommand {
     std::string sdp;
     std::string sdpMid;
     std::string candidate;
+    std::string dtlsParameters;
+    std::string rtpParameters;
+    std::string rtpCapabilities;
+    bool injectTestRtp = false;
+    std::int32_t testRtpPacketCount = 0;
+    std::int32_t testRtpPayloadSize = 0;
+    std::int32_t testRtpTimestampStep = 0;
     std::string correlationId;
 };
 

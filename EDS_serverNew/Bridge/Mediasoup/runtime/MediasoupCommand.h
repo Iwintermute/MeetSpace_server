@@ -17,6 +17,13 @@ struct MediasoupCommand {
     std::string sdp;
     std::string sdpMid;
     std::string candidate;
+    std::string dtlsParameters;
+    std::string rtpParameters;
+    std::string rtpCapabilities;
+    bool injectTestRtp = false;
+    std::int32_t testRtpPacketCount = 0;
+    std::int32_t testRtpPayloadSize = 0;
+    std::int32_t testRtpTimestampStep = 0;
 };
 
 inline constexpr std::string_view kRouteObject = "mediasoup";
@@ -30,6 +37,7 @@ inline constexpr std::string_view kActionConsume = "consume";
 inline constexpr std::string_view kActionWebrtcOffer = "webrtc_offer";
 inline constexpr std::string_view kActionWebrtcIce = "webrtc_ice";
 inline constexpr std::string_view kActionWebrtcClose = "webrtc_close";
+inline constexpr std::string_view kActionStats = "stats";
 inline constexpr std::string_view kActionConnectSession = "connect_session";
 inline constexpr std::string_view kActionDisconnectSession = "disconnect_session";
 

@@ -35,21 +35,28 @@ std::string toLowerCopy(std::string_view value) {
     return result;
 }
 
+json parseOptionalJsonPayload(std::string_view rawValue) {
+    if (rawValue.empty()) {
+        return json();
+    }
+
+    const auto parsed = json::parse(rawValue, nullptr, false);
+    if (parsed.is_discarded()) {
+        return json();
+    }
+    if (parsed.is_object() || parsed.is_array()) {
+        return parsed;
+    }
+    return json();
+}
+
 
 }
 
 MediasoupSfuEngine::MediasoupSfuEngine(bool debugMode)
     : debugMode_(debugMode),
       backendUrl_(defaultBackendUrl()) {
-    if (!parseBackendUrl(backendUrl_, backendHost_, backendPort_, backendPath_)) {
-        backendHost_.clear();
-        backendPort_.clear();
-        backendPath_.clear();
-        if (debugMode_) {
-            std::cout << "[mediasoup][verify] backend url is not configured or invalid. "
-                      << "Set EDUSPACE_MEDIASOUP_BACKEND_URL.\n";
-        }
-    }
+    refreshBackendEndpointNoLock();
 
     resolver_ = std::make_unique<tcp::resolver>(ioContext_);
     socket_ = std::make_unique<ws_stream>(ioContext_);
@@ -193,6 +200,8 @@ std::string MediasoupSfuEngine::resolveOperationName(MediaTransportIntent intent
         return "transport.connectDtls";
     case MediaTransportIntent::ApplyIce:
         return "transport.addIceCandidate";
+    case MediaTransportIntent::ReadStats:
+        return "system.getMediaStats";
     case MediaTransportIntent::CloseSession:
         return "router.closePeer";
     }
@@ -205,8 +214,53 @@ bool MediasoupSfuEngine::isMediasoupEngineName(std::string_view value) {
     const auto normalized = toLowerCopy(value);
     return normalized.find("mediasoup") != std::string::npos;
 }
+void MediasoupSfuEngine::refreshBackendEndpointNoLock() {
+    const auto resolvedBackendUrl = defaultBackendUrl();
+    const auto backendUrlChanged = resolvedBackendUrl != backendUrl_;
+    if (backendUrlChanged) {
+        if (debugMode_) {
+            std::cout << "[mediasoup][verify] backend endpoint changed to "
+                      << (resolvedBackendUrl.empty() ? std::string("<empty>") : resolvedBackendUrl)
+                      << ".\n";
+        }
+        backendUrl_ = resolvedBackendUrl;
+        if (backendConnected_ || backendVerified_) {
+            disconnectNoLock();
+        }
+    }
+
+    if (backendUrl_.empty()) {
+        backendHost_.clear();
+        backendPort_.clear();
+        backendPath_ = "/";
+        if (debugMode_) {
+            std::cout << "[mediasoup][verify] backend url is not configured. "
+                      << "Set EDUSPACE_MEDIASOUP_BACKEND_URL.\n";
+        }
+        return;
+    }
+
+    std::string parsedHost;
+    std::string parsedPort;
+    std::string parsedPath;
+    if (!parseBackendUrl(backendUrl_, parsedHost, parsedPort, parsedPath)) {
+        backendHost_.clear();
+        backendPort_.clear();
+        backendPath_ = "/";
+        if (debugMode_) {
+            std::cout << "[mediasoup][verify] backend url is invalid: " << backendUrl_
+                      << ". Expected ws://host:port/path.\n";
+        }
+        return;
+    }
+
+    backendHost_ = std::move(parsedHost);
+    backendPort_ = std::move(parsedPort);
+    backendPath_ = std::move(parsedPath);
+}
 
 core::contracts::OperationStatus MediasoupSfuEngine::ensureConnectedNoLock() {
+    refreshBackendEndpointNoLock();
     if (backendConnected_ && backendVerified_) {
         return core::contracts::OperationStatus::success();
     }
@@ -344,23 +398,54 @@ core::contracts::OperationStatus MediasoupSfuEngine::callMediasoupBackendNoLock(
     }
 
     try {
+        json payload{
+            { "sessionHandle", command.sessionHandle },
+            { "sessionId", command.sessionId },
+            { "peerId", command.peerId },
+            { "roomId", command.roomId },
+            { "transportId", command.transportId },
+            { "producerId", command.producerId },
+            { "kind", command.kind },
+            { "sdp", command.sdp },
+            { "sdpMid", command.sdpMid },
+            { "candidate", command.candidate },
+            { "injectTestRtp", command.injectTestRtp },
+            { "correlationId", command.correlationId }
+        };
+
+        const auto dtlsParameters = parseOptionalJsonPayload(command.dtlsParameters);
+        if (!dtlsParameters.is_null()) {
+            payload["dtlsParameters"] = dtlsParameters;
+        }
+        const auto rtpParameters = parseOptionalJsonPayload(command.rtpParameters);
+        if (!rtpParameters.is_null()) {
+            payload["rtpParameters"] = rtpParameters;
+        }
+        const auto rtpCapabilities = parseOptionalJsonPayload(command.rtpCapabilities);
+        if (!rtpCapabilities.is_null()) {
+            payload["rtpCapabilities"] = rtpCapabilities;
+        }
+        if (command.injectTestRtp) {
+            json testRtp = json::object();
+            if (command.testRtpPacketCount > 0) {
+                testRtp["packetCount"] = command.testRtpPacketCount;
+            }
+            if (command.testRtpPayloadSize > 0) {
+                testRtp["payloadSize"] = command.testRtpPayloadSize;
+            }
+            if (command.testRtpTimestampStep > 0) {
+                testRtp["timestampStep"] = command.testRtpTimestampStep;
+            }
+            if (!testRtp.empty()) {
+                payload["testRtp"] = std::move(testRtp);
+            }
+        }
+
         json request{
             { "id", makeRequestId(command.correlationId) },
             { "operation", operationName },
             { "requireEngine", "mediasoup" },
-            { "payload", {
-                { "sessionHandle", command.sessionHandle },
-                { "sessionId", command.sessionId },
-                { "peerId", command.peerId },
-                { "roomId", command.roomId },
-                { "transportId", command.transportId },
-                { "producerId", command.producerId },
-                { "kind", command.kind },
-                { "sdp", command.sdp },
-                { "sdpMid", command.sdpMid },
-                { "candidate", command.candidate },
-                { "correlationId", command.correlationId }
-            } }
+            { "payload", std::move(payload) }
         };
 
         const auto serialized = request.dump();
@@ -701,6 +786,37 @@ core::contracts::OperationStatus MediasoupSfuEngine::executeIntentNoLock(
         return { true, std::move(backendMessage) };
     }
     case MediaTransportIntent::ConsumeTrack: {
+        const auto roomValidation = requireField(!command.roomId.empty(), "roomId");
+        if (!roomValidation.ok) {
+            emittedEvents.push_back(makeErrorEvent(command, roomValidation.message));
+            return roomValidation;
+        }
+        const auto peerValidation = requireField(!command.peerId.empty(), "peerId");
+        if (!peerValidation.ok) {
+            emittedEvents.push_back(makeErrorEvent(command, peerValidation.message));
+            return peerValidation;
+        }
+        const auto transportValidation = requireField(!command.transportId.empty(), "transportId");
+        if (!transportValidation.ok) {
+            emittedEvents.push_back(makeErrorEvent(command, transportValidation.message));
+            return transportValidation;
+        }
+        const auto transportIt = transports_.find(command.transportId);
+        if (transportIt == transports_.end()) {
+            const auto failure = core::contracts::OperationStatus::failure("Transport not found: " + command.transportId);
+            emittedEvents.push_back(makeErrorEvent(command, failure.message));
+            return failure;
+        }
+        if (transportIt->second.roomId != command.roomId) {
+            const auto failure = core::contracts::OperationStatus::failure("Transport is registered in another room.");
+            emittedEvents.push_back(makeErrorEvent(command, failure.message));
+            return failure;
+        }
+        if (transportIt->second.peerId != command.peerId) {
+            const auto failure = core::contracts::OperationStatus::failure("Transport is not owned by peer.");
+            emittedEvents.push_back(makeErrorEvent(command, failure.message));
+            return failure;
+        }
         const auto producerIt = producers_.find(command.producerId);
         if (producerIt == producers_.end()) {
             const auto failure = core::contracts::OperationStatus::failure("Producer not found: " + command.producerId);
@@ -731,6 +847,46 @@ core::contracts::OperationStatus MediasoupSfuEngine::executeIntentNoLock(
     }
     case MediaTransportIntent::ApplyOffer:
     case MediaTransportIntent::ApplyIce: {
+        const auto peerValidation = requireField(!command.peerId.empty(), "peerId");
+        if (!peerValidation.ok) {
+            emittedEvents.push_back(makeErrorEvent(command, peerValidation.message));
+            return peerValidation;
+        }
+        const auto transportValidation = requireField(!command.transportId.empty(), "transportId");
+        if (!transportValidation.ok) {
+            emittedEvents.push_back(makeErrorEvent(command, transportValidation.message));
+            return transportValidation;
+        }
+        const auto transportIt = transports_.find(command.transportId);
+        if (transportIt == transports_.end()) {
+            const auto failure = core::contracts::OperationStatus::failure("Transport not found: " + command.transportId);
+            emittedEvents.push_back(makeErrorEvent(command, failure.message));
+            return failure;
+        }
+        if (!command.roomId.empty() && transportIt->second.roomId != command.roomId) {
+            const auto failure = core::contracts::OperationStatus::failure("Transport is registered in another room.");
+            emittedEvents.push_back(makeErrorEvent(command, failure.message));
+            return failure;
+        }
+        if (transportIt->second.peerId != command.peerId) {
+            const auto failure = core::contracts::OperationStatus::failure("Transport is not owned by peer.");
+            emittedEvents.push_back(makeErrorEvent(command, failure.message));
+            return failure;
+        }
+
+        MediaTransportCommand backendCommand = command;
+        if (backendCommand.roomId.empty()) {
+            backendCommand.roomId = transportIt->second.roomId;
+        }
+        std::string backendMessage;
+        const auto backendStatus = callMediasoupBackendNoLock(operationName, backendCommand, backendMessage);
+        if (!backendStatus.ok) {
+            emittedEvents.push_back(makeErrorEvent(backendCommand, backendStatus.message));
+            return backendStatus;
+        }
+        return { true, std::move(backendMessage) };
+    }
+    case MediaTransportIntent::ReadStats: {
         std::string backendMessage;
         const auto backendStatus = callMediasoupBackendNoLock(operationName, command, backendMessage);
         if (!backendStatus.ok) {

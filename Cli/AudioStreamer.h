@@ -64,6 +64,7 @@ struct AudioConfig {
     bool echoCancellation = false;
     bool noiseSuppression = false;
     bool autoGainControl = false;
+    bool allowLegacySignalingAudio = false;
 };
 
 // Структура для аудио пакета
@@ -118,6 +119,7 @@ private:
     std::atomic<uint64_t> bytesReceived;
     std::atomic<float> currentJitter;
     std::atomic<uint32_t> sequenceNumber;
+    std::atomic<bool> signalingTransportWarningShown;
 
     // Jitter buffer
     std::map<uint32_t, AudioPacket> jitterBuffer;
