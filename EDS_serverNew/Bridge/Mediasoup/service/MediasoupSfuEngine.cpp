@@ -482,11 +482,12 @@ core::contracts::OperationStatus MediasoupSfuEngine::callMediasoupBackendNoLock(
         const auto updatedCount = ++backendOperationCounters_[operationName];
         if (debugMode_) {
             std::cout << "[mediasoup][ops] operation=" << operationName
-                      << " count=" << updatedCount
-                      << " engine=" << backendEngine_
-                      << "\n";
+                << " count=" << updatedCount
+                << " engine=" << backendEngine_
+                << "\n";
         }
-        return { true, message };
+
+        return { true, backendMessage };
     } catch (const std::exception& error) {
         disconnectNoLock();
         return core::contracts::OperationStatus::failure(

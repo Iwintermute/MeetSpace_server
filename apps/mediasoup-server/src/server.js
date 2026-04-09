@@ -377,21 +377,28 @@ async function opJoinPeer(id, payload) {
 }
 
 async function opLeavePeer(id, payload) {
-  const roomId = requireString(payload.roomId, 'roomId');
-  const peerId = requireString(payload.peerId, 'peerId');
-  const router = await ensureRoomRouter(roomId);
-  closePeerResources(roomId, peerId);
-  const peers = ensurePeerSet(roomId);
-  peers.delete(peerId);
-  return makeSuccess(
-    id,
-    `Peer ${peerId} left ${roomId}.`,
-    {
-      roomId,
-      peerId
-    },
-    router
-  );
+    const roomId = requireString(payload.roomId, 'roomId');
+    const peerId = requireString(payload.peerId, 'peerId');
+    const router = await ensureRoomRouter(roomId);
+
+    closePeerResources(roomId, peerId);
+
+    const peers = ensurePeerSet(roomId);
+    peers.delete(peerId);
+
+    if (peers.size === 0) {
+        closeRoom(roomId);
+    }
+
+    return makeSuccess(
+        id,
+        `Peer ${peerId} left ${roomId}.`,
+        {
+            roomId,
+            peerId
+        },
+        state.routers.get(roomId) || state.capabilityRouter || router
+    );
 }
 
 async function opClosePeer(id, payload) {

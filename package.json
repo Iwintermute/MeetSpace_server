@@ -1,0 +1,28 @@
+{
+  "name": "diplom",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Iwintermute/EduSpace.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/Iwintermute/EduSpace/issues"
+  },
+  "homepage": "https://github.com/Iwintermute/EduSpace#readme",
+  "dependencies": {
+    "esbuild": "^0.28.0",
+    "mediasoup-client": "^3.18.7"
+  }
+}
