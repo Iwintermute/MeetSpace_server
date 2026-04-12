@@ -1,7 +1,7 @@
 #pragma once
+#include "adapters/StandardWsMessage.h"
 
 #include "contracts/IMessage.h"
-#include "EDS_server/App/wsFormat.h"
 #include <utility>
 
 namespace core::adapters {

@@ -228,6 +228,12 @@ namespace eds::server_new::mediasoup::signaling {
                 postTexts(session, std::move(currentSessionMessages));
                 return;
             }
+            if (directMediasoupRequested && !allowDirectMediasoupDebug_) {
+                queueValidationFailure(
+                    "Direct mediasoup control is disabled. Use feature-level orchestration actions.");
+                postTexts(session, std::move(currentSessionMessages));
+                return;
+            }
 
             const auto context = request.value("ctx", json::object());
             const auto correlationId = context.value(

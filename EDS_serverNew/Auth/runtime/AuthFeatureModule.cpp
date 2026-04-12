@@ -1,5 +1,5 @@
-#include "auth/runtime/AuthFeatureModule.h"
-#include "auth/runtime/AuthCommand.h"
+#include "Auth/runtime/AuthFeatureModule.h"
+#include "Auth/runtime/AuthCommand.h"
 
 #include <utility>
 

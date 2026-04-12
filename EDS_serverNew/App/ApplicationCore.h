@@ -1,11 +1,10 @@
 ﻿#pragma once
-#include "Bridge/Mediasoup/runtime/MediasoupCommand.h"
-#include "features/conference/runtime/ConferenceCommand.h"
 #include "features/runtime/FeatureRegistry.h"
 
 #include "contracts/IModuleRegistry.h"
 #include "contracts/Primitives.h"
 #include "runtime/MessageDispatcher.h"
+#include <cstdint>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -22,12 +21,6 @@ public:
     core::contracts::OperationStatus registerFeatures();
     eds::server_new::features::runtime::FeatureDispatchResult dispatchFeature(
         eds::server_new::features::runtime::FeatureDispatchRequest request);
-    core::contracts::OperationStatus dispatchMediasoup(
-        const core::contracts::MessageRoute& route,
-        const eds::server_new::mediasoup::MediasoupCommand& command);
-    core::contracts::OperationStatus dispatchConference(
-        const core::contracts::MessageRoute& route,
-        const eds::server_new::features::conference::ConferenceCommand& command);
     void notifyFeatureSessionDisconnected(const std::string& peerId, std::uintptr_t sessionHandle);
 
 private:

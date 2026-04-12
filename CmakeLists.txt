@@ -8,7 +8,6 @@ if(POLICY CMP0141)
   cmake_policy(SET CMP0141 NEW)
 endif()
 
-option(EDUSPACE_BUILD_SERVER "Build EDS_server target" OFF)
 option(EDUSPACE_BUILD_CLI "Build Cli target" ON)
 option(EDUSPACE_BUILD_SERVER_NEW "Build EDS_serverNew rewrite target" ON)
 
@@ -41,9 +40,6 @@ endif()
 message(STATUS "Using EduSpace Core from: ${EDUSPACE_RESOLVED_CORE_DIR}")
 add_subdirectory("${EDUSPACE_RESOLVED_CORE_DIR}" "${CMAKE_BINARY_DIR}/_deps/eduspace_core")
 
-if(EDUSPACE_BUILD_SERVER)
-  add_subdirectory(EDS_server)
-endif()
 
 if(EDUSPACE_BUILD_CLI)
   add_subdirectory(Cli)

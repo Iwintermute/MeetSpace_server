@@ -1,10 +1,41 @@
 #include "App/ApplicationCore.h"
+#include "Auth/runtime/AuthCommand.h"
+#include "Auth/runtime/AuthServices.h"
 #include "features/runtime/FeatureModuleRegistration.h"
 
 #include "managers/ModuleRegistry.h"
-
-#include <nlohmann/json.hpp>
+#include <string_view>
 #include <utility>
+
+namespace {
+
+bool isAuthObject(std::string_view objectType) {
+    return objectType == eds::server_new::features::auth::kAuthRouteObject;
+}
+
+core::contracts::OperationStatus requireAuthenticatedSession(
+    const eds::server_new::features::runtime::FeatureDispatchRequest& request) {
+    if (isAuthObject(request.objectType)) {
+        return core::contracts::OperationStatus::success();
+    }
+
+    auto sessionStore = eds::server_new::auth::AuthServices::sessionStore();
+    if (!sessionStore) {
+        return core::contracts::OperationStatus::failure("Auth session store is not configured.");
+    }
+
+    const auto authSession = sessionStore->get(request.sessionHandle);
+    if (!authSession.has_value() || !authSession->authenticated) {
+        return core::contracts::OperationStatus::failure(
+            "Unauthorized. Call auth.bind_session before non-auth actions.");
+    }
+    if (authSession->peerId != request.peerId) {
+        return core::contracts::OperationStatus::failure("Auth session peer mismatch.");
+    }
+    return core::contracts::OperationStatus::success();
+}
+
+} // namespace
 
 ApplicationApi::ApplicationApi(std::shared_ptr<core::contracts::IModuleRegistry> registry)
     : CoreRegistry(std::move(registry)) {
@@ -129,6 +160,11 @@ eds::server_new::features::runtime::FeatureDispatchResult ApplicationApi::dispat
         result.status = core::contracts::OperationStatus::failure("peer impersonation detected.");
         return result;
     }
+    const auto authStatus = requireAuthenticatedSession(request);
+    if (!authStatus.ok) {
+        result.status = authStatus;
+        return result;
+    }
 
     auto moduleResult = moduleIt->second->dispatch(request, dispatcher_);
     if (moduleResult.effectiveAgent.empty()) {
@@ -137,51 +173,6 @@ eds::server_new::features::runtime::FeatureDispatchResult ApplicationApi::dispat
     return moduleResult;
 }
 
-core::contracts::OperationStatus ApplicationApi::dispatchMediasoup(
-    const core::contracts::MessageRoute& route,
-    const eds::server_new::mediasoup::MediasoupCommand& command) {
-    nlohmann::json context{
-        { "peerId", command.peerId },
-        { "roomId", command.roomId },
-        { "transportId", command.transportId },
-        { "producerId", command.producerId },
-        { "kind", command.kind },
-        { "sdp", command.sdp },
-        { "sdpMid", command.sdpMid },
-        { "candidate", command.candidate }
-    };
-
-    eds::server_new::features::runtime::FeatureDispatchRequest request;
-    request.sessionHandle = command.sessionHandle;
-    request.peerId = command.sessionId.empty() ? command.peerId : command.sessionId;
-    request.objectType = route.object;
-    request.agentType = route.agent;
-    request.actionType = route.action;
-    request.context = std::move(context);
-
-    return dispatchFeature(std::move(request)).status;
-}
-
-core::contracts::OperationStatus ApplicationApi::dispatchConference(
-    const core::contracts::MessageRoute& route,
-    const eds::server_new::features::conference::ConferenceCommand& command) {
-    nlohmann::json context{
-        { "peerId", command.peerId },
-        { "conferenceId", command.conferenceId },
-        { "clientRequestId", command.clientRequestId },
-        { "targetPeerId", command.targetPeerId }
-    };
-
-    eds::server_new::features::runtime::FeatureDispatchRequest request;
-    request.sessionHandle = command.sessionHandle;
-    request.peerId = command.sessionId.empty() ? command.peerId : command.sessionId;
-    request.objectType = route.object;
-    request.agentType = route.agent;
-    request.actionType = route.action;
-    request.context = std::move(context);
-
-    return dispatchFeature(std::move(request)).status;
-}
 
 bool ApplicationApi::init() {
     if (!CoreRegistry) {
@@ -203,6 +194,17 @@ bool ApplicationApi::start() {
 }
 
 void ApplicationApi::notifyFeatureSessionDisconnected(const std::string& peerId, std::uintptr_t sessionHandle) {
+    auto sessionStore = eds::server_new::auth::AuthServices::sessionStore();
+    if (sessionStore) {
+        if (sessionHandle != 0) {
+            sessionStore->unbind(sessionHandle);
+        } else if (!peerId.empty()) {
+            const auto boundHandle = sessionStore->resolvePeer(peerId);
+            if (boundHandle.has_value()) {
+                sessionStore->unbind(*boundHandle);
+            }
+        }
+    }
     const auto registrationStatus = registerFeatures();
     if (!registrationStatus.ok) {
         return;

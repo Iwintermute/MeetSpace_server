@@ -1,8 +1,8 @@
 #pragma once
 
-#include "auth/ISupabaseAuthVerifier.h"
-#include "auth/SessionAuthStore.h"
-#include "auth/SupabaseAuthVerifier.h"
+#include "Auth/ISupabaseAuthVerifier.h"
+#include "Auth/SessionAuthStore.h"
+#include "Auth/SupabaseAuthVerifier.h"
 
 #include <cstdlib>
 #include <memory>

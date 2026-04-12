@@ -42,8 +42,6 @@ param(
     [string]$BuildDir = "",
     [string]$Target = "",
     [ValidateSet("ON", "OFF")]
-    [string]$BuildServer = "",
-    [ValidateSet("ON", "OFF")]
     [string]$BuildCli = "",
     [ValidateSet("ON", "OFF")]
     [string]$BuildServerNew = "",
@@ -72,9 +70,6 @@ if ([string]::IsNullOrWhiteSpace($BuildDir)) {
 
 if ([string]::IsNullOrWhiteSpace($Target)) {
     $Target = if ($env:EDUSPACE_TARGET) { $env:EDUSPACE_TARGET } else { "eds_server_new_mediasoup_app" }
-}
-if ([string]::IsNullOrWhiteSpace($BuildServer)) {
-    $BuildServer = if ($env:EDUSPACE_BUILD_SERVER) { $env:EDUSPACE_BUILD_SERVER } else { "OFF" }
 }
 if ([string]::IsNullOrWhiteSpace($BuildCli)) {
     $BuildCli = if ($env:EDUSPACE_BUILD_CLI) { $env:EDUSPACE_BUILD_CLI } else { "OFF" }
@@ -195,7 +190,6 @@ if (-not $BuildOnly) {
         "--preset", $Preset,
         "-S", $SourceDir,
         "-B", $BuildDir,
-        "-DEDUSPACE_BUILD_SERVER=$BuildServer",
         "-DEDUSPACE_BUILD_CLI=$BuildCli",
         "-DEDUSPACE_BUILD_SERVER_NEW=$BuildServerNew"
     )

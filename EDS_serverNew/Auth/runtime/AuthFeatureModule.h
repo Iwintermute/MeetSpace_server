@@ -1,7 +1,7 @@
 #pragma once
 
-#include "auth/ISupabaseAuthVerifier.h"
-#include "auth/SessionAuthStore.h"
+#include "Auth/ISupabaseAuthVerifier.h"
+#include "Auth/SessionAuthStore.h"
 #include "features/runtime/FeatureRegistry.h"
 #include "modules/BaseModule.h"
 

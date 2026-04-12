@@ -1,4 +1,4 @@
-#include "auth/SupabaseAuthVerifier.h"
+#include "Auth/SupabaseAuthVerifier.h"
 
 #include <boost/asio/connect.hpp>
 #include <boost/asio/ip/tcp.hpp>

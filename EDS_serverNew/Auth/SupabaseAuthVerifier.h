@@ -1,6 +1,6 @@
 #pragma once
 
-#include "auth/ISupabaseAuthVerifier.h"
+#include "Auth/ISupabaseAuthVerifier.h"
 
 #include <string>
 
