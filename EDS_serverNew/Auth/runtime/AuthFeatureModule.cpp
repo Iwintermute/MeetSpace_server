@@ -1,5 +1,7 @@
 #include "Auth/runtime/AuthFeatureModule.h"
 #include "Auth/runtime/AuthCommand.h"
+#include "infrastructure/control_plane/runtime/ControlPlaneServices.h"
+#include <nlohmann/json.hpp>
 
 #include <utility>
 
@@ -53,6 +55,12 @@ namespace eds::server_new::features::auth {
             return result;
         }
 
+        auto repository = eds::server_new::control_plane::ControlPlaneServices::repository();
+        if (!repository || !repository->isReady()) {
+            result.status = core::contracts::OperationStatus::failure("Control-plane repository is not configured.");
+            return result;
+        }
+
         if (request.sessionHandle == 0) {
             result.status = core::contracts::OperationStatus::failure("sessionHandle must not be empty.");
             return result;
@@ -64,8 +72,9 @@ namespace eds::server_new::features::auth {
         }
 
         if (request.actionType == kActionLogoutSession) {
+            static_cast<void>(repository->markRealtimeSessionDisconnected(request.sessionHandle, request.peerId));
             sessionStore_->unbind(request.sessionHandle);
-            result.status = { true, "Session logged out." };
+            result.status = core::contracts::OperationStatus::success("Session logged out.");
             return result;
         }
 
@@ -98,8 +107,37 @@ namespace eds::server_new::features::auth {
         session.deviceId = deviceId;
         session.authenticated = true;
 
+        const auto mirrorStatus = repository->mirrorRealtimeSession(session);
+        if (!mirrorStatus.ok) {
+            result.status = mirrorStatus;
+            return result;
+        }
+
+        session.dbSessionId = mirrorStatus.data.value("sessionId", std::string{});
+        session.dbConnectionId = mirrorStatus.data.value("connectionId", std::string{});
+
         sessionStore_->bind(std::move(session));
-        result.status = { true, "Session bound." };
+
+        nlohmann::json responseData = mirrorStatus.data;
+        nlohmann::json reconnect = nlohmann::json::object();
+
+        const auto conferencesStatus = repository->listUserConferences(verified->userId, 100);
+        reconnect["conferences"] = conferencesStatus.ok
+            ? conferencesStatus.data.value("conferences", nlohmann::json::array())
+            : nlohmann::json::array();
+
+        const auto directThreadsStatus = repository->listDirectThreads(verified->userId, 100);
+        reconnect["directThreads"] = directThreadsStatus.ok
+            ? directThreadsStatus.data.value("threads", nlohmann::json::array())
+            : nlohmann::json::array();
+
+        const auto activeCallsStatus = repository->listUserActiveDirectCalls(verified->userId, 100);
+        reconnect["activeDirectCalls"] = activeCallsStatus.ok
+            ? activeCallsStatus.data.value("calls", nlohmann::json::array())
+            : nlohmann::json::array();
+
+        responseData["reconnect"] = std::move(reconnect);
+        result.status = core::contracts::OperationStatus::success("Session bound.", std::move(responseData));
         return result;
     }
 

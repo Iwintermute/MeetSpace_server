@@ -15,6 +15,7 @@
 #include <memory>
 #include <mutex>
 #include <string>
+#include <thread>
 #include <unordered_map>
 #include <vector>
 
@@ -51,6 +52,11 @@ namespace eds::server_new::mediasoup::signaling {
         void postText(void* session, std::string text);
         void postTexts(void* session, std::vector<std::string> texts);
         void postTextToPeer(std::string peerId, std::string text);
+        bool isPeerConnected(std::string_view peerId);
+
+        void startOfflineOutboxDispatcher();
+        void stopOfflineOutboxDispatcher();
+        void runOfflineOutboxDispatcher();
 
     private:
         ApplicationApi& app_;
@@ -72,6 +78,9 @@ namespace eds::server_new::mediasoup::signaling {
         std::mutex peersMutex_;
         std::unordered_map<void*, std::string> sessionToPeer_;
         std::unordered_map<std::string, void*> peerToSession_;
+
+        std::atomic<bool> outboxDispatcherStop_{ false };
+        std::thread outboxDispatcherThread_;
     };
 
 } // namespace eds::server_new::mediasoup::signaling

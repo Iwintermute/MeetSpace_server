@@ -34,4 +34,16 @@ public:
     core::contracts::OperationStatus execute(const core::contracts::IMessage& message) override;
 };
 
+class SyncMessagesAction final : public ChatActionBase {
+public:
+    explicit SyncMessagesAction(std::shared_ptr<ChatStateStore> stateStore);
+    core::contracts::OperationStatus execute(const core::contracts::IMessage& message) override;
+};
+
+class AckMessagesAction final : public ChatActionBase {
+public:
+    explicit AckMessagesAction(std::shared_ptr<ChatStateStore> stateStore);
+    core::contracts::OperationStatus execute(const core::contracts::IMessage& message) override;
+};
+
 } // namespace eds::server_new::features::chat

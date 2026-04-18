@@ -18,6 +18,12 @@ ChatMessagingAgent::ChatMessagingAgent(std::shared_ptr<ChatStateStore> stateStor
     eds::server_new::features::runtime::registerActionOrThrow(*this, std::string(kActionSendMessage), [stateStore = stateStore_]() {
         return std::make_unique<SendMessageAction>(stateStore);
     });
+    eds::server_new::features::runtime::registerActionOrThrow(*this, std::string(kActionSyncMessages), [stateStore = stateStore_]() {
+        return std::make_unique<SyncMessagesAction>(stateStore);
+    });
+    eds::server_new::features::runtime::registerActionOrThrow(*this, std::string(kActionAckMessages), [stateStore = stateStore_]() {
+        return std::make_unique<AckMessagesAction>(stateStore);
+    });
 }
 
 } // namespace eds::server_new::features::chat

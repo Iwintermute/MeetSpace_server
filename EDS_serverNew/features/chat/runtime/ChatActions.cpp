@@ -43,4 +43,38 @@ core::contracts::OperationStatus SendMessageAction::execute(const core::contract
     return stateStore_->sendMessage(typedMessage->payload());
 }
 
+SyncMessagesAction::SyncMessagesAction(std::shared_ptr<ChatStateStore> stateStore)
+    : ChatActionBase("SyncMessagesAction", std::move(stateStore)) {
+}
+
+core::contracts::OperationStatus SyncMessagesAction::execute(const core::contracts::IMessage& message) {
+    if (!stateStore_) {
+        return core::contracts::OperationStatus::failure("Chat state store is not configured.");
+    }
+
+    const core::contracts::TypedMessage<ChatCommand>* typedMessage = nullptr;
+    const auto readStatus = readCommand(message, typedMessage);
+    if (!readStatus.ok) {
+        return readStatus;
+    }
+    return stateStore_->syncMessages(typedMessage->payload());
+}
+
+AckMessagesAction::AckMessagesAction(std::shared_ptr<ChatStateStore> stateStore)
+    : ChatActionBase("AckMessagesAction", std::move(stateStore)) {
+}
+
+core::contracts::OperationStatus AckMessagesAction::execute(const core::contracts::IMessage& message) {
+    if (!stateStore_) {
+        return core::contracts::OperationStatus::failure("Chat state store is not configured.");
+    }
+
+    const core::contracts::TypedMessage<ChatCommand>* typedMessage = nullptr;
+    const auto readStatus = readCommand(message, typedMessage);
+    if (!readStatus.ok) {
+        return readStatus;
+    }
+    return stateStore_->ackMessages(typedMessage->payload());
+}
+
 } // namespace eds::server_new::features::chat

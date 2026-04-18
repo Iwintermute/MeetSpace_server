@@ -109,11 +109,40 @@ function Send-CliJsonCommand {
     $serialized = $Payload | ConvertTo-Json -Depth 12 -Compress
     Send-CliCommandChecked -Process $Process -Command ("send " + $serialized) -Label ("send " + $Payload.action)
 }
+
+function Ensure-EnvFromBuild {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Name,
+        [Parameter(Mandatory = $true)]
+        [string]$BuildScriptText
+    )
+
+    $current = [Environment]::GetEnvironmentVariable($Name, "Process")
+    if (-not [string]::IsNullOrWhiteSpace($current)) {
+        return
+    }
+
+    $pattern = [Regex]::Escape('$env:' + $Name) + '\s*=\s*"([^"]*)"'
+    $match = [Regex]::Match($BuildScriptText, $pattern)
+    if ($match.Success) {
+        [Environment]::SetEnvironmentVariable($Name, $match.Groups[1].Value, "Process")
+    }
+}
 if ([string]::IsNullOrWhiteSpace($ConferenceId)) {
     $ConferenceId = "conf-e2e-" + [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
 }
 
 $repoRoot = Get-ChatRepoRoot -ScriptPath $PSCommandPath
+$buildScriptPath = Join-Path $repoRoot "build.ps1"
+$buildScriptText = Get-Content $buildScriptPath -Raw
+
+Ensure-EnvFromBuild -Name "SUPABASE_URL" -BuildScriptText $buildScriptText
+Ensure-EnvFromBuild -Name "SUPABASE_ANON_KEY" -BuildScriptText $buildScriptText
+Ensure-EnvFromBuild -Name "EDUSPACE_POSTGRES_CONNINFO" -BuildScriptText $buildScriptText
+Ensure-EnvFromBuild -Name "EDUSPACE_MEDIASOUP_BACKEND_URL" -BuildScriptText $buildScriptText
+Ensure-EnvFromBuild -Name "EDUSPACE_MEDIASOUP_BACKEND_CMD" -BuildScriptText $buildScriptText
+[Environment]::SetEnvironmentVariable("EDUSPACE_ALLOW_DEV_AUTH_TOKENS", "1", "Process")
 $artifacts = Resolve-ChatArtifacts -RepoRoot $repoRoot -BuildDir $BuildDir
 
 if ([string]::IsNullOrWhiteSpace($BackendCommand)) {
@@ -126,6 +155,10 @@ if (!(Test-Path $BackendCommand)) {
 $payloadA2B = "E2E_A2B::" + [Guid]::NewGuid().ToString("N") + "::SAME_PAYLOAD_CHECK"
 $payloadB2A = "E2E_B2A::" + [Guid]::NewGuid().ToString("N") + "::SAME_PAYLOAD_CHECK"
 $legacyAudioProbePayload = '{"type":"audio_data","sequence":1,"timestamp":0,"sampleRate":48000,"channels":1,"frameSize":960,"data":[1,2,3,4]}'
+$userAId = "c4487900-a777-45ba-a813-5ddd453d9c4d"
+$userBId = "f9a25664-c27d-475c-9a74-105975f77161"
+$tokenA = "dev:$userAId|oz.chat.a@example.com"
+$tokenB = "dev:$userBId|oz.chat.b@example.com"
 
 $server = $null
 $cliA = $null
@@ -154,6 +187,27 @@ try {
     $cliA = Start-CliClient -CliExe $artifacts.CliExe -ServerHost $ServerHost -Port $Port
     $cliB = Start-CliClient -CliExe $artifacts.CliExe -ServerHost $ServerHost -Port $Port
     Wait-CliStep -DelayMs 1500 -CliA $cliA -CliB $cliB
+
+    Write-Output "[e2e] step=auth_bind"
+    Send-CliJsonCommand -Process $cliA -Payload @{
+        object = "auth"
+        agent = "session"
+        action = "bind_session"
+        ctx = @{
+            accessToken = $tokenA
+            deviceId = "e2e-device-a"
+        }
+    }
+    Send-CliJsonCommand -Process $cliB -Payload @{
+        object = "auth"
+        agent = "session"
+        action = "bind_session"
+        ctx = @{
+            accessToken = $tokenB
+            deviceId = "e2e-device-b"
+        }
+    }
+    Wait-CliStep -DelayMs ($StepDelayMs + 250) -CliA $cliA -CliB $cliB
     Write-Output "[e2e] step=legacy_audio_signaling_probe"
     Send-CliCommandChecked -Process $cliA -Command ("send " + $legacyAudioProbePayload) -Label "legacy audio_data probe"
     Wait-CliStep -DelayMs ($StepDelayMs + 200) -CliA $cliA -CliB $cliB
@@ -182,7 +236,14 @@ try {
         $producerB = "producer-b-" + [Guid]::NewGuid().ToString("N").Substring(0, 10)
         $defaultOffer = "v=0`r`no=- 0 0 IN IP4 127.0.0.1`r`ns=e2e`r`nt=0 0`r`na=group:BUNDLE 0`r`nm=application 9 UDP/DTLS/SCTP webrtc-datachannel`r`nc=IN IP4 0.0.0.0`r`na=mid:0`r`na=sctp-port:5000`r`n"
         $fingerprintBytes = New-Object byte[] 32
-        [System.Security.Cryptography.RandomNumberGenerator]::Fill($fingerprintBytes)
+        $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+        try {
+            $rng.GetBytes($fingerprintBytes)
+        } finally {
+            if ($null -ne $rng) {
+                $rng.Dispose()
+            }
+        }
         $fingerprint = ($fingerprintBytes | ForEach-Object { $_.ToString("X2") }) -join ":"
         $dtlsParameters = @{
             role = "auto"
@@ -360,6 +421,18 @@ try {
 
     $eventsA = Parse-CliIncomingJson -OutputText $outA
     $eventsB = Parse-CliIncomingJson -OutputText $outB
+    $authA = @($eventsA | Where-Object {
+            $_.type -eq "dispatch_result" -and
+            $_.object -eq "auth" -and
+            $_.action -eq "bind_session" -and
+            $_.ok -eq $true
+        })
+    $authB = @($eventsB | Where-Object {
+            $_.type -eq "dispatch_result" -and
+            $_.object -eq "auth" -and
+            $_.action -eq "bind_session" -and
+            $_.ok -eq $true
+        })
 
     $chatA = @($eventsA | Where-Object { $_.type -eq "chat_message" })
     $chatB = @($eventsB | Where-Object { $_.type -eq "chat_message" })
@@ -397,17 +470,22 @@ try {
     $mediaStatsDispatchA = @($mediaDispatchA | Where-Object { $_.action -eq "stats" -and $_.ok -eq $true })
     $mediaStatsResponse = $null
     if ($mediaStatsDispatchA.Count -ge 1) {
-        $mediaStatsMessage = $mediaStatsDispatchA[-1].message
-        if ($mediaStatsMessage -is [string]) {
-            if (-not [string]::IsNullOrWhiteSpace($mediaStatsMessage)) {
-                try {
-                    $mediaStatsResponse = $mediaStatsMessage | ConvertFrom-Json -ErrorAction Stop
-                } catch {
-                    $mediaStatsResponse = $null
+        $mediaStatsEvent = $mediaStatsDispatchA[-1]
+        if ($null -ne $mediaStatsEvent.data) {
+            $mediaStatsResponse = $mediaStatsEvent.data
+        } else {
+            $mediaStatsMessage = $mediaStatsEvent.message
+            if ($mediaStatsMessage -is [string]) {
+                if (-not [string]::IsNullOrWhiteSpace($mediaStatsMessage)) {
+                    try {
+                        $mediaStatsResponse = $mediaStatsMessage | ConvertFrom-Json -ErrorAction Stop
+                    } catch {
+                        $mediaStatsResponse = $null
+                    }
                 }
+            } elseif ($null -ne $mediaStatsMessage) {
+                $mediaStatsResponse = $mediaStatsMessage
             }
-        } elseif ($null -ne $mediaStatsMessage) {
-            $mediaStatsResponse = $mediaStatsMessage
         }
     }
     $mediaStatsProducerPackets = [int64]0
@@ -498,6 +576,8 @@ try {
         cliAExited = $cliAExited
         cliBExited = $cliBExited
         hasAbort = ((Test-HasAbort -Text $outA) -or (Test-HasAbort -Text $outB))
+        authAOk = ($authA.Count -ge 1)
+        authBOk = ($authB.Count -ge 1)
         ackSendMessageA = ($ackA.Count -ge 1)
         ackSendMessageB = ($ackB.Count -ge 1)
         exactA2BDelivered = ($receivedA2BOnB.Count -ge 1)
@@ -540,6 +620,8 @@ try {
 
     $isOk =
         (-not $result.hasAbort) -and
+        $result.authAOk -and
+        $result.authBOk -and
         $result.ackSendMessageA -and
         $result.ackSendMessageB -and
         $result.exactA2BDelivered -and

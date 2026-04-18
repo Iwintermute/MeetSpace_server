@@ -67,7 +67,6 @@ if ([string]::IsNullOrWhiteSpace($BuildDir)) {
         $BuildDir = Join-Path $PSScriptRoot ("out/build/{0}-mediasoup" -f $Preset)
     }
 }
-
 if ([string]::IsNullOrWhiteSpace($Target)) {
     $Target = if ($env:EDUSPACE_TARGET) { $env:EDUSPACE_TARGET } else { "eds_server_new_mediasoup_app" }
 }
@@ -92,7 +91,7 @@ function Resolve-VsWherePath {
         return $found.Source
     }
 
-    throw "vswhere.exe not found. Install Visual Studio Installer components, or add vswhere.exe to PATH."
+    throw "vswhere.exe not found."
 }
 
 function Resolve-VcpkgRoot {
@@ -114,7 +113,7 @@ function Resolve-VcpkgRoot {
         }
     }
 
-    throw "VCPKG_ROOT is not set and no fallback vcpkg path was found. Set VCPKG_ROOT to your vcpkg directory."
+    throw "VCPKG_ROOT is not set and no fallback vcpkg path was found."
 }
 
 function Import-MsvcEnvironment {
@@ -180,10 +179,16 @@ $env:VCPKG_ROOT = $resolvedVcpkgRoot
 
 $env:SUPABASE_URL = "https://mtbbcaykjomycovrxdya.supabase.co"
 $env:SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im10YmJjYXlram9teWNvdnJ4ZHlhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ5MDkyODUsImV4cCI6MjA5MDQ4NTI4NX0.AKhEpGPBoiLDfUqAu1-MUgvDDrYlw_M0N_wHdXS9Cx4"
+$env:EDUSPACE_POSTGRES_CONNINFO = "postgresql://postgres:No_exclus1vee@db.mtbbcaykjomycovrxdya.supabase.co:5432/postgres"
+$env:EDUSPACE_MEDIASOUP_BACKEND_URL = "ws://127.0.0.1:5001/ws"
+$env:EDUSPACE_MEDIASOUP_BACKEND_CMD = ".\apps\mediasoup-server\run-backend.cmd"
 
 Write-Host "Re-applied VCPKG_ROOT after VsDevCmd: $env:VCPKG_ROOT"
 Write-Host "Using SUPABASE_URL: $env:SUPABASE_URL"
-Write-Host "SUPABASE_ANON_KEY is set."
+Write-Host "Using SUPABASE_ANON_KEY: [set]"
+Write-Host "Using EDUSPACE_POSTGRES_CONNINFO: $env:EDUSPACE_POSTGRES_CONNINFO"
+Write-Host "Using EDUSPACE_MEDIASOUP_BACKEND_URL: $env:EDUSPACE_MEDIASOUP_BACKEND_URL"
+Write-Host "Using EDUSPACE_MEDIASOUP_BACKEND_CMD: $env:EDUSPACE_MEDIASOUP_BACKEND_CMD"
 
 if (-not $BuildOnly) {
     $configureArgs = @(
@@ -218,8 +223,14 @@ if ($Run) {
         throw "Built executable not found. Checked: $($exeCandidates -join ', ')"
     }
 
-    Write-Host ">> $exePath"
-    & $exePath
+    $runArgs = @(
+        "--server",
+        "--mediasoup-backend-url", $env:EDUSPACE_MEDIASOUP_BACKEND_URL,
+        "--mediasoup-backend-cmd", $env:EDUSPACE_MEDIASOUP_BACKEND_CMD
+    )
+
+    Write-Host ">> $exePath $($runArgs -join ' ')"
+    & $exePath @runArgs
     if ($LASTEXITCODE -ne 0) {
         throw "Executable returned non-zero exit code: $LASTEXITCODE"
     }

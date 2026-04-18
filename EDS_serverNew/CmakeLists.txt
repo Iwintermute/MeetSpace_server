@@ -71,6 +71,21 @@ target_link_libraries(${TARGET_FILE} PRIVATE
   OpenSSL::SSL
   OpenSSL::Crypto
 )
+find_package(OpenSSL REQUIRED)
+find_package(PostgreSQL REQUIRED)
+
+target_link_libraries(${MEDIASOUP_BRIDGE_TARGET} PRIVATE
+  OpenSSL::SSL
+  OpenSSL::Crypto
+)
+
+target_link_libraries(${TARGET_FILE} PRIVATE
+  eduspace_core
+  ${MEDIASOUP_BRIDGE_TARGET}
+  OpenSSL::SSL
+  OpenSSL::Crypto
+  PostgreSQL::PostgreSQL
+)
 
 set(_eduspace_vcpkg_include_candidates "")
 if(DEFINED VCPKG_INSTALLED_DIR AND DEFINED VCPKG_TARGET_TRIPLET)
@@ -108,6 +123,7 @@ endif()
 if(WIN32)
   target_compile_definitions(${MEDIASOUP_BRIDGE_TARGET} PUBLIC _WIN32_WINNT=0x0A00)
   target_link_libraries(${MEDIASOUP_BRIDGE_TARGET} PRIVATE ws2_32 mswsock)
+
   target_compile_definitions(${TARGET_FILE} PUBLIC _WIN32_WINNT=0x0A00)
   target_link_libraries(${TARGET_FILE} PRIVATE ws2_32 mswsock)
 endif()
@@ -120,6 +136,7 @@ target_link_libraries(eds_server_new_mediasoup_app PRIVATE
     ${TARGET_FILE}
     ${MEDIASOUP_BRIDGE_TARGET}
     eduspace_core
+    PostgreSQL::PostgreSQL
 )
 
 if(MSVC)

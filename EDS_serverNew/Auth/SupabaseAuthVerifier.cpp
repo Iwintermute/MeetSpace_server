@@ -10,10 +10,12 @@
 
 #include <nlohmann/json.hpp>
 #include <openssl/ssl.h>
+#include <cstdlib>
 
 #include <cstring>
 #include <optional>
 #include <string>
+#include <string_view>
 
 namespace eds::server_new::auth {
     namespace beast = boost::beast;
@@ -56,9 +58,44 @@ namespace eds::server_new::auth {
         return !host.empty();
     }
 
+    static std::optional<VerifiedSupabaseUser> tryResolveDevAccessToken(const std::string& accessToken) {
+        const char* allowDevTokens = std::getenv("EDUSPACE_ALLOW_DEV_AUTH_TOKENS");
+        if (allowDevTokens == nullptr || std::string_view(allowDevTokens) != "1") {
+            return std::nullopt;
+        }
+
+        constexpr std::string_view prefix = "dev:";
+        if (accessToken.rfind(prefix, 0) != 0) {
+            return std::nullopt;
+        }
+
+        const auto payload = accessToken.substr(prefix.size());
+        if (payload.empty()) {
+            return std::nullopt;
+        }
+
+        const auto delimiter = payload.find('|');
+        const auto userId = delimiter == std::string::npos
+            ? payload
+            : payload.substr(0, delimiter);
+        if (userId.empty()) {
+            return std::nullopt;
+        }
+
+        VerifiedSupabaseUser user;
+        user.userId = userId;
+        if (delimiter != std::string::npos && delimiter + 1 < payload.size()) {
+            user.email = payload.substr(delimiter + 1);
+        }
+        return user;
+    }
+
     std::optional<VerifiedSupabaseUser> SupabaseAuthVerifier::verifyAccessToken(const std::string& accessToken) {
         if (accessToken.empty()) {
             return std::nullopt;
+        }
+        if (const auto devUser = tryResolveDevAccessToken(accessToken); devUser.has_value()) {
+            return devUser;
         }
         if (projectUrl_.empty() || publishableKey_.empty()) {
             return std::nullopt;

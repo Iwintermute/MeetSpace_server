@@ -149,11 +149,14 @@ namespace eds::server_new::mediasoup::transport {
                 self->writing = false;
                 self->outQueue.clear();
 
-                if (self->owner) {
-                    self->owner->unregisterSession(self.get());
+                auto* owner = self->owner;
+                self->owner = nullptr;
 
-                    if (wasOpen && self->owner->onDisconnected_) {
-                        self->owner->onDisconnected_(self.get());
+                if (owner) {
+                    owner->unregisterSession(self.get());
+
+                    if (wasOpen && owner->onDisconnected_) {
+                        owner->onDisconnected_(self.get());
                     }
                 }
 
@@ -238,6 +241,7 @@ namespace eds::server_new::mediasoup::transport {
         }
 
         for (auto& session : aliveSessions) {
+            session->detachOwner();
             session->close();
         }
     }
@@ -282,7 +286,9 @@ namespace eds::server_new::mediasoup::transport {
                 doAccept();
             });
     }
-
+    void WebSocketServer::Session::detachOwner() {
+        owner = nullptr;
+    }
     void WebSocketServer::registerSession(void* key, std::shared_ptr<Session> session) {
         std::lock_guard<std::mutex> lock(sessionsMutex_);
         sessions_[key] = std::move(session);

@@ -51,6 +51,7 @@ namespace eds::server_new::mediasoup::transport {
             void enqueueText(std::string text);
             void doWrite();
             void close();
+            void detachOwner();
 
             ws_stream websocket;
             boost::beast::flat_buffer buffer;

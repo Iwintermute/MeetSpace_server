@@ -1,157 +1,112 @@
 #include "features/chat/runtime/ChatStateStore.h"
 
-#include <chrono>
-#include <utility>
-
 namespace eds::server_new::features::chat {
+    namespace {
 
-core::contracts::OperationStatus ChatStateStore::requireField(bool condition, std::string fieldName) {
-    if (!condition) {
-        return core::contracts::OperationStatus::failure(std::move(fieldName) + " must not be empty.");
-    }
-    return core::contracts::OperationStatus::success();
-}
+        core::contracts::OperationStatus resolveActorSession(
+            const std::shared_ptr<eds::server_new::auth::SessionAuthStore>& sessionStore,
+            std::string_view peerId,
+            eds::server_new::auth::AuthenticatedSession& actor) {
+            if (!sessionStore) {
+                return core::contracts::OperationStatus::failure("ChatStateStore session store is not configured.");
+            }
 
-std::string ChatStateStore::makeIdempotencyKey(
-    std::string_view conferenceId,
-    std::string_view peerId,
-    std::string_view clientRequestId) {
-    std::string key;
-    key.reserve(conferenceId.size() + peerId.size() + clientRequestId.size() + 2);
-    key.append(conferenceId);
-    key.push_back('|');
-    key.append(peerId);
-    key.push_back('|');
-    key.append(clientRequestId);
-    return key;
-}
+            const auto handle = sessionStore->resolvePeer(std::string(peerId));
+            if (!handle.has_value()) {
+                return core::contracts::OperationStatus::failure("conference chat peer is not bound.");
+            }
 
-void ChatStateStore::applyConferenceSnapshot(const eds::server_new::features::events::ConferenceMembersSnapshotEvent& event) {
-    if (event.conferenceId.empty()) {
-        return;
-    }
+            const auto candidate = sessionStore->get(*handle);
+            if (!candidate.has_value() || !candidate->authenticated) {
+                return core::contracts::OperationStatus::failure("conference chat session is not authenticated.");
+            }
 
-    std::lock_guard<std::mutex> lock(mutex_);
-    auto& state = conferences_[event.conferenceId];
-    if (event.revision < state.revision) {
-        return;
-    }
-
-    state.revision = event.revision;
-    state.isClosed = event.isClosed;
-    state.members.clear();
-    for (const auto& memberPeerId : event.memberPeerIds) {
-        if (!memberPeerId.empty()) {
-            state.members.insert(memberPeerId);
+            actor = *candidate;
+            return core::contracts::OperationStatus::success();
         }
-    }
-}
 
-std::vector<std::string> ChatStateStore::resolveRecipientsNoLock(
-    const ConferenceChatState& conference,
-    std::string_view senderPeerId,
-    std::string_view targetPeerId) const {
-    std::vector<std::string> recipients;
-    if (!targetPeerId.empty()) {
-        recipients.push_back(std::string(targetPeerId));
-        return recipients;
+    } // namespace
+
+    ChatStateStore::ChatStateStore(
+        std::shared_ptr<eds::server_new::auth::SessionAuthStore> sessionStore,
+        std::shared_ptr<eds::server_new::infrastructure::db::MessengerRepository> repository)
+        : sessionStore_(std::move(sessionStore)),
+        repository_(std::move(repository)) {
     }
 
-    recipients.reserve(conference.members.size());
-    for (const auto& memberPeerId : conference.members) {
-        if (memberPeerId != senderPeerId) {
-            recipients.push_back(memberPeerId);
+    core::contracts::OperationStatus ChatStateStore::sendMessage(const ChatCommand& command) {
+        if (!repository_ || !repository_->isReady()) {
+            return core::contracts::OperationStatus::failure("ChatStateStore repository is not configured.");
         }
-    }
-    return recipients;
-}
+        eds::server_new::auth::AuthenticatedSession actor;
+        auto actorStatus = resolveActorSession(sessionStore_, command.peerId, actor);
+        if (!actorStatus.ok) {
+            return actorStatus;
+            return core::contracts::OperationStatus::failure("conference chat session is not authenticated.");
+        }
 
-core::contracts::OperationStatus ChatStateStore::sendMessage(const ChatCommand& command) {
-    const auto conferenceValidation = requireField(!command.conferenceId.empty(), "conferenceId");
-    if (!conferenceValidation.ok) {
-        return conferenceValidation;
-    }
-    const auto senderValidation = requireField(!command.peerId.empty(), "peerId");
-    if (!senderValidation.ok) {
-        return senderValidation;
-    }
-    const auto requestValidation = requireField(!command.clientRequestId.empty(), "clientRequestId");
-    if (!requestValidation.ok) {
-        return requestValidation;
-    }
-    const auto textValidation = requireField(!command.text.empty(), "text");
-    if (!textValidation.ok) {
-        return textValidation;
-    }
-    if (command.text.size() > 4000) {
-        return core::contracts::OperationStatus::failure("text is too long. Max length is 4000 symbols.");
-    }
+        auto resolvedTargetUserId = command.targetUserId;
+        if (resolvedTargetUserId.empty() && !command.targetPeerId.empty()) {
+            auto targetHandle = sessionStore_->resolvePeer(command.targetPeerId);
+            if (!targetHandle.has_value()) {
+                return core::contracts::OperationStatus::failure("target peer is not connected.");
+            }
 
-    std::lock_guard<std::mutex> lock(mutex_);
+            auto targetSession = sessionStore_->get(*targetHandle);
+            if (!targetSession.has_value() || !targetSession->authenticated) {
+                return core::contracts::OperationStatus::failure("target peer session is not authenticated.");
+            }
 
-    auto conferenceIt = conferences_.find(command.conferenceId);
-    if (conferenceIt == conferences_.end()) {
-        return core::contracts::OperationStatus::failure("conference not found in chat membership index.");
-    }
+            resolvedTargetUserId = targetSession->userId;
+            if (resolvedTargetUserId.empty()) {
+                return core::contracts::OperationStatus::failure("target peer user is not resolved.");
+            }
+        }
 
-    auto& conference = conferenceIt->second;
-    if (conference.isClosed) {
-        return core::contracts::OperationStatus::failure("conference is closed.");
-    }
-    if (conference.members.find(command.peerId) == conference.members.end()) {
-        return core::contracts::OperationStatus::failure("sender is not conference member.");
-    }
-    if (!command.targetPeerId.empty() && conference.members.find(command.targetPeerId) == conference.members.end()) {
-        return core::contracts::OperationStatus::failure("target peer is not conference member.");
+        return repository_->sendConferenceMessage(
+            actor.userId,
+            actor.peerId,
+            command.conferenceId,
+            resolvedTargetUserId,
+            command.clientRequestId,
+            command.text);
     }
 
-    const auto idempotencyKey = makeIdempotencyKey(command.conferenceId, command.peerId, command.clientRequestId);
-    if (idempotencyKeys_.find(idempotencyKey) != idempotencyKeys_.end()) {
-        return core::contracts::OperationStatus::success();
+    core::contracts::OperationStatus ChatStateStore::syncMessages(const ChatCommand& command) {
+        if (!repository_ || !repository_->isReady()) {
+            return core::contracts::OperationStatus::failure("ChatStateStore repository is not configured.");
+        }
+
+        eds::server_new::auth::AuthenticatedSession actor;
+        auto actorStatus = resolveActorSession(sessionStore_, command.peerId, actor);
+        if (!actorStatus.ok) {
+            return actorStatus;
+        }
+
+        return repository_->listConferenceMessages(
+            actor.userId,
+            command.conferenceId,
+            command.limit,
+            command.beforeCreatedAt,
+            command.afterCreatedAt);
     }
 
-    auto recipients = resolveRecipientsNoLock(conference, command.peerId, command.targetPeerId);
-    const auto sentAtUnixMs = std::chrono::duration_cast<std::chrono::milliseconds>(
-        std::chrono::system_clock::now().time_since_epoch()).count();
+    core::contracts::OperationStatus ChatStateStore::ackMessages(const ChatCommand& command) {
+        if (!repository_ || !repository_->isReady()) {
+            return core::contracts::OperationStatus::failure("ChatStateStore repository is not configured.");
+        }
 
-    sequence_ += 1;
-    const auto messageId = std::string("chat-") + std::to_string(sequence_);
+        eds::server_new::auth::AuthenticatedSession actor;
+        auto actorStatus = resolveActorSession(sessionStore_, command.peerId, actor);
+        if (!actorStatus.ok) {
+            return actorStatus;
+        }
 
-    nlohmann::json messageEvent{
-        { "type", "chat_message" },
-        { "object", std::string(kChatRouteObject) },
-        { "conferenceId", command.conferenceId },
-        { "messageId", messageId },
-        { "clientRequestId", command.clientRequestId },
-        { "senderPeerId", command.peerId },
-        { "targetPeerId", command.targetPeerId },
-        { "text", command.text },
-        { "sentAtUnixMs", sentAtUnixMs }
-    };
-
-    auto& outbound = pendingEventsBySender_[command.peerId];
-    outbound.reserve(outbound.size() + recipients.size());
-    for (const auto& recipientPeerId : recipients) {
-        outbound.push_back(OutboundChatEvent{
-            recipientPeerId,
-            messageEvent
-        });
+        return repository_->ackConferenceMessages(
+            actor.userId,
+            command.conferenceId,
+            command.messageIds,
+            command.markRead);
     }
-
-    idempotencyKeys_.insert(idempotencyKey);
-    return core::contracts::OperationStatus::success();
-}
-
-std::vector<ChatStateStore::OutboundChatEvent> ChatStateStore::consumeOutboundEventsForPeer(std::string_view senderPeerId) {
-    std::lock_guard<std::mutex> lock(mutex_);
-    auto it = pendingEventsBySender_.find(std::string(senderPeerId));
-    if (it == pendingEventsBySender_.end()) {
-        return {};
-    }
-
-    auto outbound = std::move(it->second);
-    pendingEventsBySender_.erase(it);
-    return outbound;
-}
 
 } // namespace eds::server_new::features::chat

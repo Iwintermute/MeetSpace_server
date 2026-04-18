@@ -68,8 +68,16 @@ function Start-CliClient {
     $process = New-Object System.Diagnostics.Process
     $process.StartInfo = New-Object System.Diagnostics.ProcessStartInfo
     $process.StartInfo.FileName = $CliExe
-    $process.StartInfo.ArgumentList.Add($ServerHost)
-    $process.StartInfo.ArgumentList.Add($Port)
+    try {
+        if ($null -ne $process.StartInfo.ArgumentList) {
+            $process.StartInfo.ArgumentList.Add($ServerHost)
+            $process.StartInfo.ArgumentList.Add($Port)
+        } else {
+            throw "ArgumentList is not available."
+        }
+    } catch {
+        $process.StartInfo.Arguments = "$ServerHost $Port"
+    }
     $process.StartInfo.RedirectStandardInput = $true
     $process.StartInfo.RedirectStandardOutput = $true
     $process.StartInfo.RedirectStandardError = $true

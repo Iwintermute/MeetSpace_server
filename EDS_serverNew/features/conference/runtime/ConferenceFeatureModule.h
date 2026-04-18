@@ -1,43 +1,44 @@
 #pragma once
 
-#include "features/conference/runtime/ConferenceFeatureManager.h"
-#include "features/conference/runtime/ConferenceStateStore.h"
-#include "features/runtime/FeatureEventBus.h"
+#include "Bridge/Mediasoup/service/IMediaTransportService.h"
+#include "features/conference/runtime/ConferenceCommand.h"
 #include "features/runtime/FeatureRegistry.h"
 #include "modules/BaseModule.h"
-#include <cstdint>
 
 #include <memory>
 #include <string_view>
+#include <vector>
+#include <nlohmann/json.hpp>
 
 namespace eds::server_new::features::conference {
 
-class ConferenceFeatureModule final : public BaseModule, public eds::server_new::features::runtime::IFeatureModule {
-public:
-    ConferenceFeatureModule();
-    ~ConferenceFeatureModule() override = default;
+    class ConferenceFeatureModule final
+        : public BaseModule
+        , public eds::server_new::features::runtime::IFeatureModule {
+    public:
+        ConferenceFeatureModule();
+        ~ConferenceFeatureModule() override = default;
 
-    std::string_view objectType() const override;
-    std::string_view defaultAgent() const override;
-    core::contracts::OperationStatus ensureRegistered(core::runtime::MessageDispatcher& dispatcher) override;
-    eds::server_new::features::runtime::FeatureDispatchResult dispatch(
-        const eds::server_new::features::runtime::FeatureDispatchRequest& request,
-        core::runtime::MessageDispatcher& dispatcher) override;
-    void onSessionDisconnected(std::string_view peerId, std::uintptr_t sessionHandle) override;
+        std::string_view objectType() const override;
+        std::string_view defaultAgent() const override;
 
-private:
-    bool onInitialize() override;
-    void onShutdown() override;
+        core::contracts::OperationStatus ensureRegistered(core::runtime::MessageDispatcher& dispatcher) override;
+        eds::server_new::features::runtime::FeatureDispatchResult dispatch(
+            const eds::server_new::features::runtime::FeatureDispatchRequest& request,
+            core::runtime::MessageDispatcher& dispatcher) override;
 
-private:
-    void publishConferenceSnapshot(std::string_view conferenceId);
-    bool shouldPublishConferenceSnapshot(std::string_view actionType) const;
+        void onSessionDisconnected(
+            std::string_view peerId,
+            std::uintptr_t sessionHandle,
+            std::vector<nlohmann::json>& outboundEvents) override;
 
-private:
-    bool registered_ = false;
-    std::shared_ptr<ConferenceFeatureManager> manager_;
-    std::shared_ptr<ConferenceStateStore> stateStore_;
-    std::shared_ptr<eds::server_new::features::runtime::FeatureEventBus> eventBus_;
-};
+    private:
+        bool onInitialize() override;
+        void onShutdown() override;
+
+    private:
+        bool registered_ = false;
+        std::shared_ptr<eds::server_new::mediasoup::service::IMediaTransportService> transportService_;
+    };
 
 } // namespace eds::server_new::features::conference

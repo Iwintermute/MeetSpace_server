@@ -1,9 +1,12 @@
 #include "Bridge/Mediasoup/signaling/MediasoupSignalingGateway.h"
 
 #include "App/ApplicationCore.h"
+#include "Auth/runtime/AuthServices.h"
+#include "infrastructure/control_plane/runtime/ControlPlaneServices.h"
 #include "utils/WordGenerator.h"
 
 #include <boost/asio/post.hpp>
+#include <algorithm>
 
 #include <chrono>
 #include <iostream>
@@ -15,6 +18,48 @@
 
 namespace eds::server_new::mediasoup::signaling {
     using json = nlohmann::json;
+
+    namespace {
+
+        json makeDispatchFailureResponse(const std::string& message) {
+            return json{
+                { "type", "dispatch_result" },
+                { "ok", false },
+                { "message", message }
+            };
+        }
+
+        bool shouldAttachData(const json& value) {
+            if (value.is_null()) {
+                return false;
+            }
+
+            if (value.is_object() || value.is_array()) {
+                return !value.empty();
+            }
+
+            return true;
+        }
+
+        json extractContextObject(const json& request) {
+            const auto ctxIt = request.find("ctx");
+            if (ctxIt == request.end() || ctxIt->is_null()) {
+                return json::object();
+            }
+
+            if (!ctxIt->is_object()) {
+                throw std::runtime_error("ctx must be a JSON object.");
+            }
+
+            return *ctxIt;
+        }
+
+        constexpr std::size_t kOfflineOutboxBatchSize = 16;
+        constexpr std::int32_t kOfflineOutboxMaxAttempts = 8;
+        constexpr auto kOfflineOutboxIdleSleep = std::chrono::milliseconds(450);
+        constexpr auto kOfflineOutboxBusySleep = std::chrono::milliseconds(120);
+
+    } // namespace
 
     MediasoupSignalingGateway::MediasoupSignalingGateway(
         ApplicationApi& app,
@@ -32,11 +77,13 @@ namespace eds::server_new::mediasoup::signaling {
     }
 
     bool MediasoupSignalingGateway::start() {
-        if (running_.load()) {
+        bool expected = false;
+        if (!running_.compare_exchange_strong(expected, true)) {
             return true;
         }
 
         if (!ioContext_.init()) {
+            running_.store(false);
             return false;
         }
 
@@ -51,6 +98,7 @@ namespace eds::server_new::mediasoup::signaling {
             wsServer_.reset();
             sendStrand_.reset();
             ioContext_.stop();
+            running_.store(false);
             return false;
         }
 
@@ -59,6 +107,7 @@ namespace eds::server_new::mediasoup::signaling {
             wsServer_.reset();
             sendStrand_.reset();
             ioContext_.stop();
+            running_.store(false);
             return false;
         }
 
@@ -72,13 +121,13 @@ namespace eds::server_new::mediasoup::signaling {
                     [this](const auto& event) { onAudioSessionLifecycleEvent(event); });
         }
 
-        running_.store(true);
-
         if (debugMode_) {
             std::cout << "[mediasoup][debug][signaling] gateway started on port "
                 << wsPort_
                 << ".\n";
         }
+
+        startOfflineOutboxDispatcher();
 
         return true;
     }
@@ -87,11 +136,16 @@ namespace eds::server_new::mediasoup::signaling {
         if (!running_.exchange(false)) {
             return;
         }
+        stopOfflineOutboxDispatcher();
 
         audioSessionLifecycleSubscription_.disconnect();
 
         if (wsServer_) {
-            wsServer_->stop();
+            try {
+                wsServer_->stop();
+            }
+            catch (...) {
+            }
             wsServer_.reset();
         }
 
@@ -121,7 +175,7 @@ namespace eds::server_new::mediasoup::signaling {
     }
 
     void MediasoupSignalingGateway::onConnected(void* session) {
-        if (!session) {
+        if (!running_.load() || session == nullptr) {
             return;
         }
 
@@ -144,30 +198,83 @@ namespace eds::server_new::mediasoup::signaling {
     }
 
     void MediasoupSignalingGateway::onDisconnected(void* session) {
+        if (session == nullptr) {
+            return;
+        }
+
         std::string peerId;
 
         {
             std::lock_guard<std::mutex> lock(peersMutex_);
+
             auto iterator = sessionToPeer_.find(session);
-            if (iterator == sessionToPeer_.end()) {
-                return;
+            if (iterator != sessionToPeer_.end()) {
+                peerId = iterator->second;
+                peerToSession_.erase(peerId);
+                sessionToPeer_.erase(iterator);
             }
-
-            peerId = iterator->second;
-
-            if (debugMode_) {
-                std::cout << "[mediasoup][debug][signaling] disconnected session="
-                    << reinterpret_cast<std::uintptr_t>(session)
-                    << ", trustedPeer="
-                    << peerId
-                    << "\n";
-            }
-
-            peerToSession_.erase(peerId);
-            sessionToPeer_.erase(iterator);
         }
 
-        app_.notifyFeatureSessionDisconnected(peerId, reinterpret_cast<std::uintptr_t>(session));
+        if (debugMode_) {
+            std::cout << "[mediasoup][debug][signaling] disconnected session="
+                << reinterpret_cast<std::uintptr_t>(session)
+                << ", trustedPeer="
+                << (peerId.empty() ? std::string("<unknown>") : peerId)
+                << "\n";
+        }
+
+        try {
+            auto disconnectEvents =
+                app_.notifyFeatureSessionDisconnected(peerId, reinterpret_cast<std::uintptr_t>(session));
+
+            for (const auto& event : disconnectEvents) {
+                if (!event.is_object()) {
+                    continue;
+                }
+
+                const auto deliverIt = event.find("deliverTo");
+                if (deliverIt == event.end() || deliverIt->is_null()) {
+                    continue;
+                }
+
+                auto payload = event;
+                payload.erase("deliverTo");
+                const auto serializedEvent = payload.dump();
+
+                if (deliverIt->is_string()) {
+                    const auto targetPeer = deliverIt->get<std::string>();
+                    if (!targetPeer.empty()) {
+                        postTextToPeer(targetPeer, serializedEvent);
+                    }
+                    continue;
+                }
+
+                if (deliverIt->is_array()) {
+                    for (const auto& item : *deliverIt) {
+                        if (!item.is_string()) {
+                            continue;
+                        }
+
+                        const auto targetPeer = item.get<std::string>();
+                        if (!targetPeer.empty()) {
+                            postTextToPeer(targetPeer, serializedEvent);
+                        }
+                    }
+                }
+            }
+        }
+        catch (const std::exception& ex) {
+            if (debugMode_) {
+                std::cout << "[mediasoup][debug][signaling] notifyFeatureSessionDisconnected exception: "
+                    << ex.what()
+                    << "\n";
+            }
+        }
+        catch (...) {
+            if (debugMode_) {
+                std::cout << "[mediasoup][debug][signaling] notifyFeatureSessionDisconnected unknown exception.\n";
+            }
+        }
     }
 
     void MediasoupSignalingGateway::onMessage(const std::string& text, void* session) {
@@ -180,6 +287,11 @@ namespace eds::server_new::mediasoup::signaling {
         try {
             const auto trustedPeer = resolveTrustedPeer(session);
             const auto request = json::parse(text);
+
+            if (!request.is_object()) {
+                postText(session, makeDispatchFailureResponse("request root must be a JSON object.").dump());
+                return;
+            }
 
             const auto messageType = request.value("type", std::string{});
             const auto objectType = request.value("object", std::string{});
@@ -202,12 +314,7 @@ namespace eds::server_new::mediasoup::signaling {
             std::vector<std::pair<std::string, std::string>> peerMessages;
 
             auto queueValidationFailure = [&currentSessionMessages](const std::string& message) {
-                json response{
-                    { "type", "dispatch_result" },
-                    { "ok", false },
-                    { "message", message }
-                };
-                currentSessionMessages.push_back(response.dump());
+                currentSessionMessages.push_back(makeDispatchFailureResponse(message).dump());
                 };
 
             if (messageType == "audio_data") {
@@ -228,6 +335,7 @@ namespace eds::server_new::mediasoup::signaling {
                 postTexts(session, std::move(currentSessionMessages));
                 return;
             }
+
             if (directMediasoupRequested && !allowDirectMediasoupDebug_) {
                 queueValidationFailure(
                     "Direct mediasoup control is disabled. Use feature-level orchestration actions.");
@@ -235,7 +343,7 @@ namespace eds::server_new::mediasoup::signaling {
                 return;
             }
 
-            const auto context = request.value("ctx", json::object());
+            const auto context = extractContextObject(request);
             const auto correlationId = context.value(
                 "correlationId",
                 context.value("clientRequestId", std::string{}));
@@ -282,15 +390,21 @@ namespace eds::server_new::mediasoup::signaling {
                 response["clientRequestId"] = correlationId;
             }
 
-            if (status.ok && objectType == std::string(kRouteObject) && !status.message.empty()) {
+            if (shouldAttachData(status.data)) {
+                response["data"] = status.data;
+            }
+
+            if (status.ok && directMediasoupRequested && !status.message.empty()) {
                 const auto backendPayload = json::parse(status.message, nullptr, false);
                 if (backendPayload.is_object()) {
-                    if (backendPayload.contains("data")) {
+                    if (!response.contains("data") && backendPayload.contains("data")) {
                         response["data"] = backendPayload["data"];
                     }
+
                     if (backendPayload.contains("backend")) {
                         response["backend"] = backendPayload["backend"];
                     }
+
                     if (backendPayload.contains("signalingEvents")) {
                         response["signalingEvents"] = backendPayload["signalingEvents"];
                     }
@@ -307,6 +421,10 @@ namespace eds::server_new::mediasoup::signaling {
             }
 
             for (const auto& event : dispatchResult.outboundEvents) {
+                if (!event.is_object()) {
+                    continue;
+                }
+
                 auto outboundEvent = event;
                 const auto eventType = outboundEvent.value("type", std::string("unknown"));
                 const auto deliverIt = outboundEvent.find("deliverTo");
@@ -331,16 +449,17 @@ namespace eds::server_new::mediasoup::signaling {
 
                 if (deliverIt->is_string()) {
                     const auto targetPeer = deliverIt->get<std::string>();
-                    peerMessages.emplace_back(targetPeer, serializedEvent);
+                    if (!targetPeer.empty()) {
+                        peerMessages.emplace_back(targetPeer, serializedEvent);
 
-                    if (debugMode_) {
-                        std::cout << "[mediasoup][debug][signaling] outbound_event"
-                            << " target=" << targetPeer
-                            << " event_type=" << eventType
-                            << " scheduled=true"
-                            << "\n";
+                        if (debugMode_) {
+                            std::cout << "[mediasoup][debug][signaling] outbound_event"
+                                << " target=" << targetPeer
+                                << " event_type=" << eventType
+                                << " scheduled=true"
+                                << "\n";
+                        }
                     }
-
                     continue;
                 }
 
@@ -351,6 +470,10 @@ namespace eds::server_new::mediasoup::signaling {
                         }
 
                         const auto targetPeer = recipient.get<std::string>();
+                        if (targetPeer.empty()) {
+                            continue;
+                        }
+
                         peerMessages.emplace_back(targetPeer, serializedEvent);
 
                         if (debugMode_) {
@@ -389,6 +512,15 @@ namespace eds::server_new::mediasoup::signaling {
                 { "type", "dispatch_result" },
                 { "ok", false },
                 { "message", std::string("invalid request: ") + ex.what() }
+            };
+
+            postText(session, response.dump());
+        }
+        catch (...) {
+            json response{
+                { "type", "dispatch_result" },
+                { "ok", false },
+                { "message", "invalid request: unknown exception." }
             };
 
             postText(session, response.dump());
@@ -453,7 +585,7 @@ namespace eds::server_new::mediasoup::signaling {
         }
 
         auto peer = utils::WordGenerator(12);
-        while (peerToSession_.find(peer) != peerToSession_.end()) {
+        while (peer.empty() || peerToSession_.find(peer) != peerToSession_.end()) {
             peer = utils::WordGenerator(12);
         }
 
@@ -464,19 +596,41 @@ namespace eds::server_new::mediasoup::signaling {
     }
 
     void MediasoupSignalingGateway::postText(void* session, std::string text) {
-        if (!session) {
+        if (!session || text.empty() || !sendStrand_) {
             return;
         }
 
-        boost::asio::post(ioContext_.io(), [this, session, text = std::move(text)]() mutable {
+        boost::asio::post(*sendStrand_, [this, session, text = std::move(text)]() mutable {
             if (!running_.load() || !wsServer_) {
                 return;
             }
 
             try {
-                wsServer_->sendText(session, text);
+                const auto sent = wsServer_->sendText(session, text);
+
+                if (sent) {
+                    forwardedEvents_.fetch_add(1);
+                }
+                else if (debugMode_) {
+                    std::cout << "[mediasoup][debug][signaling] sendText failed: session="
+                        << reinterpret_cast<std::uintptr_t>(session)
+                        << "\n";
+                }
+            }
+            catch (const std::exception& ex) {
+                if (debugMode_) {
+                    std::cout << "[mediasoup][debug][signaling] sendText exception: session="
+                        << reinterpret_cast<std::uintptr_t>(session)
+                        << " error=" << ex.what()
+                        << "\n";
+                }
             }
             catch (...) {
+                if (debugMode_) {
+                    std::cout << "[mediasoup][debug][signaling] sendText unknown exception: session="
+                        << reinterpret_cast<std::uintptr_t>(session)
+                        << "\n";
+                }
             }
             });
     }
@@ -492,6 +646,10 @@ namespace eds::server_new::mediasoup::signaling {
             }
 
             for (const auto& text : texts) {
+                if (text.empty()) {
+                    continue;
+                }
+
                 try {
                     const auto sent = wsServer_->sendText(session, text);
 
@@ -579,6 +737,144 @@ namespace eds::server_new::mediasoup::signaling {
                 }
             }
             });
+    }
+
+    bool MediasoupSignalingGateway::isPeerConnected(std::string_view peerId) {
+        if (peerId.empty()) {
+            return false;
+        }
+
+        std::lock_guard<std::mutex> lock(peersMutex_);
+        return peerToSession_.find(std::string(peerId)) != peerToSession_.end();
+    }
+
+    void MediasoupSignalingGateway::startOfflineOutboxDispatcher() {
+        outboxDispatcherStop_.store(false, std::memory_order_release);
+        if (outboxDispatcherThread_.joinable()) {
+            return;
+        }
+
+        outboxDispatcherThread_ = std::thread([this]() {
+            runOfflineOutboxDispatcher();
+            });
+    }
+
+    void MediasoupSignalingGateway::stopOfflineOutboxDispatcher() {
+        outboxDispatcherStop_.store(true, std::memory_order_release);
+        if (outboxDispatcherThread_.joinable()) {
+            outboxDispatcherThread_.join();
+        }
+    }
+
+    void MediasoupSignalingGateway::runOfflineOutboxDispatcher() {
+        while (!outboxDispatcherStop_.load(std::memory_order_acquire)) {
+            if (!running_.load(std::memory_order_acquire)) {
+                break;
+            }
+
+            auto repository = eds::server_new::control_plane::ControlPlaneServices::repository();
+            if (!repository || !repository->isReady()) {
+                std::this_thread::sleep_for(kOfflineOutboxIdleSleep);
+                continue;
+            }
+
+            auto claimStatus = repository->claimPendingOfflineOutbox(kOfflineOutboxBatchSize);
+            if (!claimStatus.ok) {
+                if (debugMode_) {
+                    std::cout << "[mediasoup][debug][signaling] offline_outbox_claim_failed: "
+                        << claimStatus.message
+                        << "\n";
+                }
+                std::this_thread::sleep_for(kOfflineOutboxIdleSleep);
+                continue;
+            }
+
+            const auto eventsIt = claimStatus.data.find("events");
+            if (eventsIt == claimStatus.data.end() || !eventsIt->is_array() || eventsIt->empty()) {
+                std::this_thread::sleep_for(kOfflineOutboxIdleSleep);
+                continue;
+            }
+
+            auto sessionStore = eds::server_new::auth::AuthServices::sessionStore();
+            bool handledEvents = false;
+
+            for (const auto& event : *eventsIt) {
+                if (!event.is_object()) {
+                    continue;
+                }
+                if (outboxDispatcherStop_.load(std::memory_order_acquire) || !running_.load(std::memory_order_acquire)) {
+                    break;
+                }
+
+                const auto outboxId = event.value("id", static_cast<std::int64_t>(0));
+                if (outboxId <= 0) {
+                    continue;
+                }
+
+                auto payload = event.value("payload", json::object());
+                if (!payload.is_object() && !payload.is_array()) {
+                    payload = json{
+                        { "type", "offline_outbox_payload" },
+                        { "rawPayload", event["payload"] }
+                    };
+                }
+
+                std::vector<std::string> targetPeers;
+                const auto targetPeerId = event.value("targetPeerId", std::string{});
+                if (!targetPeerId.empty()) {
+                    targetPeers.push_back(targetPeerId);
+                }
+
+                const auto recipientUserId = event.value("recipientUserId", std::string{});
+                if (!recipientUserId.empty() && sessionStore) {
+                    auto userPeers = sessionStore->resolvePeersForUser(recipientUserId);
+                    targetPeers.insert(targetPeers.end(), userPeers.begin(), userPeers.end());
+                }
+
+                targetPeers.erase(
+                    std::remove_if(targetPeers.begin(), targetPeers.end(), [](const auto& peer) { return peer.empty(); }),
+                    targetPeers.end());
+                std::sort(targetPeers.begin(), targetPeers.end());
+                targetPeers.erase(std::unique(targetPeers.begin(), targetPeers.end()), targetPeers.end());
+
+                bool delivered = false;
+                const auto payloadText = payload.dump();
+                for (const auto& targetPeer : targetPeers) {
+                    if (!isPeerConnected(targetPeer)) {
+                        continue;
+                    }
+
+                    postTextToPeer(targetPeer, payloadText);
+                    delivered = true;
+                }
+
+                if (delivered) {
+                    const auto deliveredStatus = repository->markOfflineOutboxDelivered(outboxId);
+                    if (!deliveredStatus.ok && debugMode_) {
+                        std::cout << "[mediasoup][debug][signaling] offline_outbox_mark_delivered_failed id="
+                            << outboxId
+                            << " message=" << deliveredStatus.message
+                            << "\n";
+                    }
+                }
+                else {
+                    const auto retryStatus = repository->markOfflineOutboxRetry(
+                        outboxId,
+                        "Recipient is offline.",
+                        kOfflineOutboxMaxAttempts);
+                    if (!retryStatus.ok && debugMode_) {
+                        std::cout << "[mediasoup][debug][signaling] offline_outbox_mark_retry_failed id="
+                            << outboxId
+                            << " message=" << retryStatus.message
+                            << "\n";
+                    }
+                }
+
+                handledEvents = true;
+            }
+
+            std::this_thread::sleep_for(handledEvents ? kOfflineOutboxBusySleep : kOfflineOutboxIdleSleep);
+        }
     }
 
 } // namespace eds::server_new::mediasoup::signaling
