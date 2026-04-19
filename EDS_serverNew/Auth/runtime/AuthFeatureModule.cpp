@@ -2,10 +2,38 @@
 #include "Auth/runtime/AuthCommand.h"
 #include "infrastructure/control_plane/runtime/ControlPlaneServices.h"
 #include <nlohmann/json.hpp>
+#include <algorithm>
+#include <cctype>
 
 #include <utility>
 
 namespace eds::server_new::features::auth {
+    namespace {
+        std::string trim(std::string value) {
+            const auto first = value.find_first_not_of(" \t\r\n");
+            if (first == std::string::npos) {
+                return {};
+            }
+
+            const auto last = value.find_last_not_of(" \t\r\n");
+            return value.substr(first, last - first + 1);
+        }
+
+        bool isPlaceholderToken(const std::string& value) {
+            if (value.empty()) {
+                return false;
+            }
+
+            std::string lowered = value;
+            std::transform(
+                lowered.begin(),
+                lowered.end(),
+                lowered.begin(),
+                [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
+
+            return lowered == "null" || lowered == "undefined";
+        }
+    } // namespace
 
     AuthFeatureModule::AuthFeatureModule(
         std::shared_ptr<eds::server_new::auth::SessionAuthStore> sessionStore,
@@ -84,11 +112,15 @@ namespace eds::server_new::features::auth {
             return result;
         }
 
-        const auto accessToken = request.context.value("accessToken", std::string{});
+        const auto accessToken = trim(request.context.value("accessToken", std::string{}));
         const auto deviceId = request.context.value("deviceId", std::string{});
 
         if (accessToken.empty()) {
             result.status = core::contracts::OperationStatus::failure("accessToken must not be empty.");
+            return result;
+        }
+        if (isPlaceholderToken(accessToken)) {
+            result.status = core::contracts::OperationStatus::failure("accessToken has invalid placeholder value.");
             return result;
         }
 
