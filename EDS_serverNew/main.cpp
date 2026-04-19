@@ -16,6 +16,11 @@
 #include <thread>
 
 namespace {
+    constexpr const char* kDefaultSupabaseUrl = "https://mtbbcaykjomycovrxdya.supabase.co";
+    constexpr const char* kDefaultSupabaseAnonKey =
+        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im10YmJjYXlram9teWNvdnJ4ZHlhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ5MDkyODUsImV4cCI6MjA5MDQ4NTI4NX0.AKhEpGPBoiLDfUqAu1-MUgvDDrYlw_M0N_wHdXS9Cx4";
+    constexpr const char* kDefaultPostgresConninfo =
+        "postgresql://postgres:No_exclus1vee@db.mtbbcaykjomycovrxdya.supabase.co:5432/postgres";
     std::string readEnvVar(const char* name) {
         const auto value = std::getenv(name);
         if (value == nullptr || value[0] == '\0') {
@@ -63,12 +68,21 @@ namespace {
             conninfo = readEnvVar("POSTGRES_CONNINFO");
         }
         if (conninfo.empty()) {
+            conninfo = kDefaultPostgresConninfo;
+        }
+        if (conninfo.empty()) {
             error =
                 "Postgres conninfo is not configured. Set EDUSPACE_POSTGRES_CONNINFO or POSTGRES_CONNINFO.";
             return false;
         }
-        const std::string supabaseUrl = readEnvVar("SUPABASE_URL");
-        const std::string supabaseAnonKey = readEnvVar("SUPABASE_ANON_KEY");
+        std::string supabaseUrl = readEnvVar("SUPABASE_URL");
+        std::string supabaseAnonKey = readEnvVar("SUPABASE_ANON_KEY");
+        if (supabaseUrl.empty()) {
+            supabaseUrl = kDefaultSupabaseUrl;
+        }
+        if (supabaseAnonKey.empty()) {
+            supabaseAnonKey = kDefaultSupabaseAnonKey;
+        }
         if (supabaseUrl.empty() || supabaseAnonKey.empty()) {
             error = "SUPABASE_URL and SUPABASE_ANON_KEY must be configured.";
             return false;
@@ -76,6 +90,10 @@ namespace {
 
         std::string envError;
         if (!setEnvVar("EDUSPACE_POSTGRES_CONNINFO", conninfo, envError)) {
+            error = envError;
+            return false;
+        }
+        if (!setEnvVar("POSTGRES_CONNINFO", conninfo, envError)) {
             error = envError;
             return false;
         }
