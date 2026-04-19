@@ -98,7 +98,8 @@ namespace eds::server_new::features::direct_chat {
         if (request.actionType != kActionSendDirectMessage
             && request.actionType != kActionSyncDirectMessages
             && request.actionType != kActionListDirectThreads
-            && request.actionType != kActionAckDirectMessages) {
+            && request.actionType != kActionAckDirectMessages
+            && request.actionType != kActionSearchUsers) {
             result.status = core::contracts::OperationStatus::failure("Unsupported direct chat action.");
             return result;
         }
@@ -113,6 +114,11 @@ namespace eds::server_new::features::direct_chat {
             "clientRequestId",
             request.context.value("messageId", std::string{}));
         command.text = request.context.value("text", request.context.value("message", std::string{}));
+        command.query = request.context.value(
+            "query",
+            request.context.value(
+                "emailQuery",
+                request.context.value("email", std::string{})));
         command.threadId = request.context.value("threadId", std::string{});
         command.limit = request.context.value("limit", static_cast<std::size_t>(50));
         command.beforeCreatedAt = request.context.value("beforeCreatedAt", request.context.value("before", std::string{}));

@@ -28,6 +28,9 @@ namespace eds::server_new::features::direct_chat {
         eds::server_new::features::runtime::registerActionOrThrow(*this, std::string(kActionAckDirectMessages), [stateStore = stateStore_]() {
             return std::make_unique<AckDirectMessagesAction>(stateStore);
             });
+        eds::server_new::features::runtime::registerActionOrThrow(*this, std::string(kActionSearchUsers), [stateStore = stateStore_]() {
+            return std::make_unique<SearchUsersAction>(stateStore);
+            });
     }
 
 } // namespace eds::server_new::features::direct_chat

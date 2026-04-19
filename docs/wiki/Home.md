@@ -3,6 +3,7 @@
 - [Core Architecture](Core-Architecture.md)
 - [Feature Development Guide](Feature-Development-Guide.md)
 - [Core API Stability v1](Core-API-Stability-v1.md)
+- [Realtime Direct Chat API](Realtime-Direct-Chat-API.md)
 
 ## Рекомендуемый порядок чтения
 1. `Core-Architecture.md` — слои, зависимости, маршрутизация.

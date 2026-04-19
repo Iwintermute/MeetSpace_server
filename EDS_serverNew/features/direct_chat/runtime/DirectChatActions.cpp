@@ -95,4 +95,21 @@ namespace eds::server_new::features::direct_chat {
         return stateStore_->ackMessages(typedMessage->payload());
     }
 
+    SearchUsersAction::SearchUsersAction(std::shared_ptr<DirectChatStateStore> stateStore)
+        : DirectChatActionBase("SearchUsersAction", std::move(stateStore)) {
+    }
+
+    core::contracts::OperationStatus SearchUsersAction::execute(const core::contracts::IMessage& message) {
+        if (!stateStore_) {
+            return core::contracts::OperationStatus::failure("Direct chat state store is not configured.");
+        }
+
+        const core::contracts::TypedMessage<DirectChatCommand>* typedMessage = nullptr;
+        const auto readStatus = readCommand(message, typedMessage);
+        if (!readStatus.ok) {
+            return readStatus;
+        }
+        return stateStore_->searchUsers(typedMessage->payload());
+    }
+
 } // namespace eds::server_new::features::direct_chat

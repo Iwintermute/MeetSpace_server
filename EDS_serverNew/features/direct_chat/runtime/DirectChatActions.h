@@ -52,4 +52,10 @@ namespace eds::server_new::features::direct_chat {
         core::contracts::OperationStatus execute(const core::contracts::IMessage& message) override;
     };
 
+    class SearchUsersAction final : public DirectChatActionBase {
+    public:
+        explicit SearchUsersAction(std::shared_ptr<DirectChatStateStore> stateStore);
+        core::contracts::OperationStatus execute(const core::contracts::IMessage& message) override;
+    };
+
 } // namespace eds::server_new::features::direct_chat

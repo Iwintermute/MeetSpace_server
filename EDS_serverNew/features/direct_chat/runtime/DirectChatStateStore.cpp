@@ -145,4 +145,18 @@ namespace eds::server_new::features::direct_chat {
             command.markRead);
     }
 
+    core::contracts::OperationStatus DirectChatStateStore::searchUsers(const DirectChatCommand& command) {
+        if (!repository_ || !repository_->isReady()) {
+            return core::contracts::OperationStatus::failure("DirectChatStateStore repository is not configured.");
+        }
+
+        eds::server_new::auth::AuthenticatedSession actor;
+        auto actorStatus = resolveActorSession(sessionStore_, command.peerId, actor);
+        if (!actorStatus.ok) {
+            return actorStatus;
+        }
+
+        return repository_->searchUsersByEmail(actor.userId, command.query, command.limit);
+    }
+
 } // namespace eds::server_new::features::direct_chat

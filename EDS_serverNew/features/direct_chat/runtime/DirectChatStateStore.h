@@ -19,6 +19,7 @@ namespace eds::server_new::features::direct_chat {
         core::contracts::OperationStatus listThreads(const DirectChatCommand& command);
         core::contracts::OperationStatus syncMessages(const DirectChatCommand& command);
         core::contracts::OperationStatus ackMessages(const DirectChatCommand& command);
+        core::contracts::OperationStatus searchUsers(const DirectChatCommand& command);
 
     private:
         std::shared_ptr<eds::server_new::auth::SessionAuthStore> sessionStore_;

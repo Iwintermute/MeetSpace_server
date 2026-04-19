@@ -17,6 +17,7 @@ namespace eds::server_new::features::direct_chat {
         std::string threadId;
         std::string clientRequestId;
         std::string text;
+        std::string query;
         std::size_t limit = 50;
         std::string beforeCreatedAt;
         std::string afterCreatedAt;
@@ -30,5 +31,6 @@ namespace eds::server_new::features::direct_chat {
     inline constexpr std::string_view kActionSyncDirectMessages = "sync_messages";
     inline constexpr std::string_view kActionListDirectThreads = "list_threads";
     inline constexpr std::string_view kActionAckDirectMessages = "ack_messages";
+    inline constexpr std::string_view kActionSearchUsers = "search_users";
 
 } // namespace eds::server_new::features::direct_chat

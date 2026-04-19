@@ -144,11 +144,30 @@ namespace eds::server_new::features::conference {
             }
 
             resolvedMessage = parsed.value("message", std::string{});
+            nlohmann::json responseData = nlohmann::json::object();
             const auto dataIt = parsed.find("data");
             if (dataIt != parsed.end() && dataIt->is_object()) {
-                return *dataIt;
+                responseData = *dataIt;
             }
-            return nlohmann::json::object();
+
+            const auto backendIt = parsed.find("backend");
+            if (backendIt != parsed.end() && backendIt->is_object()) {
+                responseData["backend"] = *backendIt;
+
+                const auto backendCapsIt = backendIt->find("routerRtpCapabilities");
+                if (backendCapsIt != backendIt->end() && backendCapsIt->is_object()) {
+                    responseData["routerRtpCapabilities"] = *backendCapsIt;
+                }
+            }
+
+            const auto topLevelCapsIt = parsed.find("routerRtpCapabilities");
+            if (!responseData.contains("routerRtpCapabilities")
+                && topLevelCapsIt != parsed.end()
+                && topLevelCapsIt->is_object()) {
+                responseData["routerRtpCapabilities"] = *topLevelCapsIt;
+            }
+
+            return responseData;
         }
 
         void appendOutboundTransportEvents(
@@ -483,6 +502,18 @@ namespace eds::server_new::features::conference {
         const auto activePeersIt = mediaContextStatus.data.find("activePeerIds");
         if (activePeersIt != mediaContextStatus.data.end() && activePeersIt->is_array()) {
             responseData["activePeerIds"] = *activePeersIt;
+        }
+
+        if (request.actionType == kActionOpenTransport) {
+            const auto routerCapsIt = responseData.find("routerRtpCapabilities");
+            const bool missingRouterCaps = routerCapsIt == responseData.end()
+                || !routerCapsIt->is_object()
+                || routerCapsIt->empty();
+            if (missingRouterCaps) {
+                result.status = core::contracts::OperationStatus::failure(
+                    "Mediasoup backend did not provide routerRtpCapabilities for open_transport.");
+                return result;
+            }
         }
         result.status = core::contracts::OperationStatus::success(
             resolvedMediaMessage.empty() ? std::string("Conference media action processed.") : std::move(resolvedMediaMessage),

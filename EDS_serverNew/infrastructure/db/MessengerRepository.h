@@ -112,6 +112,10 @@ namespace eds::server_new::infrastructure::db {
             std::string_view threadId,
             const std::vector<std::string>& messageIds,
             bool markRead);
+        core::contracts::OperationStatus searchUsersByEmail(
+            std::string_view requesterUserId,
+            std::string_view query,
+            std::size_t limit) const;
         core::contracts::OperationStatus claimPendingOfflineOutbox(std::size_t limit);
         core::contracts::OperationStatus markOfflineOutboxDelivered(std::int64_t outboxId);
         core::contracts::OperationStatus markOfflineOutboxRetry(

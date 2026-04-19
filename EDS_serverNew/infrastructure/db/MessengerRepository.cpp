@@ -2126,6 +2126,125 @@ LIMIT 1
             "Direct messages acknowledged.");
     }
 
+    core::contracts::OperationStatus MessengerRepository::searchUsersByEmail(
+        std::string_view requesterUserId,
+        std::string_view query,
+        std::size_t limit) const {
+        if (!isReady()) {
+            return dbFailure("Repository is not ready.");
+        }
+        if (requesterUserId.empty()) {
+            return dbFailure("searchUsersByEmail: requesterUserId must not be empty.");
+        }
+
+        auto normalizedQuery = std::string(query);
+        const auto first = normalizedQuery.find_first_not_of(" \t\r\n");
+        if (first == std::string::npos) {
+            json payload = json::object();
+            payload["query"] = "";
+            payload["users"] = json::array();
+            return core::contracts::OperationStatus::success("Users searched.", std::move(payload));
+        }
+        const auto last = normalizedQuery.find_last_not_of(" \t\r\n");
+        normalizedQuery = normalizedQuery.substr(first, last - first + 1);
+
+        const auto cappedLimit = clampBatchSize(limit, 1, 100);
+        static const std::string sql = R"SQL(
+WITH input AS (
+    SELECT lower(NULLIF(trim($2), '')) AS q
+),
+profile_matches AS (
+    SELECT
+        up.user_id::text AS user_id,
+        lower(trim(up.email::text)) AS email,
+        NULLIF(trim(up.display_name), '') AS display_name
+      FROM app.user_profiles up
+      CROSS JOIN input i
+     WHERE i.q IS NOT NULL
+       AND up.user_id <> $1::uuid
+       AND up.email IS NOT NULL
+       AND trim(up.email::text) <> ''
+       AND position(i.q IN lower(up.email::text)) > 0
+),
+auth_matches AS (
+    SELECT
+        au.id::text AS user_id,
+        lower(trim(au.email::text)) AS email,
+        NULLIF(trim(up.display_name), '') AS display_name
+      FROM auth.users au
+      LEFT JOIN app.user_profiles up
+        ON up.user_id = au.id
+      CROSS JOIN input i
+     WHERE i.q IS NOT NULL
+       AND au.id <> $1::uuid
+       AND au.deleted_at IS NULL
+       AND au.email IS NOT NULL
+       AND trim(au.email::text) <> ''
+       AND position(i.q IN lower(au.email::text)) > 0
+),
+merged AS (
+    SELECT user_id, email, display_name FROM profile_matches
+    UNION
+    SELECT user_id, email, display_name FROM auth_matches
+),
+ranked AS (
+    SELECT
+        m.user_id,
+        m.email,
+        m.display_name,
+        CASE
+            WHEN m.email = i.q THEN 0
+            WHEN left(m.email, char_length(i.q)) = i.q THEN 1
+            ELSE 2
+        END AS rank
+      FROM merged m
+      CROSS JOIN input i
+),
+deduped AS (
+    SELECT DISTINCT ON (r.user_id)
+        r.user_id,
+        r.email,
+        r.display_name,
+        r.rank
+      FROM ranked r
+     ORDER BY r.user_id, r.rank, r.email
+),
+limited AS (
+    SELECT
+        d.user_id,
+        d.email,
+        d.display_name,
+        d.rank
+      FROM deduped d
+     ORDER BY d.rank, d.email
+     LIMIT LEAST(GREATEST($3::int, 1), 100)
+)
+SELECT json_build_object(
+    'query', NULLIF(trim($2), ''),
+    'users', COALESCE((
+        SELECT json_agg(
+            json_build_object(
+                'userId', l.user_id,
+                'email', l.email,
+                'displayName', l.display_name
+            )
+            ORDER BY l.rank, l.email
+        )
+          FROM limited l
+    ), '[]'::json)
+)
+)SQL";
+
+        return querySingleJson(
+            sql,
+            {
+                std::string(requesterUserId),
+                std::move(normalizedQuery),
+                std::to_string(cappedLimit)
+            },
+            "Users searched.");
+    }
+
     core::contracts::OperationStatus MessengerRepository::createDirectCall(
         std::string_view callerUserId,
         std::string_view callerPeerId,
