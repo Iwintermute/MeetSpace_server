@@ -1000,6 +1000,8 @@ SELECT json_build_object(
         SELECT json_agg(
             json_build_object(
                 'userId', m.user_id::text,
+                'email', COALESCE(up.email::text, au.email::text),
+                'displayName', NULLIF(trim(up.display_name), ''),
                 'role', m.role,
                 'membershipStatus', m.membership_status,
                 'joinedAt', m.joined_at,
@@ -1009,6 +1011,10 @@ SELECT json_build_object(
         )
         FROM app.conference_members m
         JOIN target t ON t.id = m.conference_id
+        LEFT JOIN app.user_profiles up
+          ON up.user_id = m.user_id
+        LEFT JOIN auth.users au
+          ON au.id = m.user_id
     ), '[]'::json),
     'activePeerIds', COALESCE((
         SELECT json_agg(DISTINCT us.peer_id)
@@ -1157,6 +1163,17 @@ upsert_message AS (
     DO UPDATE SET body = app.conference_messages.body
     RETURNING id, conference_id, sender_user_id, target_user_id, body, created_at, client_request_id
 ),
+sender_profile AS (
+    SELECT
+        COALESCE(up.email::text, au.email::text) AS sender_email,
+        NULLIF(trim(up.display_name), '') AS sender_display_name
+      FROM upsert_message m
+      LEFT JOIN app.user_profiles up
+        ON up.user_id = m.sender_user_id
+      LEFT JOIN auth.users au
+        ON au.id = m.sender_user_id
+     LIMIT 1
+),
 recipients AS (
     SELECT m.user_id
       FROM app.conference_members m
@@ -1232,6 +1249,8 @@ outbox AS (
             'clientRequestId', m.client_request_id,
             'senderUserId', m.sender_user_id::text,
             'senderPeerId', $2,
+            'senderEmail', (SELECT sender_email FROM sender_profile),
+            'senderDisplayName', (SELECT sender_display_name FROM sender_profile),
             'targetUserId', NULLIF($4, ''),
             'text', m.body,
             'createdAt', m.created_at
@@ -1273,6 +1292,8 @@ offline_outbox AS (
             'clientRequestId', m.client_request_id,
             'senderUserId', m.sender_user_id::text,
             'senderPeerId', $2,
+            'senderEmail', (SELECT sender_email FROM sender_profile),
+            'senderDisplayName', (SELECT sender_display_name FROM sender_profile),
             'targetUserId', NULLIF($4, ''),
             'text', m.body,
             'createdAt', m.created_at
@@ -1288,6 +1309,8 @@ SELECT json_build_object(
     'clientRequestId', m.client_request_id,
     'senderUserId', m.sender_user_id::text,
     'senderPeerId', $2,
+    'senderEmail', (SELECT sender_email FROM sender_profile),
+    'senderDisplayName', (SELECT sender_display_name FROM sender_profile),
     'targetUserId', NULLIF($4, ''),
     'text', m.body,
     'createdAt', m.created_at,
@@ -1301,6 +1324,8 @@ SELECT json_build_object(
                 'clientRequestId', m.client_request_id,
                 'senderUserId', m.sender_user_id::text,
                 'senderPeerId', $2,
+                'senderEmail', (SELECT sender_email FROM sender_profile),
+                'senderDisplayName', (SELECT sender_display_name FROM sender_profile),
                 'targetUserId', NULLIF($4, ''),
                 'text', m.body,
                 'createdAt', m.created_at,
@@ -1360,6 +1385,9 @@ rows AS (
     SELECT
         m.id,
         m.sender_user_id,
+        COALESCE(us.peer_id, m.metadata ->> 'senderPeerId') AS sender_peer_id,
+        COALESCE(up.email::text, au.email::text) AS sender_email,
+        NULLIF(trim(up.display_name), '') AS sender_display_name,
         m.target_user_id,
         m.body,
         m.body_type,
@@ -1375,6 +1403,12 @@ rows AS (
       LEFT JOIN app.conference_message_receipts r
         ON r.message_id = m.id
        AND r.recipient_user_id = $1::uuid
+      LEFT JOIN app.user_sessions us
+        ON us.id = m.sender_session_id
+      LEFT JOIN app.user_profiles up
+        ON up.user_id = m.sender_user_id
+      LEFT JOIN auth.users au
+        ON au.id = m.sender_user_id
      WHERE m.deleted_at IS NULL
        AND (
             m.target_user_id IS NULL
@@ -1409,6 +1443,9 @@ SELECT json_build_object(
             json_build_object(
                 'messageId', p.id::text,
                 'senderUserId', p.sender_user_id::text,
+                'senderPeerId', p.sender_peer_id,
+                'senderEmail', p.sender_email,
+                'senderDisplayName', p.sender_display_name,
                 'targetUserId', p.target_user_id::text,
                 'text', p.body,
                 'bodyType', p.body_type,
@@ -1617,6 +1654,17 @@ upsert_message AS (
     DO UPDATE SET body = app.direct_messages.body
     RETURNING id, thread_id, sender_user_id, body, created_at, client_request_id
 ),
+sender_profile AS (
+    SELECT
+        COALESCE(up.email::text, au.email::text) AS sender_email,
+        NULLIF(trim(up.display_name), '') AS sender_display_name
+      FROM upsert_message m
+      LEFT JOIN app.user_profiles up
+        ON up.user_id = m.sender_user_id
+      LEFT JOIN auth.users au
+        ON au.id = m.sender_user_id
+     LIMIT 1
+),
 recipients AS (
     SELECT $3::uuid AS user_id
 ),
@@ -1690,6 +1738,8 @@ outbox AS (
             'clientRequestId', m.client_request_id,
             'senderUserId', m.sender_user_id::text,
             'senderPeerId', $2,
+            'senderEmail', (SELECT sender_email FROM sender_profile),
+            'senderDisplayName', (SELECT sender_display_name FROM sender_profile),
             'targetUserId', $3,
             'text', m.body,
             'createdAt', m.created_at
@@ -1731,6 +1781,8 @@ offline_outbox AS (
             'clientRequestId', m.client_request_id,
             'senderUserId', m.sender_user_id::text,
             'senderPeerId', $2,
+            'senderEmail', (SELECT sender_email FROM sender_profile),
+            'senderDisplayName', (SELECT sender_display_name FROM sender_profile),
             'targetUserId', $3,
             'text', m.body,
             'createdAt', m.created_at
@@ -1746,6 +1798,8 @@ SELECT json_build_object(
     'clientRequestId', m.client_request_id,
     'senderUserId', m.sender_user_id::text,
     'senderPeerId', $2,
+    'senderEmail', (SELECT sender_email FROM sender_profile),
+    'senderDisplayName', (SELECT sender_display_name FROM sender_profile),
     'targetUserId', $3,
     'text', m.body,
     'createdAt', m.created_at,
@@ -1759,6 +1813,8 @@ SELECT json_build_object(
                 'clientRequestId', m.client_request_id,
                 'senderUserId', m.sender_user_id::text,
                 'senderPeerId', $2,
+                'senderEmail', (SELECT sender_email FROM sender_profile),
+                'senderDisplayName', (SELECT sender_display_name FROM sender_profile),
                 'targetUserId', $3,
                 'text', m.body,
                 'createdAt', m.created_at,
@@ -1820,6 +1876,8 @@ thread_payload AS (
         tr.last_message_at,
         tr.updated_at,
         tr.counterpart_user_id,
+        COALESCE(cup.email::text, cau.email::text) AS counterpart_email,
+        NULLIF(trim(cup.display_name), '') AS counterpart_display_name,
         lm.message_id,
         lm.sender_user_id,
         lm.body,
@@ -1827,6 +1885,10 @@ thread_payload AS (
         lm.created_at AS last_message_created_at,
         COALESCE(u.unread_count, 0) AS unread_count
       FROM thread_rows tr
+      LEFT JOIN app.user_profiles cup
+        ON cup.user_id = tr.counterpart_user_id::uuid
+      LEFT JOIN auth.users cau
+        ON cau.id = tr.counterpart_user_id::uuid
       LEFT JOIN LATERAL (
           SELECT
               m.id AS message_id,
@@ -1858,6 +1920,8 @@ SELECT json_build_object(
             json_build_object(
                 'threadId', tp.id::text,
                 'counterpartUserId', tp.counterpart_user_id,
+                'counterpartEmail', tp.counterpart_email,
+                'counterpartDisplayName', tp.counterpart_display_name,
                 'lastMessageAt', tp.last_message_at,
                 'updatedAt', tp.updated_at,
                 'unreadCount', tp.unread_count,
