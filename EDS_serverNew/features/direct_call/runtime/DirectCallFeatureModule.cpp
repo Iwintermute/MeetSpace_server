@@ -73,6 +73,18 @@ namespace eds::server_new::features::direct_call {
                 intent = MediaTransportIntent::PublishTrack;
                 return core::contracts::OperationStatus::success();
             }
+            if (actionType == kActionPauseTrack) {
+                intent = MediaTransportIntent::PauseTrack;
+                return core::contracts::OperationStatus::success();
+            }
+            if (actionType == kActionResumeTrack) {
+                intent = MediaTransportIntent::ResumeTrack;
+                return core::contracts::OperationStatus::success();
+            }
+            if (actionType == kActionCloseTrack) {
+                intent = MediaTransportIntent::CloseTrack;
+                return core::contracts::OperationStatus::success();
+            }
             if (actionType == kActionConsumeTrack) {
                 intent = MediaTransportIntent::ConsumeTrack;
                 return core::contracts::OperationStatus::success();

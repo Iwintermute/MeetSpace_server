@@ -72,6 +72,9 @@ namespace eds::server_new::protocol {
             inline constexpr std::string_view kJoinConference = "join_conference";
             inline constexpr std::string_view kLeaveConference = "leave_conference";
             inline constexpr std::string_view kListMembers = "list_members";
+            inline constexpr std::string_view kPauseTrack = "pause_track";
+            inline constexpr std::string_view kResumeTrack = "resume_track";
+            inline constexpr std::string_view kCloseTrack = "close_track";
         }
 
         namespace conference_chat {
@@ -87,6 +90,9 @@ namespace eds::server_new::protocol {
             inline constexpr std::string_view kAcceptCall = "accept_call";
             inline constexpr std::string_view kDeclineCall = "decline_call";
             inline constexpr std::string_view kHangupCall = "hangup_call";
+            inline constexpr std::string_view kPauseTrack = "pause_track";
+            inline constexpr std::string_view kResumeTrack = "resume_track";
+            inline constexpr std::string_view kCloseTrack = "close_track";
         }
 
         namespace mediasoup {

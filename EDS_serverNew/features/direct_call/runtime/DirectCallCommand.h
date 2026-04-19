@@ -26,6 +26,9 @@ namespace eds::server_new::features::direct_call {
     inline constexpr std::string_view kActionListActiveCalls = "list_active_calls";
     inline constexpr std::string_view kActionOpenTransport = "open_transport";
     inline constexpr std::string_view kActionPublishTrack = "publish_track";
+    inline constexpr std::string_view kActionPauseTrack = "pause_track";
+    inline constexpr std::string_view kActionResumeTrack = "resume_track";
+    inline constexpr std::string_view kActionCloseTrack = "close_track";
     inline constexpr std::string_view kActionConsumeTrack = "consume_track";
     inline constexpr std::string_view kActionConsumerReady = "consumer_ready";
     inline constexpr std::string_view kActionWebrtcOffer = "webrtc_offer";

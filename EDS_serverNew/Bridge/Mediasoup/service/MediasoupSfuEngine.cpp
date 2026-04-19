@@ -190,6 +190,12 @@ namespace eds::server_new::mediasoup::service {
             return "router.createWebRtcTransport";
         case MediaTransportIntent::PublishTrack:
             return "transport.produce";
+        case MediaTransportIntent::PauseTrack:
+            return "producer.pause";
+        case MediaTransportIntent::ResumeTrack:
+            return "producer.resume";
+        case MediaTransportIntent::CloseTrack:
+            return "producer.close";
         case MediaTransportIntent::ConsumeTrack:
             return "transport.consume";
         case MediaTransportIntent::ResumeConsumer:
@@ -874,6 +880,103 @@ namespace eds::server_new::mediasoup::service {
             event.memberPeerIds = roomPeers;
             event.notifyPeerIds = std::move(notifyPeers);
             emittedEvents.push_back(std::move(event));
+            return { true, std::move(backendMessage) };
+        }
+        case MediaTransportIntent::PauseTrack:
+        case MediaTransportIntent::ResumeTrack:
+        case MediaTransportIntent::CloseTrack: {
+            const auto peerValidation = requireField(!command.peerId.empty(), "peerId");
+            if (!peerValidation.ok) {
+                emittedEvents.push_back(makeErrorEvent(command, peerValidation.message));
+                return peerValidation;
+            }
+            const auto producerValidation = requireField(!command.producerId.empty(), "producerId");
+            if (!producerValidation.ok) {
+                emittedEvents.push_back(makeErrorEvent(command, producerValidation.message));
+                return producerValidation;
+            }
+
+            auto producerIt = producers_.find(command.producerId);
+            if (producerIt == producers_.end()) {
+                const auto failure = core::contracts::OperationStatus::failure("Producer not found: " + command.producerId);
+                emittedEvents.push_back(makeErrorEvent(command, failure.message));
+                return failure;
+            }
+            if (producerIt->second.peerId != command.peerId) {
+                const auto failure = core::contracts::OperationStatus::failure("Producer is not owned by peer.");
+                emittedEvents.push_back(makeErrorEvent(command, failure.message));
+                return failure;
+            }
+            if (!command.roomId.empty() && producerIt->second.roomId != command.roomId) {
+                const auto failure = core::contracts::OperationStatus::failure("Producer is registered in another room.");
+                emittedEvents.push_back(makeErrorEvent(command, failure.message));
+                return failure;
+            }
+
+            MediaTransportCommand backendCommand = command;
+            backendCommand.roomId = producerIt->second.roomId;
+
+            std::string backendMessage;
+            const auto backendStatus = callMediasoupBackendNoLock(operationName, backendCommand, backendMessage);
+            if (!backendStatus.ok) {
+                emittedEvents.push_back(makeErrorEvent(command, backendStatus.message));
+                return backendStatus;
+            }
+
+            const auto roomPeers = collectRoomPeersNoLock(producerIt->second.roomId);
+            std::vector<std::string> notifyPeers;
+            notifyPeers.reserve(roomPeers.size());
+            for (const auto& roomPeer : roomPeers) {
+                if (roomPeer != command.peerId) {
+                    notifyPeers.push_back(roomPeer);
+                }
+            }
+
+            if (intent == MediaTransportIntent::CloseTrack) {
+                const auto producerRoomId = producerIt->second.roomId;
+                const auto producerKind = producerIt->second.kind;
+                const auto producerTrackType = producerIt->second.trackType;
+                producers_.erase(producerIt);
+
+                for (auto consumerIt = consumers_.begin(); consumerIt != consumers_.end();) {
+                    if (consumerIt->second.producerId == command.producerId
+                        && consumerIt->second.roomId == producerRoomId) {
+                        consumerIt = consumers_.erase(consumerIt);
+                        continue;
+                    }
+                    ++consumerIt;
+                }
+
+                MediaTransportEvent event;
+                event.type = MediaTransportEventType::TrackClosed;
+                event.correlationId = command.correlationId;
+                event.peerId = command.peerId;
+                event.roomId = producerRoomId;
+                event.producerId = command.producerId;
+                event.kind = producerKind;
+                event.trackType = producerTrackType;
+                event.reason = "closed";
+                event.memberPeerIds = roomPeers;
+                event.notifyPeerIds = std::move(notifyPeers);
+                emittedEvents.push_back(std::move(event));
+                return { true, std::move(backendMessage) };
+            }
+
+            MediaTransportEvent event;
+            event.type = intent == MediaTransportIntent::PauseTrack
+                ? MediaTransportEventType::TrackClosed
+                : MediaTransportEventType::TrackPublished;
+            event.correlationId = command.correlationId;
+            event.peerId = command.peerId;
+            event.roomId = producerIt->second.roomId;
+            event.producerId = command.producerId;
+            event.kind = producerIt->second.kind;
+            event.trackType = producerIt->second.trackType;
+            event.reason = intent == MediaTransportIntent::PauseTrack ? "paused" : "resumed";
+            event.memberPeerIds = roomPeers;
+            event.notifyPeerIds = std::move(notifyPeers);
+            emittedEvents.push_back(std::move(event));
+
             return { true, std::move(backendMessage) };
         }
         case MediaTransportIntent::ConsumeTrack: {

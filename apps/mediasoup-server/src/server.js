@@ -113,6 +113,12 @@ async function handleRequest(request) {
                 return await opAddIceCandidate(id, payload);
             case 'transport.produce':
                 return await opProduce(id, payload);
+            case 'producer.pause':
+                return await opPauseProducer(id, payload);
+            case 'producer.resume':
+                return await opResumeProducer(id, payload);
+            case 'producer.close':
+                return await opCloseProducer(id, payload);
             case 'transport.consume':
                 return await opConsume(id, payload);
             case 'consumer.resume':
@@ -256,6 +262,7 @@ async function opGetMediaStats(id, payload) {
             transportId: entry.transportId,
             kind: entry.kind,
             trackType: entry.trackType || null,
+            paused: entry.producer?.paused ?? false,
             rowsCount: summary.rowsCount,
             totalBytes: summary.totalBytes,
             totalPackets: summary.totalPackets,
@@ -537,6 +544,108 @@ async function opProduce(id, payload) {
             mediasoupProducerId: producer.id
         },
         router
+    );
+}
+
+async function opPauseProducer(id, payload) {
+    const producerId = requireString(payload.producerId, 'producerId');
+    const producerEntry = state.producers.get(producerId);
+    if (!producerEntry || !producerEntry.producer) {
+        throw new Error(`Producer not found: ${producerId}`);
+    }
+
+    const peerId = typeof payload.peerId === 'string' ? payload.peerId.trim() : '';
+    if (peerId.length > 0 && producerEntry.peerId !== peerId) {
+        throw new Error(`Producer ${producerId} is not owned by peer ${peerId}.`);
+    }
+
+    if (!producerEntry.producer.paused) {
+        await producerEntry.producer.pause();
+    }
+
+    return makeSuccess(
+        id,
+        `Producer ${producerId} paused.`,
+        {
+            producerId,
+            roomId: producerEntry.roomId,
+            peerId: producerEntry.peerId,
+            kind: producerEntry.kind,
+            trackType: producerEntry.trackType || null,
+            paused: producerEntry.producer.paused
+        },
+        state.routers.get(producerEntry.roomId)
+    );
+}
+
+async function opResumeProducer(id, payload) {
+    const producerId = requireString(payload.producerId, 'producerId');
+    const producerEntry = state.producers.get(producerId);
+    if (!producerEntry || !producerEntry.producer) {
+        throw new Error(`Producer not found: ${producerId}`);
+    }
+
+    const peerId = typeof payload.peerId === 'string' ? payload.peerId.trim() : '';
+    if (peerId.length > 0 && producerEntry.peerId !== peerId) {
+        throw new Error(`Producer ${producerId} is not owned by peer ${peerId}.`);
+    }
+
+    if (producerEntry.producer.paused) {
+        await producerEntry.producer.resume();
+    }
+
+    return makeSuccess(
+        id,
+        `Producer ${producerId} resumed.`,
+        {
+            producerId,
+            roomId: producerEntry.roomId,
+            peerId: producerEntry.peerId,
+            kind: producerEntry.kind,
+            trackType: producerEntry.trackType || null,
+            paused: producerEntry.producer.paused
+        },
+        state.routers.get(producerEntry.roomId)
+    );
+}
+
+async function opCloseProducer(id, payload) {
+    const producerId = requireString(payload.producerId, 'producerId');
+    const producerEntry = state.producers.get(producerId);
+    if (!producerEntry || !producerEntry.producer) {
+        throw new Error(`Producer not found: ${producerId}`);
+    }
+
+    const peerId = typeof payload.peerId === 'string' ? payload.peerId.trim() : '';
+    if (peerId.length > 0 && producerEntry.peerId !== peerId) {
+        throw new Error(`Producer ${producerId} is not owned by peer ${peerId}.`);
+    }
+
+    const roomId = producerEntry.roomId;
+    const ownerPeerId = producerEntry.peerId;
+    const kind = producerEntry.kind;
+    const trackType = producerEntry.trackType || null;
+
+    safeCloseProducerById(producerId);
+
+    for (const [consumerId, consumerEntry] of [...state.consumers.entries()]) {
+        if (consumerEntry.producerId === producerId) {
+            safeCloseConsumerById(consumerId);
+        }
+    }
+
+    return makeSuccess(
+        id,
+        `Producer ${producerId} closed.`,
+        {
+            producerId,
+            roomId,
+            peerId: ownerPeerId,
+            kind,
+            trackType,
+            closed: true
+        },
+        state.routers.get(roomId)
     );
 }
 
