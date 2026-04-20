@@ -113,6 +113,23 @@ Ensure-EnvFromBuild -Name "EDUSPACE_MEDIASOUP_BACKEND_CMD" -BuildScriptText $bui
 
 [Environment]::SetEnvironmentVariable("EDUSPACE_ALLOW_DEV_AUTH_TOKENS", "1", "Process")
 
+$backendCommand = [Environment]::GetEnvironmentVariable("EDUSPACE_MEDIASOUP_BACKEND_CMD", "Process")
+if ([string]::IsNullOrWhiteSpace($backendCommand)) {
+    $backendCommand = ".\\apps\\mediasoup-server\\run-backend.cmd"
+}
+if (-not [System.IO.Path]::IsPathRooted($backendCommand)) {
+    $backendCommand = [System.IO.Path]::GetFullPath((Join-Path $repoRoot $backendCommand))
+}
+if (!(Test-Path $backendCommand)) {
+    throw "Mediasoup backend command not found: $backendCommand"
+}
+[Environment]::SetEnvironmentVariable("EDUSPACE_MEDIASOUP_BACKEND_CMD", $backendCommand, "Process")
+
+$backendUrl = [Environment]::GetEnvironmentVariable("EDUSPACE_MEDIASOUP_BACKEND_URL", "Process")
+if ([string]::IsNullOrWhiteSpace($backendUrl)) {
+    [Environment]::SetEnvironmentVariable("EDUSPACE_MEDIASOUP_BACKEND_URL", "ws://127.0.0.1:5001/ws", "Process")
+}
+
 $artifacts = Resolve-ChatArtifacts -RepoRoot $repoRoot -BuildDir $BuildDir
 
 $userAId = "c4487900-a777-45ba-a813-5ddd453d9c4d"
@@ -132,8 +149,11 @@ $cliA = $null
 $cliB = $null
 
 try {
-    $server = Start-ChatServer -ServerExe $artifacts.ServerExe
+    $server = Start-ChatServer -ServerExe $artifacts.ServerExe -WorkingDirectory $repoRoot
     Start-Sleep -Milliseconds $ServerStartupDelayMs
+    if ($server.HasExited) {
+        throw "Server process exited during startup with code $($server.ExitCode)."
+    }
 
     $cliA = Start-CliClient -CliExe $artifacts.CliExe -ServerHost $ServerHost -Port $Port
     $cliB = Start-CliClient -CliExe $artifacts.CliExe -ServerHost $ServerHost -Port $Port

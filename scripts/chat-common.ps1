@@ -46,15 +46,19 @@ function Start-ChatServer {
     param(
         [Parameter(Mandatory = $true)]
         [string]$ServerExe,
-        [switch]$EnableDirectMediasoupTestMode
+        [switch]$EnableDirectMediasoupTestMode,
+        [string]$WorkingDirectory = ""
     )
 
     $args = @("--server")
     if ($EnableDirectMediasoupTestMode) {
         $args += "--allow-direct-mediasoup"
     }
+    if ([string]::IsNullOrWhiteSpace($WorkingDirectory)) {
+        $WorkingDirectory = Split-Path -Parent $ServerExe
+    }
 
-    return Start-Process -FilePath $ServerExe -ArgumentList $args -PassThru -WindowStyle Hidden
+    return Start-Process -FilePath $ServerExe -ArgumentList $args -WorkingDirectory $WorkingDirectory -PassThru -WindowStyle Hidden
 }
 
 function Start-CliClient {

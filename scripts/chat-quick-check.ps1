@@ -8,6 +8,25 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+function Resolve-PowerShellHost {
+    $currentProcessPath = [System.Diagnostics.Process]::GetCurrentProcess().Path
+    if (-not [string]::IsNullOrWhiteSpace($currentProcessPath) -and (Test-Path $currentProcessPath)) {
+        return $currentProcessPath
+    }
+
+    $pwsh = Get-Command pwsh -ErrorAction SilentlyContinue
+    if ($null -ne $pwsh -and -not [string]::IsNullOrWhiteSpace($pwsh.Source)) {
+        return $pwsh.Source
+    }
+
+    $powershell = Get-Command powershell -ErrorAction SilentlyContinue
+    if ($null -ne $powershell -and -not [string]::IsNullOrWhiteSpace($powershell.Source)) {
+        return $powershell.Source
+    }
+
+    throw "PowerShell host not found (neither current process path, pwsh, nor powershell)."
+}
+
 $rebuildScript = Join-Path $PSScriptRoot "chat-rebuild.ps1"
 $smokeScript = Join-Path $PSScriptRoot "chat-smoke-dual.ps1"
 
@@ -25,9 +44,10 @@ if (![string]::IsNullOrWhiteSpace($Preset)) {
 if (![string]::IsNullOrWhiteSpace($BuildDir)) {
     $rebuildArgs += @("-BuildDir", $BuildDir)
 }
+$psHost = Resolve-PowerShellHost
 
 Write-Host "[chat-quick-check] Rebuild..."
-& pwsh @rebuildArgs
+& $psHost @rebuildArgs
 if ($LASTEXITCODE -ne 0) {
     throw "Rebuild failed."
 }
@@ -42,5 +62,5 @@ if (![string]::IsNullOrWhiteSpace($BuildDir)) {
 }
 
 Write-Host "[chat-quick-check] Dual smoke..."
-& pwsh @smokeArgs
+& $psHost @smokeArgs
 exit $LASTEXITCODE
