@@ -1,7 +1,9 @@
 #include "infrastructure/db/PostgresClient.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cstdlib>
+#include <iostream>
 #include <sstream>
 #include <thread>
 
@@ -54,8 +56,27 @@ namespace eds::server_new::infrastructure::db {
             if (hw == 0) {
                 return kFallbackPoolSize;
             }
+            const auto conservativeByHardware = hw >= 8 ? 8 : std::max<std::size_t>(2, hw);
+            return clampPoolSize(std::min<std::size_t>(kFallbackPoolSize, conservativeByHardware));
+        }
 
-            return clampPoolSize(std::max<std::size_t>(4, hw));
+        std::string toLowerCopy(std::string value) {
+            std::transform(
+                value.begin(),
+                value.end(),
+                value.begin(),
+                [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
+            return value;
+        }
+
+        bool isSessionModeMaxClientsError(const std::string& message) {
+            if (message.empty()) {
+                return false;
+            }
+
+            const auto normalized = toLowerCopy(message);
+            return normalized.find("maxclientsinsessionmode") != std::string::npos ||
+                normalized.find("max clients reached") != std::string::npos;
         }
     } // namespace
 
@@ -79,6 +100,9 @@ namespace eds::server_new::infrastructure::db {
         const auto effectivePoolSize = resolvePoolSize(poolSize);
         std::vector<std::shared_ptr<ConnectionSlot>> newSlots;
         newSlots.reserve(effectivePoolSize);
+        bool poolWasCapped = false;
+        std::size_t cappedAtSlot = 0;
+        std::string cappedReason;
 
         for (std::size_t i = 0; i < effectivePoolSize; ++i) {
             auto slot = std::make_shared<ConnectionSlot>();
@@ -93,9 +117,21 @@ namespace eds::server_new::infrastructure::db {
             }
 
             if (PQstatus(slot->connection) != CONNECTION_OK) {
+                const auto slotErrorRaw = PQerrorMessage(slot->connection);
+                const std::string slotError = slotErrorRaw != nullptr
+                    ? std::string(slotErrorRaw)
+                    : std::string("unknown libpq error");
+                if (!newSlots.empty() && isSessionModeMaxClientsError(slotError)) {
+                    poolWasCapped = true;
+                    cappedAtSlot = i;
+                    cappedReason = slotError;
+                    PQfinish(slot->connection);
+                    slot->connection = nullptr;
+                    break;
+                }
                 std::ostringstream stream;
                 stream << "Postgres connection failed for slot #" << i << ": "
-                    << PQerrorMessage(slot->connection);
+                    << slotError;
                 error = stream.str();
                 PQfinish(slot->connection);
                 slot->connection = nullptr;
@@ -104,6 +140,21 @@ namespace eds::server_new::infrastructure::db {
             }
 
             newSlots.push_back(std::move(slot));
+        }
+
+        if (newSlots.empty()) {
+            error = "Postgres connection pool failed to initialize: no live connections established.";
+            return false;
+        }
+
+        if (poolWasCapped) {
+            std::cerr << "[bootstrap] Postgres pool capped to "
+                << newSlots.size()
+                << " slot(s) due to session-mode max clients limit at slot #"
+                << cappedAtSlot
+                << ": "
+                << cappedReason
+                << '\n';
         }
 
         std::vector<std::shared_ptr<ConnectionSlot>> staleSlots;
