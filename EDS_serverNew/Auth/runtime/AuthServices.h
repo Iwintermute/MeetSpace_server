@@ -14,6 +14,8 @@ namespace eds::server_new::auth {
         static std::shared_ptr<ISupabaseAuthVerifier> verifier();
 
         static void configure(std::string projectUrl, std::string publishableKey);
+        static void setAllowDevAuthTokens(bool enabled);
+        static bool allowDevAuthTokens();
 
     private:
         AuthServices() = delete;

@@ -1,4 +1,5 @@
 #include "Auth/SupabaseAuthVerifier.h"
+#include "Auth/runtime/AuthServices.h"
 
 #include <boost/asio/connect.hpp>
 #include <boost/asio/ip/tcp.hpp>
@@ -59,8 +60,12 @@ namespace eds::server_new::auth {
     }
 
     static std::optional<VerifiedSupabaseUser> tryResolveDevAccessToken(const std::string& accessToken) {
-        const char* allowDevTokens = std::getenv("EDUSPACE_ALLOW_DEV_AUTH_TOKENS");
-        if (allowDevTokens == nullptr || std::string_view(allowDevTokens) != "1") {
+        bool allowDevTokens = eds::server_new::auth::AuthServices::allowDevAuthTokens();
+        if (!allowDevTokens) {
+            const char* allowDevTokensEnv = std::getenv("EDUSPACE_ALLOW_DEV_AUTH_TOKENS");
+            allowDevTokens = allowDevTokensEnv != nullptr && std::string_view(allowDevTokensEnv) == "1";
+        }
+        if (!allowDevTokens) {
             return std::nullopt;
         }
 

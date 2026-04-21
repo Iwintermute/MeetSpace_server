@@ -1,51 +1,183 @@
 #include "infrastructure/db/PostgresClient.h"
 
+#include <algorithm>
+#include <cstdlib>
+#include <sstream>
+#include <thread>
+
 namespace eds::server_new::infrastructure::db {
+    namespace {
+        constexpr std::size_t kMinPoolSize = 1;
+        constexpr std::size_t kMaxPoolSize = 64;
+        constexpr std::size_t kFallbackPoolSize = 8;
+        constexpr const char* kPoolSizeEnvName = "EDUSPACE_POSTGRES_POOL_SIZE";
+
+        std::size_t clampPoolSize(std::size_t value) {
+            if (value < kMinPoolSize) {
+                return kMinPoolSize;
+            }
+            if (value > kMaxPoolSize) {
+                return kMaxPoolSize;
+            }
+            return value;
+        }
+
+        std::size_t readPoolSizeFromEnv() {
+            const char* raw = std::getenv(kPoolSizeEnvName);
+            if (raw == nullptr || raw[0] == '\0') {
+                return 0;
+            }
+
+            try {
+                const auto parsed = std::stoll(raw);
+                if (parsed <= 0) {
+                    return 0;
+                }
+                return clampPoolSize(static_cast<std::size_t>(parsed));
+            }
+            catch (...) {
+                return 0;
+            }
+        }
+
+        std::size_t resolvePoolSize(std::size_t requestedPoolSize) {
+            if (requestedPoolSize > 0) {
+                return clampPoolSize(requestedPoolSize);
+            }
+
+            const auto envPoolSize = readPoolSizeFromEnv();
+            if (envPoolSize > 0) {
+                return envPoolSize;
+            }
+
+            const auto hw = static_cast<std::size_t>(std::thread::hardware_concurrency());
+            if (hw == 0) {
+                return kFallbackPoolSize;
+            }
+
+            return clampPoolSize(std::max<std::size_t>(4, hw));
+        }
+    } // namespace
 
     PostgresClient::PostgresClient() = default;
 
     PostgresClient::~PostgresClient() {
-        std::lock_guard<std::mutex> lock(mutex_);
-        if (connection_ != nullptr) {
-            PQfinish(connection_);
-            connection_ = nullptr;
+        std::vector<std::shared_ptr<ConnectionSlot>> staleSlots;
+        {
+            std::lock_guard<std::mutex> lock(stateMutex_);
+            staleSlots.swap(slots_);
         }
+        closeSlots(staleSlots);
     }
 
     bool PostgresClient::connect(const std::string& conninfo, std::string& error) {
+        return connect(conninfo, error, 0);
+    }
+
+    bool PostgresClient::connect(const std::string& conninfo, std::string& error, std::size_t poolSize) {
         error.clear();
+        const auto effectivePoolSize = resolvePoolSize(poolSize);
+        std::vector<std::shared_ptr<ConnectionSlot>> newSlots;
+        newSlots.reserve(effectivePoolSize);
 
-        std::lock_guard<std::mutex> lock(mutex_);
+        for (std::size_t i = 0; i < effectivePoolSize; ++i) {
+            auto slot = std::make_shared<ConnectionSlot>();
+            slot->connection = PQconnectdb(conninfo.c_str());
 
-        if (connection_ != nullptr) {
-            PQfinish(connection_);
-            connection_ = nullptr;
+            if (slot->connection == nullptr) {
+                std::ostringstream stream;
+                stream << "PQconnectdb returned nullptr for slot #" << i << ".";
+                error = stream.str();
+                closeSlots(newSlots);
+                return false;
+            }
+
+            if (PQstatus(slot->connection) != CONNECTION_OK) {
+                std::ostringstream stream;
+                stream << "Postgres connection failed for slot #" << i << ": "
+                    << PQerrorMessage(slot->connection);
+                error = stream.str();
+                PQfinish(slot->connection);
+                slot->connection = nullptr;
+                closeSlots(newSlots);
+                return false;
+            }
+
+            newSlots.push_back(std::move(slot));
         }
 
-        connection_ = PQconnectdb(conninfo.c_str());
-        if (connection_ == nullptr) {
-            error = "PQconnectdb returned nullptr.";
-            return false;
+        std::vector<std::shared_ptr<ConnectionSlot>> staleSlots;
+        {
+            std::lock_guard<std::mutex> lock(stateMutex_);
+            staleSlots.swap(slots_);
+            slots_ = std::move(newSlots);
+            nextSlotIndex_.store(0, std::memory_order_relaxed);
         }
-
-        if (PQstatus(connection_) != CONNECTION_OK) {
-            error = PQerrorMessage(connection_);
-            PQfinish(connection_);
-            connection_ = nullptr;
-            return false;
-        }
-
+        closeSlots(staleSlots);
         return true;
     }
 
     bool PostgresClient::isConnected() const noexcept {
-        std::lock_guard<std::mutex> lock(mutex_);
-        return connection_ != nullptr && PQstatus(connection_) == CONNECTION_OK;
+        std::lock_guard<std::mutex> lock(stateMutex_);
+        for (const auto& slot : slots_) {
+            if (slot == nullptr || slot->connection == nullptr) {
+                continue;
+            }
+
+            if (PQstatus(slot->connection) == CONNECTION_OK) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    std::size_t PostgresClient::poolSize() const noexcept {
+        std::lock_guard<std::mutex> lock(stateMutex_);
+        return slots_.size();
+    }
+
+    std::shared_ptr<PostgresClient::ConnectionSlot> PostgresClient::acquireSlot(std::string& error) const {
+        error.clear();
+
+        std::lock_guard<std::mutex> lock(stateMutex_);
+        if (slots_.empty()) {
+            error = "Postgres connection pool is not initialized.";
+            return nullptr;
+        }
+
+        const auto index = nextSlotIndex_.fetch_add(1, std::memory_order_relaxed) % slots_.size();
+        auto slot = slots_[index];
+        if (slot == nullptr) {
+            error = "Postgres connection pool slot is null.";
+            return nullptr;
+        }
+
+        return slot;
+    }
+
+    void PostgresClient::closeSlots(std::vector<std::shared_ptr<ConnectionSlot>>& slots) noexcept {
+        for (auto& slot : slots) {
+            if (!slot) {
+                continue;
+            }
+
+            std::lock_guard<std::mutex> lock(slot->mutex);
+            if (slot->connection != nullptr) {
+                PQfinish(slot->connection);
+                slot->connection = nullptr;
+            }
+        }
+        slots.clear();
     }
 
     PGresult* PostgresClient::execParamsLocked(
+        PGconn* connection,
         const std::string& sql,
         const std::vector<std::string>& params) const {
+        if (connection == nullptr) {
+            return nullptr;
+        }
+
         std::vector<const char*> values;
         values.reserve(params.size());
 
@@ -54,7 +186,7 @@ namespace eds::server_new::infrastructure::db {
         }
 
         return PQexecParams(
-            connection_,
+            connection,
             sql.c_str(),
             static_cast<int>(values.size()),
             nullptr,
@@ -70,13 +202,18 @@ namespace eds::server_new::infrastructure::db {
         std::string& error) const {
         error.clear();
 
-        std::lock_guard<std::mutex> lock(mutex_);
-        if (connection_ == nullptr) {
-            error = "Postgres connection is not initialized.";
+        auto slot = acquireSlot(error);
+        if (!slot) {
             return std::nullopt;
         }
 
-        PGresult* result = execParamsLocked(sql, params);
+        std::lock_guard<std::mutex> lock(slot->mutex);
+        if (slot->connection == nullptr || PQstatus(slot->connection) != CONNECTION_OK) {
+            error = "Postgres connection slot is not ready.";
+            return std::nullopt;
+        }
+
+        PGresult* result = execParamsLocked(slot->connection, sql, params);
         if (result == nullptr) {
             error = "PQexecParams returned nullptr.";
             return std::nullopt;
@@ -113,13 +250,18 @@ namespace eds::server_new::infrastructure::db {
         error.clear();
         std::vector<json> rows;
 
-        std::lock_guard<std::mutex> lock(mutex_);
-        if (connection_ == nullptr) {
-            error = "Postgres connection is not initialized.";
+        auto slot = acquireSlot(error);
+        if (!slot) {
             return rows;
         }
 
-        PGresult* result = execParamsLocked(sql, params);
+        std::lock_guard<std::mutex> lock(slot->mutex);
+        if (slot->connection == nullptr || PQstatus(slot->connection) != CONNECTION_OK) {
+            error = "Postgres connection slot is not ready.";
+            return rows;
+        }
+
+        PGresult* result = execParamsLocked(slot->connection, sql, params);
         if (result == nullptr) {
             error = "PQexecParams returned nullptr.";
             return rows;
@@ -157,13 +299,18 @@ namespace eds::server_new::infrastructure::db {
         error.clear();
         std::vector<std::string> rows;
 
-        std::lock_guard<std::mutex> lock(mutex_);
-        if (connection_ == nullptr) {
-            error = "Postgres connection is not initialized.";
+        auto slot = acquireSlot(error);
+        if (!slot) {
             return rows;
         }
 
-        PGresult* result = execParamsLocked(sql, params);
+        std::lock_guard<std::mutex> lock(slot->mutex);
+        if (slot->connection == nullptr || PQstatus(slot->connection) != CONNECTION_OK) {
+            error = "Postgres connection slot is not ready.";
+            return rows;
+        }
+
+        PGresult* result = execParamsLocked(slot->connection, sql, params);
         if (result == nullptr) {
             error = "PQexecParams returned nullptr.";
             return rows;
@@ -193,13 +340,18 @@ namespace eds::server_new::infrastructure::db {
         std::string& error) const {
         error.clear();
 
-        std::lock_guard<std::mutex> lock(mutex_);
-        if (connection_ == nullptr) {
-            error = "Postgres connection is not initialized.";
+        auto slot = acquireSlot(error);
+        if (!slot) {
             return false;
         }
 
-        PGresult* result = execParamsLocked(sql, params);
+        std::lock_guard<std::mutex> lock(slot->mutex);
+        if (slot->connection == nullptr || PQstatus(slot->connection) != CONNECTION_OK) {
+            error = "Postgres connection slot is not ready.";
+            return false;
+        }
+
+        PGresult* result = execParamsLocked(slot->connection, sql, params);
         if (result == nullptr) {
             error = "PQexecParams returned nullptr.";
             return false;

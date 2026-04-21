@@ -9,6 +9,12 @@ namespace eds::server_new::mediasoup::transport {
     namespace websocket = beast::websocket;
     using tcp = boost::asio::ip::tcp;
 
+    namespace {
+        constexpr std::size_t kMaxOutboundQueueMessages = 1024;
+        constexpr std::size_t kMaxInboundMessageBytes = 512 * 1024;
+        constexpr std::size_t kWriteBufferBytes = 256 * 1024;
+    }
+
     WebSocketServer::Session::Session(tcp::socket&& socket, WebSocketServer* ownerIn)
         : websocket(std::move(socket)),
         owner(ownerIn) {
@@ -26,6 +32,16 @@ namespace eds::server_new::mediasoup::transport {
         auto self = shared_from_this();
 
         websocket.set_option(websocket::stream_base::timeout::suggested(beast::role_type::server));
+        websocket::permessage_deflate permessageDeflate;
+        permessageDeflate.client_enable = false;
+        permessageDeflate.server_enable = false;
+        websocket.set_option(permessageDeflate);
+        websocket.auto_fragment(false);
+        websocket.read_message_max(kMaxInboundMessageBytes);
+        websocket.write_buffer_bytes(kWriteBufferBytes);
+
+        beast::error_code noDelayError;
+        websocket.next_layer().set_option(tcp::no_delay(true), noDelayError);
 
         websocket.async_accept(
             net::bind_executor(
@@ -86,6 +102,10 @@ namespace eds::server_new::mediasoup::transport {
             websocket.get_executor(),
             [self, text = std::move(text)]() mutable {
                 if (!self->open || self->closing) {
+                    return;
+                }
+                if (self->outQueue.size() >= kMaxOutboundQueueMessages) {
+                    self->close();
                     return;
                 }
 
@@ -265,6 +285,46 @@ namespace eds::server_new::mediasoup::transport {
 
         wsSession->enqueueText(text);
         return true;
+    }
+
+    std::size_t WebSocketServer::sendTexts(const std::vector<void*>& sessions, const std::string& text) {
+        if (sessions.empty() || text.empty()) {
+            return 0;
+        }
+
+        std::vector<std::shared_ptr<Session>> aliveSessions;
+        aliveSessions.reserve(sessions.size());
+
+        {
+            std::lock_guard<std::mutex> lock(sessionsMutex_);
+            for (auto* sessionKey : sessions) {
+                if (sessionKey == nullptr) {
+                    continue;
+                }
+
+                auto iterator = sessions_.find(sessionKey);
+                if (iterator == sessions_.end()) {
+                    continue;
+                }
+
+                auto wsSession = iterator->second.lock();
+                if (!wsSession) {
+                    continue;
+                }
+
+                aliveSessions.push_back(std::move(wsSession));
+            }
+        }
+
+        if (aliveSessions.empty()) {
+            return 0;
+        }
+
+        for (auto& wsSession : aliveSessions) {
+            wsSession->enqueueText(text);
+        }
+
+        return aliveSessions.size();
     }
 
     void WebSocketServer::doAccept() {

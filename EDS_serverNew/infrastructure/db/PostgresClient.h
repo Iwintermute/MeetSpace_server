@@ -3,6 +3,7 @@
 #include <libpq-fe.h>
 
 #include <nlohmann/json.hpp>
+#include <atomic>
 
 #include <memory>
 #include <mutex>
@@ -21,9 +22,10 @@ namespace eds::server_new::infrastructure::db {
 
         PostgresClient(const PostgresClient&) = delete;
         PostgresClient& operator=(const PostgresClient&) = delete;
-
+        bool connect(const std::string& conninfo, std::string& error, std::size_t poolSize);
         bool connect(const std::string& conninfo, std::string& error);
         bool isConnected() const noexcept;
+        std::size_t poolSize() const noexcept;
 
         std::optional<json> queryScalarJson(
             const std::string& sql,
@@ -46,13 +48,21 @@ namespace eds::server_new::infrastructure::db {
             std::string& error) const;
 
     private:
+        struct ConnectionSlot {
+            mutable std::mutex mutex;
+            PGconn* connection = nullptr;
+        };
         PGresult* execParamsLocked(
+            PGconn* connection,
             const std::string& sql,
             const std::vector<std::string>& params) const;
+        std::shared_ptr<ConnectionSlot> acquireSlot(std::string& error) const;
+        static void closeSlots(std::vector<std::shared_ptr<ConnectionSlot>>& slots) noexcept;
 
     private:
-        mutable std::mutex mutex_;
-        PGconn* connection_ = nullptr;
+        mutable std::mutex stateMutex_;
+        std::vector<std::shared_ptr<ConnectionSlot>> slots_;
+        mutable std::atomic<std::size_t> nextSlotIndex_{ 0 };
     };
 
 } // namespace eds::server_new::infrastructure::db

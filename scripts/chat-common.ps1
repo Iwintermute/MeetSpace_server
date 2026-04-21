@@ -50,7 +50,7 @@ function Start-ChatServer {
         [string]$WorkingDirectory = ""
     )
 
-    $args = @("--server")
+    $args = @("--server", "--allow-dev-auth-tokens")
     if ($EnableDirectMediasoupTestMode) {
         $args += "--allow-direct-mediasoup"
     }

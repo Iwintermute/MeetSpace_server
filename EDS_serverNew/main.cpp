@@ -172,6 +172,7 @@ int main(int argc, char** argv) {
 
     bool runServer = false;
     bool allowDirectMediasoupDebug = false;
+    bool allowDevAuthTokens = false;
     bool debugMode = false;
     bool devAutostartBackend = true;
     std::string devBackendCommand;
@@ -196,6 +197,10 @@ int main(int argc, char** argv) {
         }
         if (arg == "--allow-direct-mediasoup") {
             allowDirectMediasoupDebug = true;
+            continue;
+        }
+        if (arg == "--allow-dev-auth-tokens") {
+            allowDevAuthTokens = true;
             continue;
         }
         if (arg == "--debug") {
@@ -277,6 +282,10 @@ int main(int argc, char** argv) {
         std::cerr << "--allow-direct-mediasoup requires --server mode.\n";
         return 1;
     }
+    if (!runServer && allowDevAuthTokens) {
+        std::cerr << "--allow-dev-auth-tokens requires --server mode.\n";
+        return 1;
+    }
     if (!runServer && debugMode) {
         std::cerr << "--debug requires --server mode.\n";
         return 1;
@@ -291,6 +300,14 @@ int main(int argc, char** argv) {
     }
 
     if (runServer) {
+        eds::server_new::auth::AuthServices::setAllowDevAuthTokens(allowDevAuthTokens);
+        if (allowDevAuthTokens) {
+            std::string setEnvError;
+            if (!setEnvVar("EDUSPACE_ALLOW_DEV_AUTH_TOKENS", "1", setEnvError)) {
+                std::cerr << "[auth][bootstrap] " << setEnvError << "\n";
+                return 1;
+            }
+        }
         std::string bootstrapError;
         if (!bootstrapServerDependencies(bootstrapError)) {
             std::cerr << "[bootstrap] " << bootstrapError << "\n";

@@ -12,6 +12,7 @@ namespace eds::server_new::auth {
         std::shared_ptr<ISupabaseAuthVerifier> gVerifier;
         std::string gProjectUrl;
         std::string gPublishableKey;
+        bool gAllowDevAuthTokens = false;
 
         std::string readEnv(const char* name) {
             const char* value = std::getenv(name);
@@ -53,6 +54,16 @@ namespace eds::server_new::auth {
         gProjectUrl = std::move(projectUrl);
         gPublishableKey = std::move(publishableKey);
         gVerifier.reset();
+    }
+
+    void AuthServices::setAllowDevAuthTokens(bool enabled) {
+        std::lock_guard<std::mutex> lock(gAuthServicesMutex);
+        gAllowDevAuthTokens = enabled;
+    }
+
+    bool AuthServices::allowDevAuthTokens() {
+        std::lock_guard<std::mutex> lock(gAuthServicesMutex);
+        return gAllowDevAuthTokens;
     }
 
 } // namespace eds::server_new::auth

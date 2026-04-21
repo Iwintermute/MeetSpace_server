@@ -52,6 +52,7 @@ namespace eds::server_new::mediasoup::signaling {
         void postText(void* session, std::string text);
         void postTexts(void* session, std::vector<std::string> texts);
         void postTextToPeer(std::string peerId, std::string text);
+        void postTextToPeers(std::vector<std::string> peerIds, std::string text);
         bool isPeerConnected(std::string_view peerId);
 
         void startOfflineOutboxDispatcher();

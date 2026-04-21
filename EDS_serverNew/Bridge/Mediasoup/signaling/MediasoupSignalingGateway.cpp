@@ -12,6 +12,7 @@
 #include <iostream>
 #include <nlohmann/json.hpp>
 #include <thread>
+#include <unordered_map>
 #include <unordered_set>
 #include <utility>
 #include <vector>
@@ -215,6 +216,7 @@ namespace eds::server_new::mediasoup::signaling {
             }
         }
 
+
         if (debugMode_) {
             std::cout << "[mediasoup][debug][signaling] disconnected session="
                 << reinterpret_cast<std::uintptr_t>(session)
@@ -240,16 +242,15 @@ namespace eds::server_new::mediasoup::signaling {
                 auto payload = event;
                 payload.erase("deliverTo");
                 const auto serializedEvent = payload.dump();
+                std::vector<std::string> targetPeers;
 
                 if (deliverIt->is_string()) {
                     const auto targetPeer = deliverIt->get<std::string>();
                     if (!targetPeer.empty()) {
-                        postTextToPeer(targetPeer, serializedEvent);
+                        targetPeers.push_back(targetPeer);
                     }
-                    continue;
                 }
-
-                if (deliverIt->is_array()) {
+                else if (deliverIt->is_array()) {
                     for (const auto& item : *deliverIt) {
                         if (!item.is_string()) {
                             continue;
@@ -257,9 +258,13 @@ namespace eds::server_new::mediasoup::signaling {
 
                         const auto targetPeer = item.get<std::string>();
                         if (!targetPeer.empty()) {
-                            postTextToPeer(targetPeer, serializedEvent);
+                            targetPeers.push_back(targetPeer);
                         }
                     }
+                }
+
+                if (!targetPeers.empty()) {
+                    postTextToPeers(std::move(targetPeers), serializedEvent);
                 }
             }
         }
@@ -311,7 +316,7 @@ namespace eds::server_new::mediasoup::signaling {
             }
 
             std::vector<std::string> currentSessionMessages;
-            std::vector<std::pair<std::string, std::string>> peerMessages;
+            std::unordered_map<std::string, std::vector<std::string>> peerMessagesByPayload;
 
             auto queueValidationFailure = [&currentSessionMessages](const std::string& message) {
                 currentSessionMessages.push_back(makeDispatchFailureResponse(message).dump());
@@ -450,7 +455,7 @@ namespace eds::server_new::mediasoup::signaling {
                 if (deliverIt->is_string()) {
                     const auto targetPeer = deliverIt->get<std::string>();
                     if (!targetPeer.empty()) {
-                        peerMessages.emplace_back(targetPeer, serializedEvent);
+                        peerMessagesByPayload[serializedEvent].push_back(targetPeer);
 
                         if (debugMode_) {
                             std::cout << "[mediasoup][debug][signaling] outbound_event"
@@ -474,7 +479,7 @@ namespace eds::server_new::mediasoup::signaling {
                             continue;
                         }
 
-                        peerMessages.emplace_back(targetPeer, serializedEvent);
+                        peerMessagesByPayload[serializedEvent].push_back(targetPeer);
 
                         if (debugMode_) {
                             std::cout << "[mediasoup][debug][signaling] outbound_event"
@@ -503,8 +508,8 @@ namespace eds::server_new::mediasoup::signaling {
             currentSessionMessages.push_back(response.dump());
             postTexts(session, std::move(currentSessionMessages));
 
-            for (auto& item : peerMessages) {
-                postTextToPeer(std::move(item.first), std::move(item.second));
+            for (auto& [payloadText, targetPeers] : peerMessagesByPayload) {
+                postTextToPeers(std::move(targetPeers), std::move(payloadText));
             }
         }
         catch (const std::exception& ex) {
@@ -537,12 +542,15 @@ namespace eds::server_new::mediasoup::signaling {
             return;
         }
 
-        std::unordered_set<std::string> recipients;
+        std::vector<std::string> recipients;
         for (const auto& peerId : event.notifyPeerIds) {
             if (!peerId.empty()) {
-                recipients.insert(peerId);
+                recipients.push_back(peerId);
             }
         }
+
+        std::sort(recipients.begin(), recipients.end());
+        recipients.erase(std::unique(recipients.begin(), recipients.end()), recipients.end());
 
         if (recipients.empty()) {
             return;
@@ -571,9 +579,7 @@ namespace eds::server_new::mediasoup::signaling {
                 << "\n";
         }
 
-        for (const auto& peerId : recipients) {
-            postTextToPeer(peerId, serialized);
-        }
+        postTextToPeers(std::move(recipients), serialized);
     }
 
     std::string MediasoupSignalingGateway::resolveTrustedPeer(void* session) {
@@ -682,58 +688,81 @@ namespace eds::server_new::mediasoup::signaling {
     }
 
     void MediasoupSignalingGateway::postTextToPeer(std::string peerId, std::string text) {
-        if (peerId.empty() || text.empty() || !sendStrand_) {
+        if (peerId.empty() || text.empty()) {
             return;
         }
 
-        boost::asio::post(*sendStrand_, [this, peerId = std::move(peerId), text = std::move(text)]() mutable {
+        std::vector<std::string> peerIds;
+        peerIds.push_back(std::move(peerId));
+        postTextToPeers(std::move(peerIds), std::move(text));
+    }
+
+    void MediasoupSignalingGateway::postTextToPeers(std::vector<std::string> peerIds, std::string text) {
+        if (peerIds.empty() || text.empty() || !sendStrand_) {
+            return;
+        }
+
+        boost::asio::post(*sendStrand_, [this, peerIds = std::move(peerIds), text = std::move(text)]() mutable {
             if (!running_.load() || !wsServer_) {
                 return;
             }
 
-            void* targetSession = nullptr;
-            {
-                std::lock_guard<std::mutex> lock(peersMutex_);
-                auto peerIt = peerToSession_.find(peerId);
-                if (peerIt == peerToSession_.end()) {
-                    if (debugMode_) {
-                        std::cout << "[mediasoup][debug][signaling] sendTextToPeer skipped: target peer not found: "
-                            << peerId
-                            << "\n";
-                    }
-                    return;
-                }
-
-                targetSession = peerIt->second;
+            peerIds.erase(
+                std::remove_if(peerIds.begin(), peerIds.end(), [](const auto& peerId) { return peerId.empty(); }),
+                peerIds.end());
+            if (peerIds.empty()) {
+                return;
             }
 
-            try {
-                const auto sent = wsServer_->sendText(targetSession, text);
+            std::sort(peerIds.begin(), peerIds.end());
+            peerIds.erase(std::unique(peerIds.begin(), peerIds.end()), peerIds.end());
 
-                if (sent) {
-                    forwardedEvents_.fetch_add(1);
+            std::vector<void*> targetSessions;
+            targetSessions.reserve(peerIds.size());
+            {
+                std::lock_guard<std::mutex> lock(peersMutex_);
+                for (const auto& peerId : peerIds) {
+                    auto peerIt = peerToSession_.find(peerId);
+                    if (peerIt == peerToSession_.end()) {
+                        if (debugMode_) {
+                            std::cout << "[mediasoup][debug][signaling] sendTextToPeers skipped: target peer not found: "
+                                << peerId
+                                << "\n";
+                        }
+                        continue;
+                    }
+
+                    targetSessions.push_back(peerIt->second);
+                }
+            }
+
+            if (targetSessions.empty()) {
+                return;
+            }
+
+            std::sort(targetSessions.begin(), targetSessions.end());
+            targetSessions.erase(std::unique(targetSessions.begin(), targetSessions.end()), targetSessions.end());
+
+            try {
+                const auto sentCount = wsServer_->sendTexts(targetSessions, text);
+
+                if (sentCount > 0) {
+                    forwardedEvents_.fetch_add(sentCount);
                 }
                 else if (debugMode_) {
-                    std::cout << "[mediasoup][debug][signaling] sendTextToPeer failed: target="
-                        << peerId
-                        << " session="
-                        << reinterpret_cast<std::uintptr_t>(targetSession)
-                        << "\n";
+                    std::cout << "[mediasoup][debug][signaling] sendTextToPeers failed: no active target sessions\n";
                 }
             }
             catch (const std::exception& ex) {
                 if (debugMode_) {
-                    std::cout << "[mediasoup][debug][signaling] sendTextToPeer exception: target="
-                        << peerId
-                        << " error=" << ex.what()
+                    std::cout << "[mediasoup][debug][signaling] sendTextToPeers exception: error="
+                        << ex.what()
                         << "\n";
                 }
             }
             catch (...) {
                 if (debugMode_) {
-                    std::cout << "[mediasoup][debug][signaling] sendTextToPeer unknown exception: target="
-                        << peerId
-                        << "\n";
+                    std::cout << "[mediasoup][debug][signaling] sendTextToPeers unknown exception\n";
                 }
             }
             });
@@ -837,15 +866,19 @@ namespace eds::server_new::mediasoup::signaling {
                 std::sort(targetPeers.begin(), targetPeers.end());
                 targetPeers.erase(std::unique(targetPeers.begin(), targetPeers.end()), targetPeers.end());
 
-                bool delivered = false;
                 const auto payloadText = payload.dump();
+                std::vector<std::string> connectedPeers;
+                connectedPeers.reserve(targetPeers.size());
                 for (const auto& targetPeer : targetPeers) {
                     if (!isPeerConnected(targetPeer)) {
                         continue;
                     }
+                    connectedPeers.push_back(targetPeer);
+                }
+                const bool delivered = !connectedPeers.empty();
 
-                    postTextToPeer(targetPeer, payloadText);
-                    delivered = true;
+                if (delivered) {
+                    postTextToPeers(std::move(connectedPeers), payloadText);
                 }
 
                 if (delivered) {

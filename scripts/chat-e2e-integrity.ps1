@@ -171,6 +171,7 @@ try {
     Write-Output "[e2e] step=server_start"
     $serverArgs = @(
         "--server",
+        "--allow-dev-auth-tokens",
         "--dev-autostart-mediasoup-backend",
         "--mediasoup-backend-url", $BackendWsUrl,
         "--mediasoup-backend-cmd", $BackendCommand,
