@@ -21,13 +21,24 @@ const MEDIA_CODECS = [
         kind: 'audio',
         mimeType: 'audio/opus',
         clockRate: 48000,
-        channels: 2
+        channels: 2,
+        parameters: {
+            useinbandfec: 1,
+            usedtx: 0,
+            minptime: 10,
+            stereo: 1,
+            'sprop-stereo': 1,
+            maxplaybackrate: 48000
+        }
     },
     {
         kind: 'video',
         mimeType: 'video/VP8',
         clockRate: 90000,
-        parameters: {}
+        parameters: {
+            'x-google-start-bitrate': 3500,
+            'x-google-max-bitrate': 8000
+        }
     }
 ];
 

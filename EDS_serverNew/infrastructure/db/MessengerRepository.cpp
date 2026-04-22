@@ -2332,6 +2332,16 @@ WITH caller_session AS (
        AND us.status = 'connected'
      LIMIT 1
 ),
+caller_profile AS (
+    SELECT
+        COALESCE(up.email::text, au.email::text) AS caller_email,
+        NULLIF(trim(up.display_name), '') AS caller_display_name
+      FROM auth.users au
+      LEFT JOIN app.user_profiles up
+        ON up.user_id = au.id
+     WHERE au.id = $1::uuid
+     LIMIT 1
+),
 upsert_call AS (
     INSERT INTO app.calls (
         public_id,
@@ -2503,6 +2513,8 @@ outbox AS (
             'roomId', c.media_room_id,
             'callerUserId', $1::uuid::text,
             'callerPeerId', $2,
+            'callerEmail', (SELECT caller_email FROM caller_profile),
+            'callerDisplayName', (SELECT caller_display_name FROM caller_profile),
             'targetUserId', $3::uuid::text,
             'status', c.status
         ),
@@ -2542,6 +2554,8 @@ offline_outbox AS (
             'roomId', c.media_room_id,
             'callerUserId', $1::uuid::text,
             'callerPeerId', $2,
+            'callerEmail', (SELECT caller_email FROM caller_profile),
+            'callerDisplayName', (SELECT caller_display_name FROM caller_profile),
             'targetUserId', $3::uuid::text,
             'status', c.status
         ),
@@ -2554,6 +2568,8 @@ SELECT json_build_object(
     'callId', c.public_id,
     'roomId', c.media_room_id,
     'status', c.status,
+    'callerEmail', (SELECT caller_email FROM caller_profile),
+    'callerDisplayName', (SELECT caller_display_name FROM caller_profile),
     'outboundEvents', COALESCE((
         SELECT json_agg(
             json_build_object(
@@ -2563,6 +2579,8 @@ SELECT json_build_object(
                 'roomId', c.media_room_id,
                 'callerUserId', $1::uuid::text,
                 'callerPeerId', $2,
+                'callerEmail', (SELECT caller_email FROM caller_profile),
+                'callerDisplayName', (SELECT caller_display_name FROM caller_profile),
                 'targetUserId', $3::uuid::text,
                 'status', c.status,
                 'deliverTo', s.peer_id
