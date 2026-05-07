@@ -1,50 +1,52 @@
 ﻿cmake_minimum_required(VERSION 3.20)
-project(EduSpace LANGUAGES CXX)
-
+project(MeetSpace LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-
 if(POLICY CMP0141)
   cmake_policy(SET CMP0141 NEW)
 endif()
-
-option(EDUSPACE_BUILD_CLI "Build Cli target" ON)
-option(EDUSPACE_BUILD_SERVER_NEW "Build EDS_serverNew rewrite target" ON)
-
-set(EDUSPACE_CORE_DIR "" CACHE PATH "Path to external EduSpace Core directory")
-
-set(_eduspace_core_candidates "")
-if(EDUSPACE_CORE_DIR)
-  list(APPEND _eduspace_core_candidates "${EDUSPACE_CORE_DIR}")
+option(MEETSPACE_BUILD_CLI "Build Cli target" ON)
+option(MEETSPACE_BUILD_SERVER_NEW "Build EDS_serverNew rewrite target" ON)
+if(DEFINED EDUSPACE_BUILD_CLI)
+  set(MEETSPACE_BUILD_CLI "${EDUSPACE_BUILD_CLI}")
 endif()
-list(APPEND _eduspace_core_candidates
+if(DEFINED EDUSPACE_BUILD_SERVER_NEW)
+  set(MEETSPACE_BUILD_SERVER_NEW "${EDUSPACE_BUILD_SERVER_NEW}")
+endif()
+set(EDUSPACE_BUILD_CLI "${MEETSPACE_BUILD_CLI}" CACHE BOOL "Compatibility alias for legacy option." FORCE)
+set(EDUSPACE_BUILD_SERVER_NEW "${MEETSPACE_BUILD_SERVER_NEW}" CACHE BOOL "Compatibility alias for legacy option." FORCE)
+set(MEETSPACE_CORE_DIR "" CACHE PATH "Path to external MeetSpace Core directory")
+if(NOT MEETSPACE_CORE_DIR AND DEFINED EDUSPACE_CORE_DIR AND EDUSPACE_CORE_DIR)
+  set(MEETSPACE_CORE_DIR "${EDUSPACE_CORE_DIR}" CACHE PATH "Path to external MeetSpace Core directory" FORCE)
+endif()
+set(EDUSPACE_CORE_DIR "${MEETSPACE_CORE_DIR}" CACHE PATH "Compatibility alias for legacy Core path option." FORCE)
+set(_meetspace_core_candidates "")
+if(MEETSPACE_CORE_DIR)
+  list(APPEND _meetspace_core_candidates "${MEETSPACE_CORE_DIR}")
+endif()
+list(APPEND _meetspace_core_candidates
   "${CMAKE_SOURCE_DIR}/../Core"
   "${CMAKE_SOURCE_DIR}/Core"
 )
-
-set(EDUSPACE_RESOLVED_CORE_DIR "")
-foreach(_candidate IN LISTS _eduspace_core_candidates)
+set(MEETSPACE_RESOLVED_CORE_DIR "")
+foreach(_candidate IN LISTS _meetspace_core_candidates)
   if(EXISTS "${_candidate}/CmakeLists.txt" OR EXISTS "${_candidate}/CMakeLists.txt")
-    set(EDUSPACE_RESOLVED_CORE_DIR "${_candidate}")
+    set(MEETSPACE_RESOLVED_CORE_DIR "${_candidate}")
     break()
   endif()
 endforeach()
-
-if(NOT EDUSPACE_RESOLVED_CORE_DIR)
+if(NOT MEETSPACE_RESOLVED_CORE_DIR)
   message(FATAL_ERROR
-    "EduSpace Core was not found. Set EDUSPACE_CORE_DIR to external Core path "
+    "MeetSpace Core was not found. Set MEETSPACE_CORE_DIR (or EDUSPACE_CORE_DIR) to external Core path "
     "or keep Core as ../Core (preferred) / Core (fallback)."
   )
 endif()
-
-message(STATUS "Using EduSpace Core from: ${EDUSPACE_RESOLVED_CORE_DIR}")
-add_subdirectory("${EDUSPACE_RESOLVED_CORE_DIR}" "${CMAKE_BINARY_DIR}/_deps/eduspace_core")
-
-
-if(EDUSPACE_BUILD_CLI)
+set(EDUSPACE_RESOLVED_CORE_DIR "${MEETSPACE_RESOLVED_CORE_DIR}" CACHE PATH "Compatibility alias for legacy resolved Core path." FORCE)
+message(STATUS "Using MeetSpace Core from: ${MEETSPACE_RESOLVED_CORE_DIR}")
+add_subdirectory("${MEETSPACE_RESOLVED_CORE_DIR}" "${CMAKE_BINARY_DIR}/_deps/eduspace_core")
+if(MEETSPACE_BUILD_CLI)
   add_subdirectory(Cli)
 endif()
-
-if(EDUSPACE_BUILD_SERVER_NEW)
+if(MEETSPACE_BUILD_SERVER_NEW)
   add_subdirectory(EDS_serverNew)
 endif()

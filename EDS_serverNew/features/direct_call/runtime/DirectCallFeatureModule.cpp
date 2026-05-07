@@ -128,7 +128,7 @@ namespace eds::server_new::features::direct_call {
             command.trackType = request.context.value("trackType", std::string{});
             command.sdp = request.context.value("sdp", std::string{});
             command.sdpMid = request.context.value("sdpMid", std::string{});
-            command.candidate = request.context.value("candidate", std::string{});
+            command.candidate = extractJsonPayloadField(request.context, "candidate");
             command.dtlsParameters = extractJsonPayloadField(request.context, "dtlsParameters");
             command.rtpParameters = extractJsonPayloadField(request.context, "rtpParameters");
             command.rtpCapabilities = extractJsonPayloadField(request.context, "rtpCapabilities");
@@ -180,6 +180,44 @@ namespace eds::server_new::features::direct_call {
             }
 
             return responseData;
+        }
+
+        bool shouldRetryOpenTransportRecovery(const core::contracts::OperationStatus& status) {
+            return !status.ok
+                && (status.message.find("Peer must join room before opening transport.") != std::string::npos
+                    || status.message.find("Room not found:") != std::string::npos);
+        }
+
+        bool shouldRecreateRoomBeforeRetry(const core::contracts::OperationStatus& status) {
+            return !status.ok && status.message.find("Room not found:") != std::string::npos;
+        }
+
+        MediaTransportCommand buildCreateRoomCommand(
+            const eds::server_new::features::runtime::FeatureDispatchRequest& request,
+            std::string_view roomId) {
+            MediaTransportCommand command;
+            command.sessionHandle = request.sessionHandle;
+            command.sessionId = request.peerId;
+            command.peerId = request.peerId;
+            command.roomId = std::string(roomId);
+            command.correlationId = request.context.value(
+                "correlationId",
+                request.context.value("clientRequestId", std::string("direct_call_open_transport_create_room")));
+            return command;
+        }
+
+        MediaTransportCommand buildJoinSessionCommand(
+            const eds::server_new::features::runtime::FeatureDispatchRequest& request,
+            std::string_view roomId) {
+            MediaTransportCommand command;
+            command.sessionHandle = request.sessionHandle;
+            command.sessionId = request.peerId;
+            command.peerId = request.peerId;
+            command.roomId = std::string(roomId);
+            command.correlationId = request.context.value(
+                "correlationId",
+                request.context.value("clientRequestId", std::string("direct_call_open_transport_rejoin")));
+            return command;
         }
 
         void appendOutboundTransportEvents(
@@ -446,6 +484,56 @@ namespace eds::server_new::features::direct_call {
         std::vector<MediaTransportEvent> mediaEvents;
         auto mediaStatus = transportService_->execute(mediaIntent, mediaCommand, mediaEvents);
 
+        if (mediaIntent == MediaTransportIntent::OpenTransport
+            && shouldRetryOpenTransportRecovery(mediaStatus)) {
+            auto joinCommand = buildJoinSessionCommand(request, roomId);
+            std::vector<MediaTransportEvent> joinEvents;
+            auto joinStatus = transportService_->execute(
+                MediaTransportIntent::JoinSession,
+                joinCommand,
+                joinEvents);
+
+            if (!joinStatus.ok && shouldRecreateRoomBeforeRetry(joinStatus)) {
+                auto createCommand = buildCreateRoomCommand(request, roomId);
+                std::vector<MediaTransportEvent> createEvents;
+                const auto createStatus = transportService_->execute(
+                    MediaTransportIntent::CreateRoom,
+                    createCommand,
+                    createEvents);
+                appendOutboundTransportEvents(
+                    createEvents,
+                    kDirectCallRouteObject,
+                    nlohmann::json{ { "callId", callId } },
+                    result.outboundEvents);
+
+                if (createStatus.ok
+                    || createStatus.message.find("Room already exists") != std::string::npos) {
+                    joinEvents.clear();
+                    joinStatus = transportService_->execute(
+                        MediaTransportIntent::JoinSession,
+                        joinCommand,
+                        joinEvents);
+                }
+                else {
+                    joinStatus = createStatus;
+                }
+            }
+
+            appendOutboundTransportEvents(
+                joinEvents,
+                kDirectCallRouteObject,
+                nlohmann::json{ { "callId", callId } },
+                result.outboundEvents);
+
+            if (joinStatus.ok) {
+                mediaEvents.clear();
+                mediaStatus = transportService_->execute(mediaIntent, mediaCommand, mediaEvents);
+            }
+            else {
+                mediaStatus = joinStatus;
+            }
+        }
+
         appendOutboundTransportEvents(
             mediaEvents,
             kDirectCallRouteObject,
@@ -464,6 +552,11 @@ namespace eds::server_new::features::direct_call {
         const auto participantPeersIt = mediaContextStatus.data.find("participantPeerIds");
         if (participantPeersIt != mediaContextStatus.data.end() && participantPeersIt->is_array()) {
             responseData["participantPeerIds"] = *participantPeersIt;
+            responseData["participant_peer_ids"] = *participantPeersIt;
+            responseData["memberPeerIds"] = *participantPeersIt;
+            responseData["member_peer_ids"] = *participantPeersIt;
+            responseData["activePeerIds"] = *participantPeersIt;
+            responseData["active_peer_ids"] = *participantPeersIt;
         }
 
         if (request.actionType == kActionOpenTransport) {

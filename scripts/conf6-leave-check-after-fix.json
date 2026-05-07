@@ -1,0 +1,194 @@
+﻿{
+  "timestampUtc": "2026-05-02T04:59:42Z",
+  "pass": false,
+  "config": {
+    "host": "127.0.0.1",
+    "port": 9002,
+    "conference_users": 6,
+    "dm_users": 0,
+    "chat_users": 0,
+    "messages_per_chat_user": 0,
+    "action_timeout_s": 10.0,
+    "concurrency": 6,
+    "settle_s": 1.0,
+    "run_id": "conf6leavefix",
+    "user_pool": [
+      "da6c8e61-9d89-4f62-ac21-9d84e76cd1b0",
+      "04692988-fce1-4d31-afb7-2ff16db4c5d9",
+      "9679918e-a5bb-486f-b439-3c979ca24e27",
+      "79dd6d02-c6a2-4866-9307-241c0d66b894",
+      "095b7aa6-3358-477c-a796-d61a14497fa8",
+      "aaac6ea8-0294-4784-ba35-20e65d7ecd47"
+    ]
+  },
+  "clientGroups": {
+    "aliveTotal": 6,
+    "conferenceClients": 6,
+    "dmClients": 0,
+    "chatClients": 0,
+    "conferencePairs": 3,
+    "dmPairs": 0,
+    "chatPairs": 0
+  },
+  "metrics": {
+    "connectOk": 6,
+    "connectFail": 0,
+    "authOk": 6,
+    "authFail": 0,
+    "operationsTotal": 84,
+    "operationsOk": 78,
+    "operationsFail": 6,
+    "operationFailureRate": 0.0714,
+    "criticalSuccessRate": {
+      "conference.open_transport": 1.0,
+      "direct_call.open_transport": 0.0,
+      "direct_call.create_call": 0.0,
+      "direct_call.accept_call": 0.0,
+      "direct_chat.send_message": 0.0
+    },
+    "events": {
+      "conference_member_joined": 3,
+      "transport_opened": 6,
+      "track_published": 12,
+      "consumer_resumed": 12
+    },
+    "latencyMs": {
+      "auth.bind_session": {
+        "count": 6,
+        "p50": 428.295,
+        "p95": 538.5,
+        "p99": 554.48,
+        "max": 558.475,
+        "avg": 442.338
+      },
+      "conference.create": {
+        "count": 3,
+        "p50": 87.372,
+        "p95": 94.701,
+        "p99": 95.352,
+        "max": 95.515,
+        "avg": 89.303
+      },
+      "conference.join": {
+        "count": 6,
+        "p50": 86.78,
+        "p95": 110.593,
+        "p99": 112.519,
+        "max": 113.001,
+        "avg": 90.81
+      },
+      "conference.open_transport": {
+        "count": 6,
+        "p50": 84.842,
+        "p95": 134.08,
+        "p99": 145.691,
+        "max": 148.594,
+        "avg": 94.026
+      },
+      "conference.webrtc_offer": {
+        "count": 6,
+        "p50": 80.0,
+        "p95": 84.356,
+        "p99": 84.578,
+        "max": 84.634,
+        "avg": 79.275
+      },
+      "conference.webrtc_ice": {
+        "count": 6,
+        "p50": 80.553,
+        "p95": 149.387,
+        "p99": 149.861,
+        "max": 149.979,
+        "avg": 100.931
+      },
+      "conference.publish_track": {
+        "count": 12,
+        "p50": 92.785,
+        "p95": 167.911,
+        "p99": 179.335,
+        "max": 182.192,
+        "avg": 109.124
+      },
+      "conference.consume_track": {
+        "count": 12,
+        "p50": 93.004,
+        "p95": 131.723,
+        "p99": 144.941,
+        "max": 148.245,
+        "avg": 100.719
+      },
+      "conference.consumer_ready": {
+        "count": 12,
+        "p50": 89.173,
+        "p95": 159.105,
+        "p99": 162.271,
+        "max": 163.062,
+        "avg": 103.912
+      },
+      "conference.media_stats": {
+        "count": 6,
+        "p50": 91.604,
+        "p95": 149.032,
+        "p99": 152.793,
+        "max": 153.733,
+        "avg": 107.072
+      },
+      "conference.leave": {
+        "count": 6,
+        "p50": 10011.692,
+        "p95": 10018.746,
+        "p99": 10018.916,
+        "max": 10018.959,
+        "avg": 10012.255
+      },
+      "conference.close": {
+        "count": 3,
+        "p50": 90.023,
+        "p95": 97.736,
+        "p99": 98.421,
+        "max": 98.593,
+        "avg": 90.103
+      }
+    },
+    "stageSeconds": {
+      "connect_auth": 0.61,
+      "conference_group": 22.493,
+      "direct_call_group": 0.0,
+      "direct_chat_group": 0.0,
+      "settle": 1.005,
+      "total": 24.152
+    },
+    "failureSample": [
+      {
+        "op": "conference.leave",
+        "code": "transport_exception",
+        "message": "TimeoutError: "
+      },
+      {
+        "op": "conference.leave",
+        "code": "transport_exception",
+        "message": "TimeoutError: "
+      },
+      {
+        "op": "conference.leave",
+        "code": "transport_exception",
+        "message": "TimeoutError: "
+      },
+      {
+        "op": "conference.leave",
+        "code": "transport_exception",
+        "message": "TimeoutError: "
+      },
+      {
+        "op": "conference.leave",
+        "code": "transport_exception",
+        "message": "TimeoutError: "
+      },
+      {
+        "op": "conference.leave",
+        "code": "transport_exception",
+        "message": "TimeoutError: "
+      }
+    ]
+  }
+}

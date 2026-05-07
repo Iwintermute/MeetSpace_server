@@ -9,6 +9,7 @@
 #include <algorithm>
 
 #include <chrono>
+#include <cctype>
 #include <iostream>
 #include <nlohmann/json.hpp>
 #include <thread>
@@ -21,14 +22,15 @@ namespace eds::server_new::mediasoup::signaling {
     using json = nlohmann::json;
 
     namespace {
-
-        json makeDispatchFailureResponse(const std::string& message) {
-            return json{
-                { "type", "dispatch_result" },
-                { "ok", false },
-                { "message", message }
-            };
-        }
+        struct InboundRequestEnvelope {
+            int contractVersion = 1;
+            std::string objectType;
+            std::string agentType;
+            std::string actionType;
+            json context = json::object();
+            std::string correlationId;
+            std::string messageType;
+        };
 
         bool shouldAttachData(const json& value) {
             if (value.is_null()) {
@@ -42,17 +44,241 @@ namespace eds::server_new::mediasoup::signaling {
             return true;
         }
 
-        json extractContextObject(const json& request) {
-            const auto ctxIt = request.find("ctx");
-            if (ctxIt == request.end() || ctxIt->is_null()) {
-                return json::object();
+        std::string toLowerCopy(std::string value) {
+            std::transform(value.begin(), value.end(), value.begin(), [](unsigned char symbol) {
+                return static_cast<char>(std::tolower(symbol));
+                });
+            return value;
+        }
+
+        std::string deriveErrorCodeFromMessage(const std::string& message) {
+            const auto lowered = toLowerCopy(message);
+            if (lowered.find("unauthorized") != std::string::npos) {
+                return "unauthorized";
+            }
+            if (lowered.find("forbidden") != std::string::npos
+                || lowered.find("disabled") != std::string::npos) {
+                return "forbidden";
+            }
+            if (lowered.find("not found") != std::string::npos) {
+                return "not_found";
+            }
+            if (lowered.find("timeout") != std::string::npos) {
+                return "timeout";
+            }
+            if (lowered.find("must not be empty") != std::string::npos
+                || lowered.find("invalid") != std::string::npos
+                || lowered.find("json") != std::string::npos) {
+                return "validation_error";
+            }
+            return "dispatch_failed";
+        }
+
+        std::string readStringField(const json& source, std::initializer_list<const char*> names) {
+            for (const auto* name : names) {
+                if (name == nullptr || name[0] == '\0') {
+                    continue;
+                }
+
+                const auto it = source.find(name);
+                if (it == source.end() || it->is_null()) {
+                    continue;
+                }
+                if (it->is_string()) {
+                    return it->get<std::string>();
+                }
+                if (it->is_number_integer() || it->is_number_unsigned() || it->is_number_float() || it->is_boolean()) {
+                    return it->dump();
+                }
             }
 
-            if (!ctxIt->is_object()) {
-                throw std::runtime_error("ctx must be a JSON object.");
+            return {};
+        }
+
+        bool extractContextObject(const json& source, json& context, std::string& error) {
+            for (const auto* name : { "ctx", "context" }) {
+                const auto ctxIt = source.find(name);
+                if (ctxIt == source.end() || ctxIt->is_null()) {
+                    continue;
+                }
+
+                if (!ctxIt->is_object()) {
+                    error = std::string(name) + " must be a JSON object.";
+                    return false;
+                }
+
+                context = *ctxIt;
+                return true;
             }
 
-            return *ctxIt;
+            context = json::object();
+            error.clear();
+            return true;
+        }
+
+        bool parseInboundRequestEnvelope(
+            const json& request,
+            InboundRequestEnvelope& envelope,
+            std::string& error) {
+            envelope = InboundRequestEnvelope{};
+            error.clear();
+
+            if (!request.is_object()) {
+                error = "request root must be a JSON object.";
+                return false;
+            }
+
+            const auto legacyType = readStringField(request, { "type", "messageType", "message_type" });
+            const auto kind = readStringField(request, { "kind" });
+            envelope.messageType = legacyType.empty() ? kind : legacyType;
+
+            if (const auto versionIt = request.find("v");
+                versionIt != request.end() && versionIt->is_number_integer()) {
+                envelope.contractVersion = std::max(1, versionIt->get<int>());
+            }
+            else if (const auto versionText = readStringField(request, { "version" }); !versionText.empty()) {
+                try {
+                    envelope.contractVersion = std::max(1, std::stoi(versionText));
+                }
+                catch (...) {
+                    envelope.contractVersion = 1;
+                }
+            }
+
+            const json* commandNode = &request;
+            if (const auto requestNode = request.find("request");
+                requestNode != request.end() && requestNode->is_object()) {
+                commandNode = &(*requestNode);
+                envelope.contractVersion = std::max(2, envelope.contractVersion);
+            }
+
+            envelope.objectType = readStringField(*commandNode, { "object", "obj", "feature" });
+            envelope.agentType = readStringField(*commandNode, { "agent", "module" });
+            envelope.actionType = readStringField(*commandNode, { "action", "operation", "op" });
+
+            if (envelope.objectType.empty()) {
+                envelope.objectType = readStringField(request, { "object", "obj", "feature" });
+            }
+            if (envelope.agentType.empty()) {
+                envelope.agentType = readStringField(request, { "agent", "module" });
+            }
+            if (envelope.actionType.empty()) {
+                envelope.actionType = readStringField(request, { "action", "operation", "op" });
+            }
+
+            if (!extractContextObject(*commandNode, envelope.context, error)) {
+                return false;
+            }
+            if (envelope.context.empty()) {
+                if (!extractContextObject(request, envelope.context, error)) {
+                    return false;
+                }
+            }
+
+            envelope.correlationId = readStringField(
+                envelope.context,
+                { "correlationId", "clientRequestId", "requestId" });
+
+            auto requestId = readStringField(*commandNode, { "id", "requestId" });
+            if (requestId.empty()) {
+                requestId = readStringField(request, { "requestId", "id" });
+            }
+            if (envelope.correlationId.empty()) {
+                envelope.correlationId = requestId;
+            }
+
+            if (!envelope.correlationId.empty()) {
+                envelope.context["correlationId"] = envelope.correlationId;
+                envelope.context["clientRequestId"] = envelope.correlationId;
+                envelope.context["requestId"] = envelope.correlationId;
+            }
+
+            return true;
+        }
+
+        void applyContractV2Response(
+            json& response,
+            int contractVersion,
+            const std::string& correlationId,
+            bool ok,
+            const std::string& message,
+            const json& data,
+            const json& errorDetails,
+            std::string errorCode = {}) {
+            if (contractVersion < 2) {
+                return;
+            }
+
+            response["v"] = 2;
+            response["kind"] = "response";
+            if (!correlationId.empty()) {
+                response["requestId"] = correlationId;
+            }
+
+            json result{
+                { "ok", ok },
+                { "message", message }
+            };
+            if (shouldAttachData(data)) {
+                result["data"] = data;
+            }
+            response["result"] = std::move(result);
+
+            if (!ok) {
+                if (errorCode.empty()) {
+                    errorCode = deriveErrorCodeFromMessage(message);
+                }
+
+                json error{
+                    { "code", std::move(errorCode) },
+                    { "message", message }
+                };
+                if (shouldAttachData(errorDetails)) {
+                    error["details"] = errorDetails;
+                }
+                response["error"] = std::move(error);
+            }
+        }
+
+        json makeDispatchFailureResponse(
+            const std::string& message,
+            std::string errorCode = "validation_error",
+            int contractVersion = 1,
+            const std::string& correlationId = {},
+            const std::string& objectType = {},
+            const std::string& agentType = {},
+            const std::string& actionType = {},
+            json errorDetails = json::object()) {
+            json response{
+                { "type", "dispatch_result" },
+                { "ok", false },
+                { "message", message }
+            };
+
+            if (!objectType.empty()) {
+                response["object"] = objectType;
+            }
+            if (!agentType.empty()) {
+                response["agent"] = agentType;
+            }
+            if (!actionType.empty()) {
+                response["action"] = actionType;
+            }
+            if (!correlationId.empty()) {
+                response["correlationId"] = correlationId;
+                response["clientRequestId"] = correlationId;
+            }
+
+            applyContractV2Response(
+                response,
+                contractVersion,
+                correlationId,
+                false,
+                message,
+                json::object(),
+                std::move(errorDetails),
+                std::move(errorCode));
+            return response;
         }
 
         constexpr std::size_t kOfflineOutboxBatchSize = 16;
@@ -66,11 +292,13 @@ namespace eds::server_new::mediasoup::signaling {
         ApplicationApi& app,
         unsigned short wsPort,
         bool allowDirectMediasoupDebug,
-        bool debugMode)
+        bool debugMode,
+        transport::WebSocketTlsOptions tlsOptions)
         : app_(app),
         wsPort_(wsPort),
         allowDirectMediasoupDebug_(allowDirectMediasoupDebug),
-        debugMode_(debugMode) {
+        debugMode_(debugMode),
+        tlsOptions_(std::move(tlsOptions)) {
     }
 
     MediasoupSignalingGateway::~MediasoupSignalingGateway() {
@@ -90,7 +318,7 @@ namespace eds::server_new::mediasoup::signaling {
 
         sendStrand_ = std::make_unique<SendStrand>(boost::asio::make_strand(ioContext_.io()));
 
-        wsServer_ = std::make_unique<transport::WebSocketServer>(ioContext_.io(), wsPort_);
+        wsServer_ = std::make_unique<transport::WebSocketServer>(ioContext_.io(), wsPort_, tlsOptions_);
         wsServer_->setOnConnected([this](void* session) { onConnected(session); });
         wsServer_->setOnDisconnected([this](void* session) { onDisconnected(session); });
         wsServer_->setOnMessage([this](const std::string& text, void* session) { onMessage(text, session); });
@@ -123,7 +351,9 @@ namespace eds::server_new::mediasoup::signaling {
         }
 
         if (debugMode_) {
-            std::cout << "[mediasoup][debug][signaling] gateway started on port "
+            std::cout << "[mediasoup][debug][signaling] gateway started on "
+                << (tlsOptions_.enabled ? "wss://" : "ws://")
+                << "0.0.0.0:"
                 << wsPort_
                 << ".\n";
         }
@@ -178,6 +408,17 @@ namespace eds::server_new::mediasoup::signaling {
     void MediasoupSignalingGateway::onConnected(void* session) {
         if (!running_.load() || session == nullptr) {
             return;
+        }
+
+        {
+            std::lock_guard<std::mutex> lock(peersMutex_);
+            if (sessionToPeer_.size() >= kMaxConcurrentConnections) {
+                if (debugMode_) {
+                    std::cout << "[mediasoup][debug][signaling] connection rejected: max "
+                        << kMaxConcurrentConnections << " concurrent connections reached.\n";
+                }
+                return;
+            }
         }
 
         const auto trustedPeer = resolveTrustedPeer(session);
@@ -287,21 +528,43 @@ namespace eds::server_new::mediasoup::signaling {
             return;
         }
 
+        {
+            std::lock_guard<std::mutex> lock(peersMutex_);
+            auto& rate = peerRateState_[session];
+            const auto now = std::chrono::steady_clock::now();
+            if (now - rate.windowStart >= std::chrono::seconds(1)) {
+                rate.messageCount = 0;
+                rate.windowStart = now;
+            }
+            ++rate.messageCount;
+            if (rate.messageCount > kMaxMessagesPerSecondPerPeer) {
+                return;
+            }
+        }
+
         const auto messageNo = receivedMessages_.fetch_add(1) + 1;
 
         try {
             const auto trustedPeer = resolveTrustedPeer(session);
             const auto request = json::parse(text);
-
-            if (!request.is_object()) {
-                postText(session, makeDispatchFailureResponse("request root must be a JSON object.").dump());
+            InboundRequestEnvelope inbound;
+            std::string parseError;
+            if (!parseInboundRequestEnvelope(request, inbound, parseError)) {
+                postText(
+                    session,
+                    makeDispatchFailureResponse(
+                        parseError,
+                        "invalid_request",
+                        inbound.contractVersion).dump());
                 return;
             }
 
-            const auto messageType = request.value("type", std::string{});
-            const auto objectType = request.value("object", std::string{});
-            const auto agentType = request.value("agent", std::string{});
-            const auto actionType = request.value("action", std::string{});
+            const auto& messageType = inbound.messageType;
+            const auto& objectType = inbound.objectType;
+            const auto& agentType = inbound.agentType;
+            const auto& actionType = inbound.actionType;
+            const auto& correlationId = inbound.correlationId;
+            const auto contractVersion = inbound.contractVersion;
             const bool directMediasoupRequested = objectType == std::string(kRouteObject);
 
             if (debugMode_) {
@@ -317,41 +580,45 @@ namespace eds::server_new::mediasoup::signaling {
 
             std::vector<std::string> currentSessionMessages;
             std::unordered_map<std::string, std::vector<std::string>> peerMessagesByPayload;
-
-            auto queueValidationFailure = [&currentSessionMessages](const std::string& message) {
-                currentSessionMessages.push_back(makeDispatchFailureResponse(message).dump());
+            auto queueValidationFailure = [&](const std::string& message, const std::string& code) {
+                currentSessionMessages.push_back(
+                    makeDispatchFailureResponse(
+                        message,
+                        code,
+                        contractVersion,
+                        correlationId,
+                        objectType,
+                        agentType,
+                        actionType).dump());
                 };
 
             if (messageType == "audio_data") {
                 queueValidationFailure(
-                    "audio_data over signaling websocket is forbidden. Use mediasoup WebRTC transport for media flow.");
+                    "audio_data over signaling websocket is forbidden. Use mediasoup WebRTC transport for media flow.",
+                    "forbidden");
                 postTexts(session, std::move(currentSessionMessages));
                 return;
             }
 
             if (actionType.empty()) {
-                queueValidationFailure("action must not be empty.");
+                queueValidationFailure("action must not be empty.", "validation_error");
                 postTexts(session, std::move(currentSessionMessages));
                 return;
             }
 
             if (objectType.empty()) {
-                queueValidationFailure("object must not be empty.");
+                queueValidationFailure("object must not be empty.", "validation_error");
                 postTexts(session, std::move(currentSessionMessages));
                 return;
             }
 
             if (directMediasoupRequested && !allowDirectMediasoupDebug_) {
                 queueValidationFailure(
-                    "Direct mediasoup control is disabled. Use feature-level orchestration actions.");
+                    "Direct mediasoup control is disabled. Use feature-level orchestration actions.",
+                    "forbidden");
                 postTexts(session, std::move(currentSessionMessages));
                 return;
             }
-
-            const auto context = extractContextObject(request);
-            const auto correlationId = context.value(
-                "correlationId",
-                context.value("clientRequestId", std::string{}));
 
             eds::server_new::features::runtime::FeatureDispatchRequest dispatchRequest;
             dispatchRequest.sessionHandle = reinterpret_cast<std::uintptr_t>(session);
@@ -359,7 +626,7 @@ namespace eds::server_new::mediasoup::signaling {
             dispatchRequest.objectType = objectType;
             dispatchRequest.agentType = agentType;
             dispatchRequest.actionType = actionType;
-            dispatchRequest.context = context;
+            dispatchRequest.context = inbound.context;
 
             auto dispatchResult = app_.dispatchFeature(dispatchRequest);
             const auto& status = dispatchResult.status;
@@ -425,12 +692,29 @@ namespace eds::server_new::mediasoup::signaling {
                 response["note"] = "Direct mediasoup mode is enabled for isolated tests only.";
             }
 
+            json v2Data = json::object();
+            if (response.contains("data")) {
+                v2Data = response["data"];
+            }
+            applyContractV2Response(
+                response,
+                contractVersion,
+                correlationId,
+                status.ok,
+                response.value("message", status.message),
+                v2Data,
+                status.ok ? json::object() : status.data);
+
             for (const auto& event : dispatchResult.outboundEvents) {
                 if (!event.is_object()) {
                     continue;
                 }
 
                 auto outboundEvent = event;
+                if (contractVersion >= 2) {
+                    outboundEvent["v"] = 2;
+                    outboundEvent["kind"] = "event";
+                }
                 const auto eventType = outboundEvent.value("type", std::string("unknown"));
                 const auto deliverIt = outboundEvent.find("deliverTo");
 
@@ -513,22 +797,18 @@ namespace eds::server_new::mediasoup::signaling {
             }
         }
         catch (const std::exception& ex) {
-            json response{
-                { "type", "dispatch_result" },
-                { "ok", false },
-                { "message", std::string("invalid request: ") + ex.what() }
-            };
-
-            postText(session, response.dump());
+            postText(
+                session,
+                makeDispatchFailureResponse(
+                    std::string("invalid request: ") + ex.what(),
+                    "invalid_request").dump());
         }
         catch (...) {
-            json response{
-                { "type", "dispatch_result" },
-                { "ok", false },
-                { "message", "invalid request: unknown exception." }
-            };
-
-            postText(session, response.dump());
+            postText(
+                session,
+                makeDispatchFailureResponse(
+                    "invalid request: unknown exception.",
+                    "invalid_request").dump());
         }
     }
 

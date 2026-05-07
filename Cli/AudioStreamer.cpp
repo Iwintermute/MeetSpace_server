@@ -2,6 +2,48 @@
 #include <iostream>
 #include <algorithm>
 #include <cmath>
+#include <cctype>
+#include <cstdlib>
+#include <limits>
+
+namespace {
+    std::string trimCopy(const std::string& value) {
+        auto begin = value.begin();
+        auto end = value.end();
+        while (begin != end && std::isspace(static_cast<unsigned char>(*begin))) {
+            ++begin;
+        }
+        while (end != begin && std::isspace(static_cast<unsigned char>(*(end - 1)))) {
+            --end;
+        }
+        return std::string(begin, end);
+    }
+
+    std::string toLowerCopy(const std::string& value) {
+        std::string lowered = value;
+        std::transform(
+            lowered.begin(),
+            lowered.end(),
+            lowered.begin(),
+            [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
+        return lowered;
+    }
+
+    int tryParseDeviceIndex(const std::string& value) {
+        if (value.empty()) {
+            return -1;
+        }
+        char* end = nullptr;
+        const auto parsed = std::strtol(value.c_str(), &end, 10);
+        if (end == value.c_str() || *end != '\0') {
+            return -1;
+        }
+        if (parsed < 0 || parsed > std::numeric_limits<int>::max()) {
+            return -1;
+        }
+        return static_cast<int>(parsed);
+    }
+}
 
 // Конструктор
 AudioStreamer::AudioStreamer(websocket::stream<beast::tcp_stream>& websocket)
@@ -21,12 +63,17 @@ AudioStreamer::AudioStreamer(websocket::stream<beast::tcp_stream>& websocket)
     , sequenceNumber(0)
     , signalingTransportWarningShown(false)
     , lastPlayedSequence(0)
+    , agcSmoothedGain(1.0f)
 {
     // Инициализация буферов
     captureBuffer.resize(config.frameSize * config.channels);
     playbackBuffer.resize(config.frameSize * config.channels, 0.0f);
     encodeBuffer.resize(1275); // Максимальный размер пакета Opus
     resampleBuffer.resize(config.frameSize * config.channels * 2);
+    highPassPrevInput.resize(config.channels, 0.0f);
+    highPassPrevOutput.resize(config.channels, 0.0f);
+    activeInputDeviceName = "default";
+    activeOutputDeviceName = "default";
 }
 
 // Деструктор
@@ -38,11 +85,17 @@ AudioStreamer::~AudioStreamer() {
 bool AudioStreamer::initialize(const AudioConfig& cfg) {
     state = StreamerState::INITIALIZING;
     config = cfg;
+    if (config.channels <= 0) {
+        config.channels = 1;
+    }
+    agcSmoothedGain = 1.0f;
     signalingTransportWarningShown.store(false);
 
     // Изменяем размеры буферов под новую конфигурацию
     captureBuffer.resize(config.frameSize * config.channels);
     playbackBuffer.resize(config.frameSize * config.channels, 0.0f);
+    highPassPrevInput.assign(config.channels, 0.0f);
+    highPassPrevOutput.assign(config.channels, 0.0f);
 
     if (!initializePortAudio()) {
         state = StreamerState::ERR;
@@ -115,12 +168,44 @@ bool AudioStreamer::startCapture() {
         return false;
     }
 
-    PaError err = Pa_OpenDefaultStream(&captureStream,
-        config.channels,           // input channels
-        0,                         // output channels
-        paFloat32,                 // sample format
+    std::string deviceName;
+    std::string resolveError;
+    const auto inputDeviceIndex = resolveInputDeviceIndex(deviceName, resolveError);
+    if (inputDeviceIndex < 0) {
+        triggerEvent(AudioEventType::DEVICE_ERROR, "Failed to resolve input device: " + resolveError);
+        return false;
+    }
+
+    const auto* inputInfo = Pa_GetDeviceInfo(inputDeviceIndex);
+    if (inputInfo == nullptr || inputInfo->maxInputChannels <= 0) {
+        triggerEvent(AudioEventType::DEVICE_ERROR, "Selected input device has no capture channels.");
+        return false;
+    }
+
+    PaStreamParameters inputParams{};
+    inputParams.device = inputDeviceIndex;
+    inputParams.channelCount = std::min(config.channels, inputInfo->maxInputChannels);
+    if (inputParams.channelCount <= 0) {
+        inputParams.channelCount = 1;
+    }
+    inputParams.sampleFormat = paFloat32;
+    inputParams.suggestedLatency = inputInfo->defaultLowInputLatency;
+    inputParams.hostApiSpecificStreamInfo = nullptr;
+
+    config.channels = inputParams.channelCount;
+    captureBuffer.assign(static_cast<std::size_t>(config.frameSize * config.channels), 0.0f);
+    highPassPrevInput.assign(config.channels, 0.0f);
+    highPassPrevOutput.assign(config.channels, 0.0f);
+    agcSmoothedGain = 1.0f;
+    activeInputDeviceName = deviceName;
+
+    PaError err = Pa_OpenStream(
+        &captureStream,
+        &inputParams,
+        nullptr,
         config.sampleRate,
-        config.frameSize,          // frames per buffer
+        config.frameSize,
+        paNoFlag,
         captureCallback,
         this);
 
@@ -144,7 +229,7 @@ bool AudioStreamer::startCapture() {
     }
 
     state = (playbackStream != nullptr) ? StreamerState::STREAMING : StreamerState::CAPTURING;
-    triggerEvent(AudioEventType::STREAM_STARTED, "Capture started");
+    triggerEvent(AudioEventType::STREAM_STARTED, "Capture started (input: " + activeInputDeviceName + ")");
 
     return true;
 }
@@ -161,12 +246,38 @@ bool AudioStreamer::startPlayback() {
         return false;
     }
 
-    PaError err = Pa_OpenDefaultStream(&playbackStream,
-        0,                         // input channels
-        config.channels,           // output channels
-        paFloat32,                 // sample format
+    std::string deviceName;
+    std::string resolveError;
+    const auto outputDeviceIndex = resolveOutputDeviceIndex(deviceName, resolveError);
+    if (outputDeviceIndex < 0) {
+        triggerEvent(AudioEventType::DEVICE_ERROR, "Failed to resolve output device: " + resolveError);
+        return false;
+    }
+
+    const auto* outputInfo = Pa_GetDeviceInfo(outputDeviceIndex);
+    if (outputInfo == nullptr || outputInfo->maxOutputChannels <= 0) {
+        triggerEvent(AudioEventType::DEVICE_ERROR, "Selected output device has no playback channels.");
+        return false;
+    }
+
+    PaStreamParameters outputParams{};
+    outputParams.device = outputDeviceIndex;
+    outputParams.channelCount = std::min(config.channels, outputInfo->maxOutputChannels);
+    if (outputParams.channelCount <= 0) {
+        outputParams.channelCount = 1;
+    }
+    outputParams.sampleFormat = paFloat32;
+    outputParams.suggestedLatency = outputInfo->defaultLowOutputLatency;
+    outputParams.hostApiSpecificStreamInfo = nullptr;
+    activeOutputDeviceName = deviceName;
+
+    PaError err = Pa_OpenStream(
+        &playbackStream,
+        nullptr,
+        &outputParams,
         config.sampleRate,
-        config.frameSize,          // frames per buffer
+        config.frameSize,
+        paNoFlag,
         playbackCallback,
         this);
 
@@ -193,7 +304,7 @@ bool AudioStreamer::startPlayback() {
     }
 
     state = (captureStream != nullptr) ? StreamerState::STREAMING : StreamerState::PLAYING;
-    triggerEvent(AudioEventType::STREAM_STARTED, "Playback started");
+    triggerEvent(AudioEventType::STREAM_STARTED, "Playback started (output: " + activeOutputDeviceName + ")");
 
     return true;
 }
@@ -205,36 +316,39 @@ int AudioStreamer::captureCallback(const void* input, void* output,
     PaStreamCallbackFlags statusFlags,
     void* userData) {
     auto* self = static_cast<AudioStreamer*>(userData);
-
-    if (!input || !self) return paContinue;
+    if (!input || !self) {
+        return paContinue;
+    }
+    if (statusFlags & paInputOverflow) {
+        self->triggerEvent(AudioEventType::BUFFER_OVERFLOW, "Capture input overflow");
+    }
 
     const float* in = static_cast<const float*>(input);
+    const auto channels = static_cast<std::size_t>(std::max(1, self->config.channels));
+    const auto totalSamples = static_cast<std::size_t>(frameCount) * channels;
+    if (totalSamples == 0) {
+        return paContinue;
+    }
 
-    // Копируем данные в буфер
     std::lock_guard<std::mutex> lock(self->captureMutex);
-    std::copy(in, in + frameCount, self->captureBuffer.begin());
+    if (self->captureBuffer.size() < totalSamples) {
+        self->captureBuffer.resize(totalSamples, 0.0f);
+    }
+    std::copy(in, in + totalSamples, self->captureBuffer.begin());
+    self->processCaptureBuffer(frameCount);
 
-    // Вычисляем RMS (Root Mean Square) энергию сигнала
     float sumSquares = 0.0f;
-    for (size_t i = 0; i < frameCount; ++i) {
+    for (std::size_t i = 0; i < totalSamples; ++i) {
         sumSquares += self->captureBuffer[i] * self->captureBuffer[i];
     }
-    float rms = std::sqrt(sumSquares / frameCount);
+    const auto rms = std::sqrt(sumSquares / static_cast<float>(totalSamples));
+    constexpr float kSilenceDropThreshold = 0.0012f;
 
-    // Порог тишины (экспериментально подобранное значение)
-    const float SILENCE_THRESHOLD = 0.020f;
-
-    // Если есть звук выше порога - добавляем в очередь
-    if (rms > SILENCE_THRESHOLD) {
-        if (self->captureQueue.size() < 10) {
-            // Применяем усиление если нужно
-            if (self->config.volume != 1.0f) {
-                for (size_t i = 0; i < frameCount; ++i) {
-                    self->captureBuffer[i] *= self->config.volume;
-                }
-            }
-            self->captureQueue.push(self->captureBuffer);
+    if (rms >= kSilenceDropThreshold || !self->config.noiseSuppression) {
+        if (self->captureQueue.size() >= 10) {
+            self->captureQueue.pop();
         }
+        self->captureQueue.push(self->captureBuffer);
     }
     // else - тишина, ничего не добавляем в очередь
 
@@ -248,21 +362,31 @@ int AudioStreamer::playbackCallback(const void* input, void* output,
     PaStreamCallbackFlags statusFlags,
     void* userData) {
     auto* self = static_cast<AudioStreamer*>(userData);
-
-    if (!output || !self) return paContinue;
+    if (!output || !self) {
+        return paContinue;
+    }
+    if (statusFlags & paOutputUnderflow) {
+        self->triggerEvent(AudioEventType::BUFFER_UNDERRUN, "Playback output underflow");
+    }
 
     float* out = static_cast<float*>(output);
+    const auto channels = static_cast<std::size_t>(std::max(1, self->config.channels));
+    const auto totalSamples = static_cast<std::size_t>(frameCount) * channels;
 
     std::lock_guard<std::mutex> lock(self->receiveMutex);
 
     if (!self->playbackBuffer.empty()) {
+        const auto copyCount = std::min(totalSamples, self->playbackBuffer.size());
         std::copy(self->playbackBuffer.begin(),
-            self->playbackBuffer.begin() + frameCount,
+            self->playbackBuffer.begin() + copyCount,
             out);
+        if (copyCount < totalSamples) {
+            std::fill(out + copyCount, out + totalSamples, 0.0f);
+        }
     }
     else {
         // Тишина если нет данных
-        std::fill(out, out + frameCount, 0.0f);
+        std::fill(out, out + totalSamples, 0.0f);
         self->triggerEvent(AudioEventType::BUFFER_UNDERRUN, "Playback buffer underrun");
     }
 
@@ -331,7 +455,12 @@ void AudioStreamer::decodeLoop() {
 
             if (decodedSamples > 0) {
                 std::lock_guard<std::mutex> lock(receiveMutex);
-                playbackBuffer = decodedAudio;
+                const auto channels = static_cast<std::size_t>(std::max(1, config.channels));
+                const auto decodedSampleCount = static_cast<std::size_t>(decodedSamples) * channels;
+                playbackBuffer.assign(decodedAudio.begin(), decodedAudio.begin() + std::min(decodedSampleCount, decodedAudio.size()));
+                if (playbackBuffer.size() < decodedAudio.size()) {
+                    playbackBuffer.resize(decodedAudio.size(), 0.0f);
+                }
 
                 // Проверка на потерю пакетов
                 uint32_t expectedSeq = lastPlayedSequence + 1;
@@ -398,6 +527,173 @@ void AudioStreamer::processJitterBuffer() {
         packetsLost++;
         lastPlayedSequence++;
     }
+}
+
+void AudioStreamer::processCaptureBuffer(unsigned long frameCount) {
+    const auto channels = static_cast<std::size_t>(std::max(1, config.channels));
+    const auto totalSamples = static_cast<std::size_t>(frameCount) * channels;
+    if (totalSamples == 0 || captureBuffer.size() < totalSamples) {
+        return;
+    }
+    if (highPassPrevInput.size() != channels) {
+        highPassPrevInput.assign(channels, 0.0f);
+    }
+    if (highPassPrevOutput.size() != channels) {
+        highPassPrevOutput.assign(channels, 0.0f);
+    }
+
+    const auto safeSampleRate = static_cast<float>(std::max(8000, config.sampleRate));
+    const float dt = 1.0f / safeSampleRate;
+    constexpr float kHighPassCutoffHz = 85.0f;
+    const float rc = 1.0f / (2.0f * 3.14159265f * kHighPassCutoffHz);
+    const float highPassAlpha = rc / (rc + dt);
+
+    float sumSquares = 0.0f;
+    for (std::size_t frame = 0; frame < frameCount; ++frame) {
+        for (std::size_t channel = 0; channel < channels; ++channel) {
+            const auto index = frame * channels + channel;
+            auto sample = captureBuffer[index];
+
+            if (config.echoCancellation) {
+                const auto filtered = highPassAlpha * (highPassPrevOutput[channel] + sample - highPassPrevInput[channel]);
+                highPassPrevInput[channel] = sample;
+                highPassPrevOutput[channel] = filtered;
+                sample = filtered;
+            }
+
+            captureBuffer[index] = sample;
+            sumSquares += sample * sample;
+        }
+    }
+
+    const auto rms = std::sqrt(sumSquares / static_cast<float>(totalSamples));
+
+    if (config.noiseSuppression) {
+        constexpr float kGateClose = 0.0040f;
+        constexpr float kGateOpen = 0.0110f;
+        for (std::size_t index = 0; index < totalSamples; ++index) {
+            const auto sample = captureBuffer[index];
+            const auto amplitude = std::abs(sample);
+            if (amplitude <= kGateClose) {
+                captureBuffer[index] = 0.0f;
+            }
+            else if (amplitude < kGateOpen) {
+                const auto scale = (amplitude - kGateClose) / (kGateOpen - kGateClose);
+                captureBuffer[index] = sample * scale;
+            }
+        }
+    }
+
+    float effectiveGain = 1.0f;
+    if (config.autoGainControl) {
+        constexpr float kTargetRms = 0.11f;
+        constexpr float kMinGain = 0.65f;
+        constexpr float kMaxGain = 2.20f;
+        const auto safeRms = std::max(rms, 0.008f);
+        const auto desiredGain = std::clamp(kTargetRms / safeRms, kMinGain, kMaxGain);
+        const auto smoothing = desiredGain < agcSmoothedGain ? 0.30f : 0.08f;
+        agcSmoothedGain += (desiredGain - agcSmoothedGain) * smoothing;
+        effectiveGain = agcSmoothedGain;
+    }
+    else {
+        agcSmoothedGain = 1.0f;
+    }
+
+    const auto volume = std::clamp(config.volume, 0.0f, 2.0f);
+    const auto limiterScale = std::tanh(1.6f);
+    for (std::size_t index = 0; index < totalSamples; ++index) {
+        auto sample = captureBuffer[index] * effectiveGain * volume;
+        sample = std::clamp(sample, -1.0f, 1.0f);
+        sample = std::tanh(sample * 1.6f) / limiterScale;
+        captureBuffer[index] = sample;
+    }
+}
+
+int AudioStreamer::resolveDeviceIndex(
+    const std::string& selector,
+    bool isInput,
+    std::string& deviceName,
+    std::string& error) {
+    error.clear();
+    deviceName.clear();
+
+    const auto normalizedSelector = trimCopy(selector);
+    int deviceIndex = paNoDevice;
+
+    if (normalizedSelector.empty() || toLowerCopy(normalizedSelector) == "default") {
+        deviceIndex = isInput ? Pa_GetDefaultInputDevice() : Pa_GetDefaultOutputDevice();
+    }
+    else {
+        const auto parsedIndex = tryParseDeviceIndex(normalizedSelector);
+        if (parsedIndex >= 0) {
+            deviceIndex = parsedIndex;
+        }
+        else {
+            const auto needle = toLowerCopy(normalizedSelector);
+            const auto deviceCount = Pa_GetDeviceCount();
+            if (deviceCount < 0) {
+                error = "PortAudio could not enumerate devices: " + std::string(Pa_GetErrorText(static_cast<PaError>(deviceCount)));
+                return -1;
+            }
+            for (int index = 0; index < deviceCount; ++index) {
+                const auto* info = Pa_GetDeviceInfo(index);
+                if (info == nullptr) {
+                    continue;
+                }
+                if (isInput && info->maxInputChannels <= 0) {
+                    continue;
+                }
+                if (!isInput && info->maxOutputChannels <= 0) {
+                    continue;
+                }
+                const auto candidateName = info->name ? std::string(info->name) : std::string{};
+                if (toLowerCopy(candidateName).find(needle) != std::string::npos) {
+                    deviceIndex = index;
+                    break;
+                }
+            }
+        }
+    }
+
+    if (deviceIndex == paNoDevice) {
+        error = std::string(isInput ? "Default input device is unavailable." : "Default output device is unavailable.");
+        return -1;
+    }
+
+    const auto deviceCount = Pa_GetDeviceCount();
+    if (deviceCount < 0) {
+        error = "PortAudio could not enumerate devices: " + std::string(Pa_GetErrorText(static_cast<PaError>(deviceCount)));
+        return -1;
+    }
+    if (deviceIndex < 0 || deviceIndex >= deviceCount) {
+        error = "Device index is out of range: " + std::to_string(deviceIndex);
+        return -1;
+    }
+
+    const auto* info = Pa_GetDeviceInfo(deviceIndex);
+    if (info == nullptr) {
+        error = "PortAudio returned null device info for index " + std::to_string(deviceIndex);
+        return -1;
+    }
+    if (isInput && info->maxInputChannels <= 0) {
+        error = "Selected device has no input channels: " + std::to_string(deviceIndex);
+        return -1;
+    }
+    if (!isInput && info->maxOutputChannels <= 0) {
+        error = "Selected device has no output channels: " + std::to_string(deviceIndex);
+        return -1;
+    }
+
+    deviceName = info->name ? std::string(info->name) : ("device-" + std::to_string(deviceIndex));
+    return deviceIndex;
+}
+
+int AudioStreamer::resolveInputDeviceIndex(std::string& deviceName, std::string& error) const {
+    return resolveDeviceIndex(config.inputDevice, true, deviceName, error);
+}
+
+int AudioStreamer::resolveOutputDeviceIndex(std::string& deviceName, std::string& error) const {
+    return resolveDeviceIndex(config.outputDevice, false, deviceName, error);
 }
 
 // Отправка аудио пакета
@@ -585,6 +881,14 @@ void AudioStreamer::cleanupOpus() {
 // Установка конфигурации
 void AudioStreamer::setConfig(const AudioConfig& cfg) {
     config = cfg;
+    if (config.channels <= 0) {
+        config.channels = 1;
+    }
+    captureBuffer.resize(static_cast<std::size_t>(config.frameSize * config.channels));
+    playbackBuffer.resize(static_cast<std::size_t>(config.frameSize * config.channels), 0.0f);
+    highPassPrevInput.assign(config.channels, 0.0f);
+    highPassPrevOutput.assign(config.channels, 0.0f);
+    agcSmoothedGain = 1.0f;
 
     // Обновляем параметры энкодера если он существует
     if (encoder) {
@@ -648,6 +952,14 @@ void AudioStreamer::getStats(uint32_t& sent, uint32_t& received, uint32_t& lost,
     bytesSent = this->bytesSent;
     bytesReceived = this->bytesReceived;
     jitter = currentJitter;
+}
+
+std::string AudioStreamer::getActiveInputDeviceName() const {
+    return activeInputDeviceName;
+}
+
+std::string AudioStreamer::getActiveOutputDeviceName() const {
+    return activeOutputDeviceName;
 }
 
 // Триггер события

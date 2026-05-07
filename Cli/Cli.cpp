@@ -910,6 +910,11 @@ int main(int argc, char** argv) {
         console::writeLine("  --devices         Show available audio devices", 12, true, false);
         console::writeLine("  --rate <hz>       Set sample rate (default: 48000)", 12, true, false);
         console::writeLine("  --bitrate <kbps>  Set Opus bitrate (default: 64)", 12, true, false);
+        console::writeLine("  --input-device <id|name>   Select capture device (default: system default)", 12, true, false);
+        console::writeLine("  --output-device <id|name>  Select playback device (default: system default)", 12, true, false);
+        console::writeLine("  --no-noise-suppression     Disable capture noise gate/suppression", 12, true, false);
+        console::writeLine("  --no-echo-cancellation     Disable capture high-pass echo/rumble cleanup", 12, true, false);
+        console::writeLine("  --no-auto-gain-control     Disable automatic voice gain leveling", 12, true, false);
         console::writeLine("  --allow-legacy-signaling-audio  Allow deprecated audio_data over signaling websocket", 12, true, false);
         return 1;
     }
@@ -923,7 +928,12 @@ int main(int argc, char** argv) {
     bool showDevicesOnly = false;
     bool allowLegacySignalingAudio = false;
     int sampleRate = 48000;
-    int bitrate = 64000;
+    int bitrate = 96000;
+    std::string inputDeviceSelector = "default";
+    std::string outputDeviceSelector = "default";
+    bool enableNoiseSuppression = true;
+    bool enableEchoCancellation = true;
+    bool enableAutoGainControl = true;
 
     for (int i = 3; i < argc; ++i) {
         const std::string arg = argv[i];
@@ -954,11 +964,26 @@ int main(int argc, char** argv) {
         else if (arg == "--bitrate" && i + 1 < argc) {
             bitrate = std::stoi(argv[++i]) * 1000;
         }
+        else if (arg == "--input-device" && i + 1 < argc) {
+            inputDeviceSelector = argv[++i];
+        }
+        else if (arg == "--output-device" && i + 1 < argc) {
+            outputDeviceSelector = argv[++i];
+        }
         else if (arg == "--path" && i + 1 < argc) {
             wsPath = argv[++i];
             if (!wsPath.empty() && wsPath.front() != '/') {
                 wsPath = "/" + wsPath;
             }
+        }
+        else if (arg == "--no-noise-suppression") {
+            enableNoiseSuppression = false;
+        }
+        else if (arg == "--no-echo-cancellation") {
+            enableEchoCancellation = false;
+        }
+        else if (arg == "--no-auto-gain-control") {
+            enableAutoGainControl = false;
         }
         else if (arg == "--allow-legacy-signaling-audio") {
             allowLegacySignalingAudio = true;
@@ -982,7 +1007,7 @@ int main(int argc, char** argv) {
         websocket::stream<beast::tcp_stream> ws{ std::move(stream) };
         ws.set_option(websocket::stream_base::decorator(
             [](websocket::request_type& req) {
-                req.set(beast::http::field::user_agent, "EduSpaceCli/2.0");
+                req.set(beast::http::field::user_agent, "MeetSpaceCli/2.0");
             }));
 
         ws.next_layer().expires_never();
@@ -997,6 +1022,11 @@ int main(int argc, char** argv) {
             config.sampleRate = sampleRate;
             config.bitrate = bitrate;
             config.frameSize = sampleRate / 50;
+            config.inputDevice = inputDeviceSelector;
+            config.outputDevice = outputDeviceSelector;
+            config.noiseSuppression = enableNoiseSuppression;
+            config.echoCancellation = enableEchoCancellation;
+            config.autoGainControl = enableAutoGainControl;
             config.allowLegacySignalingAudio = allowLegacySignalingAudio;
             g_audioStreamer->setEventCallback(audioEventHandler);
             if (!allowLegacySignalingAudio) {
@@ -1007,6 +1037,14 @@ int main(int argc, char** argv) {
 
             if (g_audioStreamer->initialize(config)) {
                 console::writeLine("[audio] initialized", 10);
+                console::writeLine(
+                    "[audio] selectors: input=" + config.inputDevice + ", output=" + config.outputDevice,
+                    11);
+                console::writeLine(
+                    "[audio] processing: noiseSuppression=" + std::string(config.noiseSuppression ? "on" : "off")
+                    + ", echoCancellation=" + std::string(config.echoCancellation ? "on" : "off")
+                    + ", autoGainControl=" + std::string(config.autoGainControl ? "on" : "off"),
+                    11);
                 if (enableCapture) {
                     g_audioStreamer->startCapture();
                 }
@@ -1287,6 +1325,13 @@ int main(int argc, char** argv) {
                     console::writeLine("[audio.config] frameSize=" + std::to_string(cfg.frameSize), 11);
                     console::writeLine("[audio.config] bitrate=" + std::to_string(cfg.bitrate), 11);
                     console::writeLine("[audio.config] volume=" + std::to_string(static_cast<int>(cfg.volume * 100)) + "%", 11);
+                    console::writeLine("[audio.config] input.selector=" + cfg.inputDevice, 11);
+                    console::writeLine("[audio.config] output.selector=" + cfg.outputDevice, 11);
+                    console::writeLine("[audio.config] input.active=" + g_audioStreamer->getActiveInputDeviceName(), 11);
+                    console::writeLine("[audio.config] output.active=" + g_audioStreamer->getActiveOutputDeviceName(), 11);
+                    console::writeLine("[audio.config] noiseSuppression=" + std::string(cfg.noiseSuppression ? "on" : "off"), 11);
+                    console::writeLine("[audio.config] echoCancellation=" + std::string(cfg.echoCancellation ? "on" : "off"), 11);
+                    console::writeLine("[audio.config] autoGainControl=" + std::string(cfg.autoGainControl ? "on" : "off"), 11);
                 }
                 else if (subcmd == "devices") {
                     showAudioDevices();

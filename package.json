@@ -1,7 +1,7 @@
 {
   "name": "diplom",
   "version": "1.0.0",
-  "description": "",
+  "description": "MeetSpace workspace",
   "main": "index.js",
   "directories": {
     "doc": "docs"

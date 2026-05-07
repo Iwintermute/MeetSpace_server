@@ -56,12 +56,20 @@ namespace eds::server_new::infrastructure::db {
             PGconn* connection,
             const std::string& sql,
             const std::vector<std::string>& params) const;
+        PGresult* execParamsResilient(
+            const std::string& sql,
+            const std::vector<std::string>& params,
+            bool allowCommandStatus,
+            std::string& error) const;
         std::shared_ptr<ConnectionSlot> acquireSlot(std::string& error) const;
+        std::size_t slotCountSnapshot() const noexcept;
+        std::string conninfoSnapshot() const;
         static void closeSlots(std::vector<std::shared_ptr<ConnectionSlot>>& slots) noexcept;
 
     private:
         mutable std::mutex stateMutex_;
         std::vector<std::shared_ptr<ConnectionSlot>> slots_;
+        std::string conninfo_;
         mutable std::atomic<std::size_t> nextSlotIndex_{ 0 };
     };
 

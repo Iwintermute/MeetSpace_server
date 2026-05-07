@@ -1,0 +1,190 @@
+﻿{
+  "timestampUtc": "2026-05-02T04:55:15Z",
+  "pass": false,
+  "config": {
+    "host": "127.0.0.1",
+    "port": 9002,
+    "conference_users": 0,
+    "dm_users": 10,
+    "chat_users": 0,
+    "messages_per_chat_user": 0,
+    "action_timeout_s": 20.0,
+    "concurrency": 18,
+    "settle_s": 1.0,
+    "run_id": "dm10check",
+    "user_pool": [
+      "da6c8e61-9d89-4f62-ac21-9d84e76cd1b0",
+      "04692988-fce1-4d31-afb7-2ff16db4c5d9",
+      "9679918e-a5bb-486f-b439-3c979ca24e27",
+      "79dd6d02-c6a2-4866-9307-241c0d66b894",
+      "095b7aa6-3358-477c-a796-d61a14497fa8",
+      "aaac6ea8-0294-4784-ba35-20e65d7ecd47",
+      "b126c0d8-664c-4486-896a-89118433d727",
+      "55d66f76-b588-4f04-ac7c-faf8cdb27f09",
+      "f051c102-6585-4041-888d-907b766f1b1c",
+      "d240f15d-f181-498e-9453-b1f37fdc520d"
+    ]
+  },
+  "clientGroups": {
+    "aliveTotal": 10,
+    "conferenceClients": 0,
+    "dmClients": 10,
+    "chatClients": 0,
+    "conferencePairs": 0,
+    "dmPairs": 5,
+    "chatPairs": 0
+  },
+  "metrics": {
+    "connectOk": 10,
+    "connectFail": 0,
+    "authOk": 10,
+    "authFail": 0,
+    "operationsTotal": 114,
+    "operationsOk": 110,
+    "operationsFail": 4,
+    "operationFailureRate": 0.0351,
+    "criticalSuccessRate": {
+      "conference.open_transport": 0.0,
+      "direct_call.open_transport": 0.8,
+      "direct_call.create_call": 1.0,
+      "direct_call.accept_call": 1.0,
+      "direct_chat.send_message": 0.0
+    },
+    "events": {
+      "direct_call_accepted": 10,
+      "transport_opened": 8,
+      "track_published": 16,
+      "consumer_resumed": 16,
+      "direct_call_ended": 10,
+      "direct_call_invite": 5
+    },
+    "latencyMs": {
+      "auth.bind_session": {
+        "count": 10,
+        "p50": 627.318,
+        "p95": 686.656,
+        "p99": 688.582,
+        "max": 689.063,
+        "avg": 632.367
+      },
+      "direct_call.create_call": {
+        "count": 5,
+        "p50": 173.156,
+        "p95": 305.258,
+        "p99": 308.836,
+        "max": 309.731,
+        "avg": 216.907
+      },
+      "direct_call.invite": {
+        "count": 5,
+        "p50": 0.0,
+        "p95": 0.0,
+        "p99": 0.0,
+        "max": 0.0,
+        "avg": 0.0
+      },
+      "direct_call.accept_call": {
+        "count": 5,
+        "p50": 136.742,
+        "p95": 149.465,
+        "p99": 150.321,
+        "max": 150.535,
+        "avg": 122.888
+      },
+      "direct_call.open_transport": {
+        "count": 10,
+        "p50": 132.233,
+        "p95": 179.013,
+        "p99": 179.257,
+        "max": 179.318,
+        "avg": 128.72
+      },
+      "direct_call.webrtc_ice": {
+        "count": 10,
+        "p50": 82.997,
+        "p95": 143.795,
+        "p99": 162.566,
+        "max": 167.259,
+        "avg": 94.9
+      },
+      "direct_call.webrtc_offer": {
+        "count": 8,
+        "p50": 86.568,
+        "p95": 137.279,
+        "p99": 156.03,
+        "max": 160.718,
+        "avg": 94.083
+      },
+      "direct_call.hangup_call": {
+        "count": 5,
+        "p50": 109.195,
+        "p95": 151.081,
+        "p99": 159.03,
+        "max": 161.017,
+        "avg": 117.038
+      },
+      "direct_call.publish_track": {
+        "count": 16,
+        "p50": 94.774,
+        "p95": 134.237,
+        "p99": 177.335,
+        "max": 188.109,
+        "avg": 101.325
+      },
+      "direct_call.consume_track": {
+        "count": 16,
+        "p50": 104.781,
+        "p95": 161.69,
+        "p99": 167.01,
+        "max": 168.339,
+        "avg": 113.831
+      },
+      "direct_call.consumer_ready": {
+        "count": 16,
+        "p50": 96.364,
+        "p95": 135.995,
+        "p99": 157.224,
+        "max": 162.531,
+        "avg": 104.53
+      },
+      "direct_call.media_stats": {
+        "count": 8,
+        "p50": 88.003,
+        "p95": 102.197,
+        "p99": 105.29,
+        "max": 106.063,
+        "avg": 88.449
+      }
+    },
+    "stageSeconds": {
+      "connect_auth": 0.745,
+      "conference_group": 0.0,
+      "direct_call_group": 2.665,
+      "direct_chat_group": 0.0,
+      "settle": 1.018,
+      "total": 4.461
+    },
+    "failureSample": [
+      {
+        "op": "direct_call.open_transport",
+        "code": "operation_failed",
+        "message": "Peer must join room before opening transport."
+      },
+      {
+        "op": "direct_call.open_transport",
+        "code": "operation_failed",
+        "message": "Peer must join room before opening transport."
+      },
+      {
+        "op": "direct_call.webrtc_ice",
+        "code": "operation_failed",
+        "message": "Transport not found: mp-call-tr-a-dm10check-2"
+      },
+      {
+        "op": "direct_call.webrtc_ice",
+        "code": "operation_failed",
+        "message": "Transport not found: mp-call-tr-b-dm10check-2"
+      }
+    ]
+  }
+}

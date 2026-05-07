@@ -13,6 +13,8 @@
 #include <functional>
 #include <memory>
 #include <chrono>
+#include <map>
+#include <string>
 
 namespace beast = boost::beast;
 namespace websocket = beast::websocket;
@@ -55,7 +57,7 @@ struct AudioConfig {
     int sampleRate = 48000;
     int channels = 1;
     int frameSize = 960;  // 20ms at 48kHz
-    int bitrate = 64000;   // 64 kbps
+    int bitrate = 96000;   // 96 kbps
     int complexity = 10;   // Opus complexity (0-10)
     int application = OPUS_APPLICATION_VOIP;
     std::string inputDevice = "default";
@@ -98,6 +100,11 @@ private:
     std::vector<float> playbackBuffer;
     std::vector<unsigned char> encodeBuffer;
     std::vector<float> resampleBuffer;
+    std::vector<float> highPassPrevInput;
+    std::vector<float> highPassPrevOutput;
+    float agcSmoothedGain;
+    std::string activeInputDeviceName;
+    std::string activeOutputDeviceName;
 
     // Очереди для потоковой обработки
     std::queue<std::vector<float>> captureQueue;
@@ -156,6 +163,10 @@ private:
     void sendAudioPacket(const std::vector<uint8_t>& encodedData);
     void processJitterBuffer();
     void triggerEvent(AudioEventType type, const std::string& message, int data = 0);
+    void processCaptureBuffer(unsigned long frameCount);
+    int resolveInputDeviceIndex(std::string& deviceName, std::string& error) const;
+    int resolveOutputDeviceIndex(std::string& deviceName, std::string& error) const;
+    static int resolveDeviceIndex(const std::string& selector, bool isInput, std::string& deviceName, std::string& error);
 
 public:
     AudioStreamer(websocket::stream<beast::tcp_stream>& websocket);
@@ -192,6 +203,8 @@ public:
     std::string getStateString() const;
     void getStats(uint32_t& sent, uint32_t& received, uint32_t& lost,
         uint64_t& bytesSent, uint64_t& bytesReceived, float& jitter) const;
+    std::string getActiveInputDeviceName() const;
+    std::string getActiveOutputDeviceName() const;
 
     // Список устройств
     static std::vector<std::pair<std::string, std::string>> getInputDevices();

@@ -1,0 +1,214 @@
+﻿{
+  "timestampUtc": "2026-05-02T04:52:14Z",
+  "pass": false,
+  "config": {
+    "host": "127.0.0.1",
+    "port": 9002,
+    "conference_users": 6,
+    "dm_users": 0,
+    "chat_users": 0,
+    "messages_per_chat_user": 0,
+    "action_timeout_s": 10.0,
+    "concurrency": 6,
+    "settle_s": 1.0,
+    "run_id": "conf6leave",
+    "user_pool": [
+      "da6c8e61-9d89-4f62-ac21-9d84e76cd1b0",
+      "04692988-fce1-4d31-afb7-2ff16db4c5d9",
+      "9679918e-a5bb-486f-b439-3c979ca24e27",
+      "79dd6d02-c6a2-4866-9307-241c0d66b894",
+      "095b7aa6-3358-477c-a796-d61a14497fa8",
+      "aaac6ea8-0294-4784-ba35-20e65d7ecd47"
+    ]
+  },
+  "clientGroups": {
+    "aliveTotal": 6,
+    "conferenceClients": 6,
+    "dmClients": 0,
+    "chatClients": 0,
+    "conferencePairs": 3,
+    "dmPairs": 0,
+    "chatPairs": 0
+  },
+  "metrics": {
+    "connectOk": 6,
+    "connectFail": 0,
+    "authOk": 6,
+    "authFail": 0,
+    "operationsTotal": 68,
+    "operationsOk": 58,
+    "operationsFail": 10,
+    "operationFailureRate": 0.1471,
+    "criticalSuccessRate": {
+      "conference.open_transport": 0.6667,
+      "direct_call.open_transport": 0.0,
+      "direct_call.create_call": 0.0,
+      "direct_call.accept_call": 0.0,
+      "direct_chat.send_message": 0.0
+    },
+    "events": {
+      "conference_member_joined": 3,
+      "transport_opened": 4,
+      "track_published": 8,
+      "consumer_resumed": 8
+    },
+    "latencyMs": {
+      "auth.bind_session": {
+        "count": 6,
+        "p50": 526.353,
+        "p95": 600.515,
+        "p99": 601.171,
+        "max": 601.336,
+        "avg": 522.805
+      },
+      "conference.create": {
+        "count": 3,
+        "p50": 209.071,
+        "p95": 223.226,
+        "p99": 224.484,
+        "max": 224.799,
+        "avg": 180.509
+      },
+      "conference.join": {
+        "count": 6,
+        "p50": 112.508,
+        "p95": 192.093,
+        "p99": 194.681,
+        "max": 195.328,
+        "avg": 131.354
+      },
+      "conference.open_transport": {
+        "count": 6,
+        "p50": 91.365,
+        "p95": 158.596,
+        "p99": 173.273,
+        "max": 176.942,
+        "avg": 106.547
+      },
+      "conference.webrtc_ice": {
+        "count": 6,
+        "p50": 80.463,
+        "p95": 86.905,
+        "p99": 88.035,
+        "max": 88.318,
+        "avg": 81.514
+      },
+      "conference.webrtc_offer": {
+        "count": 4,
+        "p50": 86.091,
+        "p95": 102.167,
+        "p99": 104.187,
+        "max": 104.692,
+        "avg": 89.568
+      },
+      "conference.publish_track": {
+        "count": 8,
+        "p50": 80.64,
+        "p95": 90.988,
+        "p99": 93.435,
+        "max": 94.047,
+        "avg": 81.527
+      },
+      "conference.consume_track": {
+        "count": 8,
+        "p50": 99.588,
+        "p95": 163.491,
+        "p99": 175.683,
+        "max": 178.731,
+        "avg": 109.618
+      },
+      "conference.consumer_ready": {
+        "count": 8,
+        "p50": 89.77,
+        "p95": 112.78,
+        "p99": 118.606,
+        "max": 120.063,
+        "avg": 92.977
+      },
+      "conference.media_stats": {
+        "count": 4,
+        "p50": 87.489,
+        "p95": 92.123,
+        "p99": 92.776,
+        "max": 92.939,
+        "avg": 88.166
+      },
+      "conference.leave": {
+        "count": 6,
+        "p50": 10010.13,
+        "p95": 10013.509,
+        "p99": 10013.783,
+        "max": 10013.852,
+        "avg": 10008.892
+      },
+      "conference.close": {
+        "count": 3,
+        "p50": 100.596,
+        "p95": 117.375,
+        "p99": 118.867,
+        "max": 119.24,
+        "avg": 105.187
+      }
+    },
+    "stageSeconds": {
+      "connect_auth": 0.638,
+      "conference_group": 22.569,
+      "direct_call_group": 0.0,
+      "direct_chat_group": 0.0,
+      "settle": 1.013,
+      "total": 24.223
+    },
+    "failureSample": [
+      {
+        "op": "conference.open_transport",
+        "code": "operation_failed",
+        "message": "Peer must join room before opening transport."
+      },
+      {
+        "op": "conference.open_transport",
+        "code": "operation_failed",
+        "message": "Peer must join room before opening transport."
+      },
+      {
+        "op": "conference.webrtc_ice",
+        "code": "operation_failed",
+        "message": "Transport not found: mp-conf-tr-a-conf6leave-0"
+      },
+      {
+        "op": "conference.webrtc_ice",
+        "code": "operation_failed",
+        "message": "Transport not found: mp-conf-tr-b-conf6leave-0"
+      },
+      {
+        "op": "conference.leave",
+        "code": "transport_exception",
+        "message": "TimeoutError: "
+      },
+      {
+        "op": "conference.leave",
+        "code": "transport_exception",
+        "message": "TimeoutError: "
+      },
+      {
+        "op": "conference.leave",
+        "code": "transport_exception",
+        "message": "TimeoutError: "
+      },
+      {
+        "op": "conference.leave",
+        "code": "transport_exception",
+        "message": "TimeoutError: "
+      },
+      {
+        "op": "conference.leave",
+        "code": "transport_exception",
+        "message": "TimeoutError: "
+      },
+      {
+        "op": "conference.leave",
+        "code": "transport_exception",
+        "message": "TimeoutError: "
+      }
+    ]
+  }
+}

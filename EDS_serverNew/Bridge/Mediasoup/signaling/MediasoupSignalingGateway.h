@@ -29,7 +29,8 @@ namespace eds::server_new::mediasoup::signaling {
             ApplicationApi& app,
             unsigned short wsPort,
             bool allowDirectMediasoupDebug = false,
-            bool debugMode = false);
+            bool debugMode = false,
+            transport::WebSocketTlsOptions tlsOptions = {});
 
         ~MediasoupSignalingGateway();
 
@@ -64,6 +65,7 @@ namespace eds::server_new::mediasoup::signaling {
         unsigned short wsPort_ = 0;
         bool allowDirectMediasoupDebug_ = false;
         bool debugMode_ = false;
+        transport::WebSocketTlsOptions tlsOptions_;
 
         transport::NetIoContext ioContext_;
         std::unique_ptr<transport::WebSocketServer> wsServer_;
@@ -79,6 +81,14 @@ namespace eds::server_new::mediasoup::signaling {
         std::mutex peersMutex_;
         std::unordered_map<void*, std::string> sessionToPeer_;
         std::unordered_map<std::string, void*> peerToSession_;
+
+        static constexpr std::size_t kMaxConcurrentConnections = 50;
+        static constexpr std::uint64_t kMaxMessagesPerSecondPerPeer = 100;
+        struct PeerRateState {
+            std::uint64_t messageCount = 0;
+            std::chrono::steady_clock::time_point windowStart = std::chrono::steady_clock::now();
+        };
+        std::unordered_map<void*, PeerRateState> peerRateState_;
 
         std::atomic<bool> outboxDispatcherStop_{ false };
         std::thread outboxDispatcherThread_;

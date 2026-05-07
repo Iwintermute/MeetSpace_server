@@ -95,9 +95,12 @@ namespace eds::server_new::infrastructure::db {
     }
 
     std::string MessengerRepository::readServerNode() {
-        const char* raw = std::getenv("EDUSPACE_SERVER_NODE");
+        const char* raw = std::getenv("MEETSPACE_SERVER_NODE");
         if (raw == nullptr || raw[0] == '\0') {
-            return "server-default";
+            raw = std::getenv("EDUSPACE_SERVER_NODE");
+        }
+        if (raw == nullptr || raw[0] == '\0') {
+            return "meetspace-server-default";
         }
         return std::string(raw);
     }
@@ -291,7 +294,7 @@ WITH updated AS (
            disconnected_at = COALESCE(us.disconnected_at, timezone('utc', now())),
            last_seen_at = timezone('utc', now()),
            metadata = us.metadata || jsonb_build_object(
-               'cleanupServerNode', $1,
+               'cleanupServerNode', $1::text,
                'cleanupReason', 'startup_stale_session_cleanup',
                'cleanupScope', 'all_connected_sessions',
                'cleanupAt', timezone('utc', now())
@@ -300,7 +303,7 @@ WITH updated AS (
      RETURNING us.id
 )
 SELECT json_build_object(
-    'serverNode', $1,
+    'serverNode', $1::text,
     'disconnectedCount', (SELECT COUNT(*) FROM updated)
 )
 )SQL";

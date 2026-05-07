@@ -1,10 +1,13 @@
 #pragma once
+#include "Bridge/Mediasoup/policy/MediaProductionPolicy.h"
 
 #include "Bridge/Mediasoup/service/IMediaEngine.h"
 
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/ip/tcp.hpp>
+#include <boost/asio/ssl/context.hpp>
 #include <boost/beast/core/tcp_stream.hpp>
+#include <boost/beast/ssl.hpp>
 #include <boost/beast/websocket/stream.hpp>
 
 #include <cstdint>
@@ -38,6 +41,7 @@ namespace eds::server_new::mediasoup::service {
     private:
         using tcp = boost::asio::ip::tcp;
         using ws_stream = boost::beast::websocket::stream<boost::beast::tcp_stream>;
+        using wss_stream = boost::beast::websocket::stream<boost::beast::ssl_stream<boost::beast::tcp_stream>>;
 
         struct RoomState {
             std::unordered_set<std::string> peers;
@@ -79,11 +83,17 @@ namespace eds::server_new::mediasoup::service {
             std::string_view url,
             std::string& host,
             std::string& port,
-            std::string& path);
+            std::string& path,
+            bool& secure);
+        static bool isPrivateOrLoopbackHost(std::string_view host);
         static std::string defaultBackendUrl();
         static std::string resolveOperationName(MediaTransportIntent intent);
         static bool isMediasoupEngineName(std::string_view value);
         void refreshBackendEndpointNoLock();
+        core::contracts::OperationStatus configureBackendTlsContextNoLock();
+        core::contracts::OperationStatus sendBackendRequestNoLock(
+            const std::string& serializedRequest,
+            std::string& responseText);
 
         core::contracts::OperationStatus ensureConnectedNoLock();
         core::contracts::OperationStatus verifyMediasoupBackendNoLock();
@@ -114,9 +124,14 @@ namespace eds::server_new::mediasoup::service {
     private:
         bool debugMode_ = false;
         std::string backendUrl_;
+        std::string backendEndpointValidationError_;
         std::string backendHost_;
         std::string backendPort_;
         std::string backendPath_ = "/";
+        bool backendSecure_ = false;
+        bool backendTlsInsecureSkipVerify_ = false;
+        std::string backendTlsCaFile_;
+        std::string backendTlsServerName_;
         bool backendConnected_ = false;
         bool backendVerified_ = false;
         std::string backendEngine_;
@@ -124,9 +139,12 @@ namespace eds::server_new::mediasoup::service {
 
         boost::asio::io_context ioContext_;
         std::unique_ptr<tcp::resolver> resolver_;
+        std::unique_ptr<boost::asio::ssl::context> tlsContext_;
         std::unique_ptr<ws_stream> socket_;
+        std::unique_ptr<wss_stream> tlsSocket_;
 
         mutable std::mutex mutex_;
+        policy::MediaProductionPolicy mediaPolicy_;
         std::unordered_map<std::string, RoomState> rooms_;
         std::unordered_map<std::string, PeerState> peers_;
         std::unordered_map<std::string, TransportState> transports_;

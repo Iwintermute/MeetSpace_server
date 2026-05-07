@@ -62,7 +62,10 @@ namespace eds::server_new::auth {
     static std::optional<VerifiedSupabaseUser> tryResolveDevAccessToken(const std::string& accessToken) {
         bool allowDevTokens = eds::server_new::auth::AuthServices::allowDevAuthTokens();
         if (!allowDevTokens) {
-            const char* allowDevTokensEnv = std::getenv("EDUSPACE_ALLOW_DEV_AUTH_TOKENS");
+            const char* allowDevTokensEnv = std::getenv("MEETSPACE_ALLOW_DEV_AUTH_TOKENS");
+            if (allowDevTokensEnv == nullptr || allowDevTokensEnv[0] == '\0') {
+                allowDevTokensEnv = std::getenv("EDUSPACE_ALLOW_DEV_AUTH_TOKENS");
+            }
             allowDevTokens = allowDevTokensEnv != nullptr && std::string_view(allowDevTokensEnv) == "1";
         }
         if (!allowDevTokens) {

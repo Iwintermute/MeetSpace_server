@@ -1,14 +1,17 @@
 #include "Bridge/Mediasoup/service/MediasoupSfuEngine.h"
 
+#include <boost/asio/ip/address.hpp>
 #include <boost/beast/core/buffers_to_string.hpp>
 #include <boost/beast/core/flat_buffer.hpp>
 #include <boost/system/system_error.hpp>
 #include <nlohmann/json.hpp>
+#include <openssl/ssl.h>
 
 #include <algorithm>
 #include <chrono>
 #include <cctype>
 #include <cstdlib>
+#include <initializer_list>
 #include <iostream>
 #include <unordered_set>
 #include <utility>
@@ -34,6 +37,49 @@ namespace eds::server_new::mediasoup::service {
             return result;
         }
 
+        std::string stripIpv6Brackets(std::string_view host) {
+            if (host.size() >= 2 && host.front() == '[' && host.back() == ']') {
+                return std::string(host.substr(1, host.size() - 2));
+            }
+            return std::string(host);
+        }
+
+        bool isPrivateOrLoopbackAddress(const boost::asio::ip::address& address) {
+            if (address.is_v4()) {
+                const auto bytes = address.to_v4().to_bytes();
+                if (bytes[0] == 127) {
+                    return true;
+                }
+                if (bytes[0] == 10) {
+                    return true;
+                }
+                if (bytes[0] == 172 && bytes[1] >= 16 && bytes[1] <= 31) {
+                    return true;
+                }
+                if (bytes[0] == 192 && bytes[1] == 168) {
+                    return true;
+                }
+                if (bytes[0] == 169 && bytes[1] == 254) {
+                    return true;
+                }
+                return false;
+            }
+
+            const auto addressV6 = address.to_v6();
+            if (addressV6.is_loopback()) {
+                return true;
+            }
+
+            const auto bytes = addressV6.to_bytes();
+            if ((bytes[0] & 0xFE) == 0xFC) {
+                return true;
+            }
+            if (bytes[0] == 0xFE && (bytes[1] & 0xC0) == 0x80) {
+                return true;
+            }
+            return false;
+        }
+
         json parseOptionalJsonPayload(std::string_view rawValue) {
             if (rawValue.empty()) {
                 return json();
@@ -54,6 +100,75 @@ namespace eds::server_new::mediasoup::service {
             return parsed.is_object() ? parsed : json::object();
         }
 
+        bool containsCaseInsensitive(std::string_view value, std::string_view token) {
+            if (value.empty() || token.empty()) {
+                return false;
+            }
+
+            const auto loweredValue = toLowerCopy(value);
+            const auto loweredToken = toLowerCopy(token);
+            return loweredValue.find(loweredToken) != std::string::npos;
+        }
+        std::string readEnvVar(const char* name) {
+            const auto value = std::getenv(name);
+            if (value == nullptr || value[0] == '\0') {
+                return {};
+            }
+            return std::string(value);
+        }
+
+        std::string readFirstEnvVar(std::initializer_list<const char*> names) {
+            for (const auto* name : names) {
+                if (name == nullptr || name[0] == '\0') {
+                    continue;
+                }
+
+                auto value = readEnvVar(name);
+                if (!value.empty()) {
+                    return value;
+                }
+            }
+            return {};
+        }
+
+        bool parseBooleanOption(std::string value, bool& result) {
+            if (value.empty()) {
+                return false;
+            }
+
+            std::transform(value.begin(), value.end(), value.begin(), [](unsigned char symbol) {
+                return static_cast<char>(std::tolower(symbol));
+                });
+            if (value == "1" || value == "true" || value == "yes" || value == "on") {
+                result = true;
+                return true;
+            }
+            if (value == "0" || value == "false" || value == "no" || value == "off") {
+                result = false;
+                return true;
+            }
+            return false;
+        }
+
+        bool readFirstBooleanEnvVar(std::initializer_list<const char*> names, bool fallbackValue) {
+            for (const auto* name : names) {
+                if (name == nullptr || name[0] == '\0') {
+                    continue;
+                }
+
+                auto value = readEnvVar(name);
+                if (value.empty()) {
+                    continue;
+                }
+
+                bool parsed = fallbackValue;
+                if (parseBooleanOption(value, parsed)) {
+                    return parsed;
+                }
+            }
+            return fallbackValue;
+        }
+
     } // namespace
 
     MediasoupSfuEngine::MediasoupSfuEngine(bool debugMode)
@@ -61,7 +176,6 @@ namespace eds::server_new::mediasoup::service {
         backendUrl_(defaultBackendUrl()) {
         refreshBackendEndpointNoLock();
         resolver_ = std::make_unique<tcp::resolver>(ioContext_);
-        socket_ = std::make_unique<ws_stream>(ioContext_);
     }
 
     MediasoupSfuEngine::~MediasoupSfuEngine() {
@@ -141,13 +255,23 @@ namespace eds::server_new::mediasoup::service {
         std::string_view url,
         std::string& host,
         std::string& port,
-        std::string& path) {
+        std::string& path,
+        bool& secure) {
         constexpr std::string_view wsPrefix = "ws://";
-        if (url.rfind(wsPrefix, 0) != 0) {
+        constexpr std::string_view wssPrefix = "wss://";
+
+        std::string_view remaining;
+        if (url.rfind(wsPrefix, 0) == 0) {
+            remaining = url.substr(wsPrefix.size());
+            secure = false;
+        }
+        else if (url.rfind(wssPrefix, 0) == 0) {
+            remaining = url.substr(wssPrefix.size());
+            secure = true;
+        }
+        else {
             return false;
         }
-
-        auto remaining = url.substr(wsPrefix.size());
         const auto slashPos = remaining.find('/');
         const auto hostPort = slashPos == std::string_view::npos ? remaining : remaining.substr(0, slashPos);
         path = slashPos == std::string_view::npos ? "/" : std::string(remaining.substr(slashPos));
@@ -155,7 +279,7 @@ namespace eds::server_new::mediasoup::service {
         const auto colonPos = hostPort.rfind(':');
         if (colonPos == std::string_view::npos) {
             host = std::string(hostPort);
-            port = "80";
+            port = secure ? "443" : "80";
         }
         else {
             host = std::string(hostPort.substr(0, colonPos));
@@ -170,7 +294,34 @@ namespace eds::server_new::mediasoup::service {
         return true;
     }
 
+    bool MediasoupSfuEngine::isPrivateOrLoopbackHost(std::string_view host) {
+        if (host.empty()) {
+            return false;
+        }
+
+        const auto normalizedHost = stripIpv6Brackets(host);
+        if (normalizedHost.empty()) {
+            return false;
+        }
+
+        if (toLowerCopy(normalizedHost) == "localhost") {
+            return true;
+        }
+
+        boost::system::error_code addressCode;
+        const auto parsedAddress = boost::asio::ip::make_address(normalizedHost, addressCode);
+        if (addressCode) {
+            return false;
+        }
+
+        return isPrivateOrLoopbackAddress(parsedAddress);
+    }
+
     std::string MediasoupSfuEngine::defaultBackendUrl() {
+        const auto meetspaceValue = std::getenv("MEETSPACE_MEDIASOUP_BACKEND_URL");
+        if (meetspaceValue != nullptr && meetspaceValue[0] != '\0') {
+            return std::string(meetspaceValue);
+        }
         const auto envValue = std::getenv("EDUSPACE_MEDIASOUP_BACKEND_URL");
         if (envValue != nullptr && envValue[0] != '\0') {
             return std::string(envValue);
@@ -221,34 +372,200 @@ namespace eds::server_new::mediasoup::service {
 
     void MediasoupSfuEngine::refreshBackendEndpointNoLock() {
         const auto resolvedBackendUrl = defaultBackendUrl();
-        const auto backendUrlChanged = resolvedBackendUrl != backendUrl_;
-        if (backendUrlChanged) {
-            backendUrl_ = resolvedBackendUrl;
+        std::string parsedHost;
+        std::string parsedPort;
+        std::string parsedPath = "/";
+        bool parsedSecure = false;
+        backendEndpointValidationError_.clear();
+        if (!resolvedBackendUrl.empty()
+            && !parseBackendUrl(resolvedBackendUrl, parsedHost, parsedPort, parsedPath, parsedSecure)) {
             if (backendConnected_ || backendVerified_) {
                 disconnectNoLock();
             }
-        }
-
-        if (backendUrl_.empty()) {
+            backendUrl_ = resolvedBackendUrl;
+            backendEndpointValidationError_ =
+                "Invalid mediasoup backend endpoint. Expected ws://host:port/path or wss://host:port/path.";
             backendHost_.clear();
             backendPort_.clear();
             backendPath_ = "/";
+            backendSecure_ = false;
+            backendTlsInsecureSkipVerify_ = false;
+            backendTlsCaFile_.clear();
+            backendTlsServerName_.clear();
             return;
         }
-
-        std::string parsedHost;
-        std::string parsedPort;
-        std::string parsedPath;
-        if (!parseBackendUrl(backendUrl_, parsedHost, parsedPort, parsedPath)) {
+        if (!resolvedBackendUrl.empty() && !parsedSecure && !isPrivateOrLoopbackHost(parsedHost)) {
+            if (backendConnected_ || backendVerified_) {
+                disconnectNoLock();
+            }
+            backendUrl_ = resolvedBackendUrl;
+            backendEndpointValidationError_ =
+                "Remote mediasoup backend endpoint must use wss://. ws:// is allowed only for localhost/private hosts.";
             backendHost_.clear();
             backendPort_.clear();
             backendPath_ = "/";
+            backendSecure_ = false;
+            backendTlsInsecureSkipVerify_ = false;
+            backendTlsCaFile_.clear();
+            backendTlsServerName_.clear();
             return;
         }
+        const bool parsedTlsInsecureSkipVerify = readFirstBooleanEnvVar(
+            {
+                "MEETSPACE_MEDIASOUP_BACKEND_TLS_INSECURE_SKIP_VERIFY",
+                "EDUSPACE_MEDIASOUP_BACKEND_TLS_INSECURE_SKIP_VERIFY",
+                "MEDIASOUP_BACKEND_TLS_INSECURE_SKIP_VERIFY"
+            },
+            false);
+        const auto parsedTlsCaFile = readFirstEnvVar(
+            {
+                "MEETSPACE_MEDIASOUP_BACKEND_TLS_CA_FILE",
+                "EDUSPACE_MEDIASOUP_BACKEND_TLS_CA_FILE",
+                "MEDIASOUP_BACKEND_TLS_CA_FILE"
+            });
+        auto parsedTlsServerName = readFirstEnvVar(
+            {
+                "MEETSPACE_MEDIASOUP_BACKEND_TLS_SERVER_NAME",
+                "EDUSPACE_MEDIASOUP_BACKEND_TLS_SERVER_NAME",
+                "MEDIASOUP_BACKEND_TLS_SERVER_NAME"
+            });
+        if (parsedTlsServerName.empty()) {
+            parsedTlsServerName = parsedHost;
+        }
 
+        const bool connectionSettingsChanged =
+            resolvedBackendUrl != backendUrl_
+            || parsedHost != backendHost_
+            || parsedPort != backendPort_
+            || parsedPath != backendPath_
+            || parsedSecure != backendSecure_
+            || parsedTlsInsecureSkipVerify != backendTlsInsecureSkipVerify_
+            || parsedTlsCaFile != backendTlsCaFile_
+            || parsedTlsServerName != backendTlsServerName_;
+        if (connectionSettingsChanged && (backendConnected_ || backendVerified_)) {
+            disconnectNoLock();
+        }
+
+        backendUrl_ = resolvedBackendUrl;
         backendHost_ = std::move(parsedHost);
         backendPort_ = std::move(parsedPort);
         backendPath_ = std::move(parsedPath);
+        backendSecure_ = parsedSecure;
+        backendTlsInsecureSkipVerify_ = parsedTlsInsecureSkipVerify;
+        backendTlsCaFile_ = parsedTlsCaFile;
+        backendTlsServerName_ = std::move(parsedTlsServerName);
+
+        if (backendHost_.empty() || backendPort_.empty()) {
+            backendPath_ = "/";
+            backendSecure_ = false;
+            backendTlsServerName_.clear();
+        }
+    }
+
+    core::contracts::OperationStatus MediasoupSfuEngine::configureBackendTlsContextNoLock() {
+        if (!backendSecure_) {
+            tlsContext_.reset();
+            return core::contracts::OperationStatus::success();
+        }
+
+        tlsContext_ = std::make_unique<boost::asio::ssl::context>(boost::asio::ssl::context::tls_client);
+        boost::system::error_code code;
+
+        tlsContext_->set_options(
+            boost::asio::ssl::context::default_workarounds
+            | boost::asio::ssl::context::no_sslv2
+            | boost::asio::ssl::context::no_sslv3
+            | boost::asio::ssl::context::no_tlsv1
+            | boost::asio::ssl::context::no_tlsv1_1,
+            code);
+        if (code) {
+            return core::contracts::OperationStatus::failure(
+                std::string("Failed to configure mediasoup backend TLS options: ") + code.message());
+        }
+
+        if (!backendTlsInsecureSkipVerify_) {
+            if (!backendTlsCaFile_.empty()) {
+                tlsContext_->load_verify_file(backendTlsCaFile_, code);
+                if (code) {
+                    return core::contracts::OperationStatus::failure(
+                        std::string("Failed to load mediasoup backend TLS CA file: ") + code.message());
+                }
+            }
+            else {
+                tlsContext_->set_default_verify_paths(code);
+                if (code) {
+                    return core::contracts::OperationStatus::failure(
+                        std::string("Failed to configure mediasoup backend TLS trust store: ") + code.message());
+                }
+            }
+
+            tlsContext_->set_verify_mode(boost::asio::ssl::verify_peer, code);
+            if (code) {
+                return core::contracts::OperationStatus::failure(
+                    std::string("Failed to enable mediasoup backend TLS peer verification: ") + code.message());
+            }
+        }
+        else {
+            tlsContext_->set_verify_mode(boost::asio::ssl::verify_none, code);
+            if (code) {
+                return core::contracts::OperationStatus::failure(
+                    std::string("Failed to configure mediasoup backend TLS verify mode: ") + code.message());
+            }
+        }
+
+        return core::contracts::OperationStatus::success();
+    }
+
+    core::contracts::OperationStatus MediasoupSfuEngine::sendBackendRequestNoLock(
+        const std::string& serializedRequest,
+        std::string& responseText) {
+        if (serializedRequest.empty()) {
+            return core::contracts::OperationStatus::failure("Mediasoup backend request payload is empty.");
+        }
+
+        const auto timeout = std::chrono::milliseconds(
+            std::max(500, mediaPolicy_.backendOperationTimeoutMs()));
+
+        try {
+            boost::beast::flat_buffer responseBuffer;
+            if (backendSecure_) {
+                if (!tlsSocket_) {
+                    return core::contracts::OperationStatus::failure(
+                        "Mediasoup backend TLS websocket is not initialized.");
+                }
+
+                auto& lowestLayer = boost::beast::get_lowest_layer(*tlsSocket_);
+                lowestLayer.expires_after(timeout);
+                tlsSocket_->write(boost::asio::buffer(serializedRequest));
+
+                lowestLayer.expires_after(timeout);
+                tlsSocket_->read(responseBuffer);
+            }
+            else {
+                if (!socket_) {
+                    return core::contracts::OperationStatus::failure(
+                        "Mediasoup backend websocket is not initialized.");
+                }
+
+                auto& lowestLayer = boost::beast::get_lowest_layer(*socket_);
+                lowestLayer.expires_after(timeout);
+                socket_->write(boost::asio::buffer(serializedRequest));
+
+                lowestLayer.expires_after(timeout);
+                socket_->read(responseBuffer);
+            }
+
+            responseText = boost::beast::buffers_to_string(responseBuffer.data());
+            return core::contracts::OperationStatus::success();
+        }
+        catch (const boost::system::system_error& error) {
+            return core::contracts::OperationStatus::failure(
+                std::string("Mediasoup backend websocket IO failed: ") + error.what());
+        }
+        catch (const std::exception& error) {
+            return core::contracts::OperationStatus::failure(
+                std::string("Mediasoup backend websocket IO failed: ") + error.what());
+        }
     }
 
     core::contracts::OperationStatus MediasoupSfuEngine::ensureConnectedNoLock() {
@@ -260,21 +577,65 @@ namespace eds::server_new::mediasoup::service {
             return verifyMediasoupBackendNoLock();
         }
         if (backendHost_.empty() || backendPort_.empty()) {
+            if (!backendEndpointValidationError_.empty()) {
+                return core::contracts::OperationStatus::failure(backendEndpointValidationError_);
+            }
             return core::contracts::OperationStatus::failure(
-                "Mediasoup backend endpoint is not configured. Set EDUSPACE_MEDIASOUP_BACKEND_URL.");
+                "Mediasoup backend endpoint is not configured. Set MEETSPACE_MEDIASOUP_BACKEND_URL.");
         }
 
         try {
             if (!resolver_) {
                 resolver_ = std::make_unique<tcp::resolver>(ioContext_);
             }
-            if (!socket_) {
-                socket_ = std::make_unique<ws_stream>(ioContext_);
-            }
 
             const auto endpoints = resolver_->resolve(backendHost_, backendPort_);
-            boost::beast::get_lowest_layer(*socket_).connect(endpoints);
-            socket_->handshake(backendHost_ + ":" + backendPort_, backendPath_);
+            const auto connectTimeout = std::chrono::milliseconds(
+                std::max(500, mediaPolicy_.backendConnectTimeoutMs()));
+
+            if (backendSecure_) {
+                socket_.reset();
+
+                const auto tlsContextStatus = configureBackendTlsContextNoLock();
+                if (!tlsContextStatus.ok) {
+                    return tlsContextStatus;
+                }
+                if (!tlsContext_) {
+                    return core::contracts::OperationStatus::failure(
+                        "Mediasoup backend TLS context is not initialized.");
+                }
+
+                tlsSocket_ = std::make_unique<wss_stream>(ioContext_, *tlsContext_);
+                auto& lowestLayer = boost::beast::get_lowest_layer(*tlsSocket_);
+                lowestLayer.expires_after(connectTimeout);
+                lowestLayer.connect(endpoints);
+
+                if (!backendTlsServerName_.empty()
+                    && !SSL_set_tlsext_host_name(
+                        tlsSocket_->next_layer().native_handle(),
+                        backendTlsServerName_.c_str())) {
+                    disconnectNoLock();
+                    return core::contracts::OperationStatus::failure(
+                        "Failed to configure TLS SNI for mediasoup backend connection.");
+                }
+
+                lowestLayer.expires_after(connectTimeout);
+                tlsSocket_->next_layer().handshake(boost::asio::ssl::stream_base::client);
+
+                lowestLayer.expires_after(connectTimeout);
+                tlsSocket_->handshake(backendHost_ + ":" + backendPort_, backendPath_);
+            }
+            else {
+                tlsSocket_.reset();
+                tlsContext_.reset();
+                socket_ = std::make_unique<ws_stream>(ioContext_);
+                auto& lowestLayer = boost::beast::get_lowest_layer(*socket_);
+                lowestLayer.expires_after(connectTimeout);
+                lowestLayer.connect(endpoints);
+
+                lowestLayer.expires_after(connectTimeout);
+                socket_->handshake(backendHost_ + ":" + backendPort_, backendPath_);
+            }
             backendConnected_ = true;
 
             const auto verificationStatus = verifyMediasoupBackendNoLock();
@@ -295,8 +656,13 @@ namespace eds::server_new::mediasoup::service {
         if (!backendConnected_) {
             return core::contracts::OperationStatus::failure("Mediasoup backend websocket is not connected.");
         }
-        if (!socket_) {
-            return core::contracts::OperationStatus::failure("Mediasoup backend socket is not initialized.");
+        if (backendSecure_ && !tlsSocket_) {
+            return core::contracts::OperationStatus::failure(
+                "Mediasoup backend TLS websocket is not initialized.");
+        }
+        if (!backendSecure_ && !socket_) {
+            return core::contracts::OperationStatus::failure(
+                "Mediasoup backend websocket is not initialized.");
         }
 
         try {
@@ -308,12 +674,11 @@ namespace eds::server_new::mediasoup::service {
                     { "requireRouterRtpCapabilities", true }
                 } }
             };
-            const auto serialized = request.dump();
-            socket_->write(boost::asio::buffer(serialized));
-
-            boost::beast::flat_buffer responseBuffer;
-            socket_->read(responseBuffer);
-            const auto responseText = boost::beast::buffers_to_string(responseBuffer.data());
+            std::string responseText;
+            const auto requestStatus = sendBackendRequestNoLock(request.dump(), responseText);
+            if (!requestStatus.ok) {
+                return requestStatus;
+            }
             const auto response = json::parse(responseText, nullptr, false);
             if (!response.is_object()) {
                 return core::contracts::OperationStatus::failure("Invalid mediasoup capability response.");
@@ -352,18 +717,19 @@ namespace eds::server_new::mediasoup::service {
     }
 
     void MediasoupSfuEngine::disconnectNoLock() {
-        if (!socket_) {
-            backendConnected_ = false;
-            backendVerified_ = false;
-            backendEngine_.clear();
-            backendVersion_.clear();
-            return;
-        }
+        if (tlsSocket_) {
+            boost::system::error_code closeCode;
+            tlsSocket_->close(boost::beast::websocket::close_code::normal, closeCode);
 
-        boost::system::error_code code;
-        socket_->close(boost::beast::websocket::close_code::normal, code);
-        socket_.reset();
-        socket_ = std::make_unique<ws_stream>(ioContext_);
+            boost::system::error_code shutdownCode;
+            tlsSocket_->next_layer().shutdown(shutdownCode);
+            tlsSocket_.reset();
+        }
+        if (socket_) {
+            boost::system::error_code closeCode;
+            socket_->close(boost::beast::websocket::close_code::normal, closeCode);
+            socket_.reset();
+        }
         backendConnected_ = false;
         backendVerified_ = false;
         backendEngine_.clear();
@@ -374,117 +740,142 @@ namespace eds::server_new::mediasoup::service {
         const std::string& operationName,
         const MediaTransportCommand& command,
         std::string& backendMessage) {
-        const auto connectionStatus = ensureConnectedNoLock();
-        if (!connectionStatus.ok) {
-            return connectionStatus;
-        }
-        if (!backendVerified_) {
-            return core::contracts::OperationStatus::failure(
-                "Mediasoup backend is connected but not verified.");
-        }
-        if (!socket_) {
-            return core::contracts::OperationStatus::failure("Mediasoup backend socket is not initialized.");
-        }
+        const auto maxRetries = std::max(0, mediaPolicy_.backendMaxRetries());
+        auto lastFailure = core::contracts::OperationStatus::failure(
+            "Mediasoup backend request failed.");
 
-        try {
-            json payload{
-                { "sessionHandle", command.sessionHandle },
-                { "sessionId", command.sessionId },
-                { "peerId", command.peerId },
-                { "roomId", command.roomId },
-                { "transportId", command.transportId },
-                { "producerId", command.producerId },
-                { "consumerId", command.consumerId },
-                { "kind", command.kind },
-                { "trackType", command.trackType },
-                { "sdp", command.sdp },
-                { "sdpMid", command.sdpMid },
-                { "candidate", command.candidate },
-                { "injectTestRtp", command.injectTestRtp },
-                { "correlationId", command.correlationId }
-            };
-
-            const auto dtlsParameters = parseOptionalJsonPayload(command.dtlsParameters);
-            if (!dtlsParameters.is_null()) {
-                payload["dtlsParameters"] = dtlsParameters;
-            }
-            const auto rtpParameters = parseOptionalJsonPayload(command.rtpParameters);
-            if (!rtpParameters.is_null()) {
-                payload["rtpParameters"] = rtpParameters;
-            }
-            const auto rtpCapabilities = parseOptionalJsonPayload(command.rtpCapabilities);
-            if (!rtpCapabilities.is_null()) {
-                payload["rtpCapabilities"] = rtpCapabilities;
-            }
-            if (command.injectTestRtp) {
-                json testRtp = json::object();
-                if (command.testRtpPacketCount > 0) {
-                    testRtp["packetCount"] = command.testRtpPacketCount;
+        for (int attempt = 0; attempt <= maxRetries; ++attempt) {
+            const auto connectionStatus = ensureConnectedNoLock();
+            if (!connectionStatus.ok) {
+                lastFailure = connectionStatus;
+                disconnectNoLock();
+                if (attempt < maxRetries) {
+                    continue;
                 }
-                if (command.testRtpPayloadSize > 0) {
-                    testRtp["payloadSize"] = command.testRtpPayloadSize;
+                return lastFailure;
+            }
+            if (!backendVerified_) {
+                lastFailure = core::contracts::OperationStatus::failure(
+                    "Mediasoup backend is connected but not verified.");
+                disconnectNoLock();
+                if (attempt < maxRetries) {
+                    continue;
                 }
-                if (command.testRtpTimestampStep > 0) {
-                    testRtp["timestampStep"] = command.testRtpTimestampStep;
-                }
-                if (!testRtp.empty()) {
-                    payload["testRtp"] = std::move(testRtp);
-                }
+                return lastFailure;
             }
 
-            json request{
-                { "id", makeRequestId(command.correlationId) },
-                { "operation", operationName },
-                { "requireEngine", "mediasoup" },
-                { "payload", std::move(payload) }
-            };
+            try {
+                json payload{
+                    { "sessionHandle", command.sessionHandle },
+                    { "sessionId", command.sessionId },
+                    { "peerId", command.peerId },
+                    { "roomId", command.roomId },
+                    { "transportId", command.transportId },
+                    { "producerId", command.producerId },
+                    { "consumerId", command.consumerId },
+                    { "kind", command.kind },
+                    { "trackType", command.trackType },
+                    { "sdp", command.sdp },
+                    { "sdpMid", command.sdpMid },
+                    { "candidate", command.candidate },
+                    { "injectTestRtp", command.injectTestRtp },
+                    { "correlationId", command.correlationId }
+                };
 
-            const auto serialized = request.dump();
-            socket_->write(boost::asio::buffer(serialized));
+                const auto dtlsParameters = parseOptionalJsonPayload(command.dtlsParameters);
+                if (!dtlsParameters.is_null()) {
+                    payload["dtlsParameters"] = dtlsParameters;
+                }
+                const auto rtpParameters = parseOptionalJsonPayload(command.rtpParameters);
+                if (!rtpParameters.is_null()) {
+                    payload["rtpParameters"] = rtpParameters;
+                }
+                const auto rtpCapabilities = parseOptionalJsonPayload(command.rtpCapabilities);
+                if (!rtpCapabilities.is_null()) {
+                    payload["rtpCapabilities"] = rtpCapabilities;
+                }
+                if (command.injectTestRtp) {
+                    json testRtp = json::object();
+                    if (command.testRtpPacketCount > 0) {
+                        testRtp["packetCount"] = command.testRtpPacketCount;
+                    }
+                    if (command.testRtpPayloadSize > 0) {
+                        testRtp["payloadSize"] = command.testRtpPayloadSize;
+                    }
+                    if (command.testRtpTimestampStep > 0) {
+                        testRtp["timestampStep"] = command.testRtpTimestampStep;
+                    }
+                    if (!testRtp.empty()) {
+                        payload["testRtp"] = std::move(testRtp);
+                    }
+                }
 
-            boost::beast::flat_buffer responseBuffer;
-            socket_->read(responseBuffer);
-            backendMessage = boost::beast::buffers_to_string(responseBuffer.data());
-            appendSignalingEventsFromBackendNoLock(command.peerId, backendMessage);
+                json request{
+                    { "id", makeRequestId(command.correlationId) },
+                    { "operation", operationName },
+                    { "requireEngine", "mediasoup" },
+                    { "payload", std::move(payload) }
+                };
 
-            const auto response = json::parse(backendMessage, nullptr, false);
-            if (!response.is_object()) {
-                return core::contracts::OperationStatus::failure("Invalid mediasoup backend response format.");
-            }
-            if (!response.contains("ok") || !response["ok"].is_boolean()) {
-                return core::contracts::OperationStatus::failure(
-                    "Mediasoup backend response must contain boolean field 'ok'.");
-            }
-            if (response.contains("backend") && response["backend"].is_object()) {
-                const auto engine = response["backend"].value("engine", std::string{});
-                if (!engine.empty() && !isMediasoupEngineName(engine)) {
+                std::string responseText;
+                const auto requestStatus = sendBackendRequestNoLock(request.dump(), responseText);
+                if (!requestStatus.ok) {
+                    lastFailure = requestStatus;
                     disconnectNoLock();
-                    return core::contracts::OperationStatus::failure(
-                        "Mediasoup backend engine mismatch during operation '" + operationName + "'.");
+                    if (attempt < maxRetries) {
+                        continue;
+                    }
+                    return lastFailure;
                 }
-            }
-            const bool ok = response.value("ok", false);
-            const auto message = response.value("message", std::string{});
-            if (!ok) {
-                return core::contracts::OperationStatus::failure(
-                    message.empty() ? std::string("Mediasoup backend rejected operation: ") + operationName : message);
-            }
 
-            const auto updatedCount = ++backendOperationCounters_[operationName];
-            if (debugMode_) {
-                std::cout << "[mediasoup][ops] operation=" << operationName
-                    << " count=" << updatedCount
-                    << " engine=" << backendEngine_
-                    << "\n";
-            }
+                backendMessage = std::move(responseText);
+                appendSignalingEventsFromBackendNoLock(command.peerId, backendMessage);
 
-            return core::contracts::OperationStatus::success();
+                const auto response = json::parse(backendMessage, nullptr, false);
+                if (!response.is_object()) {
+                    return core::contracts::OperationStatus::failure("Invalid mediasoup backend response format.");
+                }
+                if (!response.contains("ok") || !response["ok"].is_boolean()) {
+                    return core::contracts::OperationStatus::failure(
+                        "Mediasoup backend response must contain boolean field 'ok'.");
+                }
+                if (response.contains("backend") && response["backend"].is_object()) {
+                    const auto engine = response["backend"].value("engine", std::string{});
+                    if (!engine.empty() && !isMediasoupEngineName(engine)) {
+                        disconnectNoLock();
+                        return core::contracts::OperationStatus::failure(
+                            "Mediasoup backend engine mismatch during operation '" + operationName + "'.");
+                    }
+                }
+                const bool ok = response.value("ok", false);
+                const auto message = response.value("message", std::string{});
+                if (!ok) {
+                    return core::contracts::OperationStatus::failure(
+                        message.empty() ? std::string("Mediasoup backend rejected operation: ") + operationName : message);
+                }
+
+                const auto updatedCount = ++backendOperationCounters_[operationName];
+                if (debugMode_) {
+                    std::cout << "[mediasoup][ops] operation=" << operationName
+                        << " count=" << updatedCount
+                        << " engine=" << backendEngine_
+                        << "\n";
+                }
+
+                return core::contracts::OperationStatus::success();
+            }
+            catch (const std::exception& error) {
+                lastFailure = core::contracts::OperationStatus::failure(
+                    std::string("Mediasoup backend request failed: ") + error.what());
+                disconnectNoLock();
+                if (attempt < maxRetries) {
+                    continue;
+                }
+                return lastFailure;
+            }
         }
-        catch (const std::exception& error) {
-            disconnectNoLock();
-            return core::contracts::OperationStatus::failure(
-                std::string("Mediasoup backend request failed: ") + error.what());
-        }
+
+        return lastFailure;
     }
 
     void MediasoupSfuEngine::appendSignalingEventsFromBackendNoLock(
@@ -681,6 +1072,11 @@ namespace eds::server_new::mediasoup::service {
             emittedEvents.push_back(makeErrorEvent(command, failure.message));
             return failure;
         }
+        const auto policyStatus = mediaPolicy_.validateAndConsume(intent, command);
+        if (!policyStatus.ok) {
+            emittedEvents.push_back(makeErrorEvent(command, policyStatus.message));
+            return policyStatus;
+        }
 
         switch (intent) {
         case MediaTransportIntent::CreateRoom: {
@@ -698,6 +1094,11 @@ namespace eds::server_new::mediasoup::service {
             std::string backendMessage;
             const auto backendStatus = callMediasoupBackendNoLock(operationName, command, backendMessage);
             if (!backendStatus.ok) {
+                if (containsCaseInsensitive(backendStatus.message, "already exists")) {
+                    rooms_.emplace(command.roomId, RoomState{});
+                    return core::contracts::OperationStatus::success(
+                        "Media room already existed in backend; local state synchronized.");
+                }
                 emittedEvents.push_back(makeErrorEvent(command, backendStatus.message));
                 return backendStatus;
             }

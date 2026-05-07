@@ -1,0 +1,169 @@
+﻿{
+  "timestampUtc": "2026-05-02T05:03:26Z",
+  "pass": false,
+  "config": {
+    "host": "127.0.0.1",
+    "port": 9002,
+    "conference_users": 0,
+    "dm_users": 10,
+    "chat_users": 0,
+    "messages_per_chat_user": 0,
+    "action_timeout_s": 20.0,
+    "concurrency": 18,
+    "settle_s": 1.0,
+    "run_id": "dm10checkfix2",
+    "user_pool": [
+      "da6c8e61-9d89-4f62-ac21-9d84e76cd1b0",
+      "04692988-fce1-4d31-afb7-2ff16db4c5d9",
+      "9679918e-a5bb-486f-b439-3c979ca24e27",
+      "79dd6d02-c6a2-4866-9307-241c0d66b894",
+      "095b7aa6-3358-477c-a796-d61a14497fa8",
+      "aaac6ea8-0294-4784-ba35-20e65d7ecd47",
+      "b126c0d8-664c-4486-896a-89118433d727",
+      "55d66f76-b588-4f04-ac7c-faf8cdb27f09",
+      "f051c102-6585-4041-888d-907b766f1b1c",
+      "d240f15d-f181-498e-9453-b1f37fdc520d"
+    ]
+  },
+  "clientGroups": {
+    "aliveTotal": 10,
+    "conferenceClients": 0,
+    "dmClients": 10,
+    "chatClients": 0,
+    "conferencePairs": 0,
+    "dmPairs": 5,
+    "chatPairs": 0
+  },
+  "metrics": {
+    "connectOk": 10,
+    "connectFail": 0,
+    "authOk": 10,
+    "authFail": 0,
+    "operationsTotal": 130,
+    "operationsOk": 130,
+    "operationsFail": 0,
+    "operationFailureRate": 0.0,
+    "criticalSuccessRate": {
+      "conference.open_transport": 0.0,
+      "direct_call.open_transport": 1.0,
+      "direct_call.create_call": 1.0,
+      "direct_call.accept_call": 1.0,
+      "direct_chat.send_message": 0.0
+    },
+    "events": {
+      "direct_call_accepted": 10,
+      "transport_opened": 10,
+      "track_published": 20,
+      "consumer_resumed": 20,
+      "direct_call_ended": 10,
+      "direct_call_invite": 5
+    },
+    "latencyMs": {
+      "auth.bind_session": {
+        "count": 10,
+        "p50": 500.643,
+        "p95": 670.464,
+        "p99": 672.387,
+        "max": 672.868,
+        "avg": 521.525
+      },
+      "direct_call.create_call": {
+        "count": 5,
+        "p50": 108.557,
+        "p95": 117.834,
+        "p99": 118.239,
+        "max": 118.34,
+        "avg": 110.496
+      },
+      "direct_call.invite": {
+        "count": 5,
+        "p50": 0.0,
+        "p95": 0.0,
+        "p99": 0.0,
+        "max": 0.0,
+        "avg": 0.0
+      },
+      "direct_call.accept_call": {
+        "count": 5,
+        "p50": 232.988,
+        "p95": 239.811,
+        "p99": 240.625,
+        "max": 240.829,
+        "avg": 205.681
+      },
+      "direct_call.open_transport": {
+        "count": 10,
+        "p50": 109.838,
+        "p95": 173.734,
+        "p99": 174.855,
+        "max": 175.135,
+        "avg": 125.871
+      },
+      "direct_call.webrtc_offer": {
+        "count": 10,
+        "p50": 104.979,
+        "p95": 183.339,
+        "p99": 186.088,
+        "max": 186.775,
+        "avg": 127.267
+      },
+      "direct_call.webrtc_ice": {
+        "count": 10,
+        "p50": 87.298,
+        "p95": 171.819,
+        "p99": 172.012,
+        "max": 172.061,
+        "avg": 110.676
+      },
+      "direct_call.publish_track": {
+        "count": 20,
+        "p50": 104.895,
+        "p95": 201.2,
+        "p99": 203.959,
+        "max": 204.649,
+        "avg": 124.514
+      },
+      "direct_call.consume_track": {
+        "count": 20,
+        "p50": 117.981,
+        "p95": 184.567,
+        "p99": 204.052,
+        "max": 208.923,
+        "avg": 131.519
+      },
+      "direct_call.consumer_ready": {
+        "count": 20,
+        "p50": 122.488,
+        "p95": 179.467,
+        "p99": 197.721,
+        "max": 202.284,
+        "avg": 130.137
+      },
+      "direct_call.media_stats": {
+        "count": 10,
+        "p50": 128.101,
+        "p95": 228.817,
+        "p99": 246.626,
+        "max": 251.079,
+        "avg": 146.573
+      },
+      "direct_call.hangup_call": {
+        "count": 5,
+        "p50": 116.229,
+        "p95": 146.44,
+        "p99": 150.264,
+        "max": 151.221,
+        "avg": 116.263
+      }
+    },
+    "stageSeconds": {
+      "connect_auth": 0.712,
+      "conference_group": 0.0,
+      "direct_call_group": 3.101,
+      "direct_chat_group": 0.0,
+      "settle": 1.012,
+      "total": 4.831
+    },
+    "failureSample": []
+  }
+}

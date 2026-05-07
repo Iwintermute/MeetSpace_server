@@ -1,0 +1,39 @@
+﻿{
+  "timestampUtc": "2026-05-02T04:51:38Z",
+  "pass": false,
+  "reason": "too_few_alive_clients_after_auth",
+  "config": {
+    "host": "127.0.0.1",
+    "port": 9002,
+    "conference_users": 2,
+    "dm_users": 0,
+    "chat_users": 0,
+    "messages_per_chat_user": 0,
+    "action_timeout_s": 10.0,
+    "concurrency": 2,
+    "settle_s": 1.0,
+    "run_id": "conf2leave",
+    "user_pool": [
+      "da6c8e61-9d89-4f62-ac21-9d84e76cd1b0",
+      "04692988-fce1-4d31-afb7-2ff16db4c5d9"
+    ]
+  },
+  "metrics": {
+    "connectOk": 2,
+    "connectFail": 0,
+    "authOk": 0,
+    "authFail": 2,
+    "failureSample": [
+      {
+        "op": "auth.bind_session",
+        "code": "transport_exception",
+        "message": "TimeoutError: "
+      },
+      {
+        "op": "auth.bind_session",
+        "code": "transport_exception",
+        "message": "TimeoutError: "
+      }
+    ]
+  }
+}

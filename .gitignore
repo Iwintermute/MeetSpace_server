@@ -364,3 +364,7 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
+# Runtime server env files with deployment secrets
+server.env
+app/server.env
+apps/server.env

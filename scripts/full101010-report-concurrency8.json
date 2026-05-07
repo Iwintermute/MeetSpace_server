@@ -1,0 +1,358 @@
+﻿{
+  "timestampUtc": "2026-05-02T04:43:54Z",
+  "pass": false,
+  "config": {
+    "host": "127.0.0.1",
+    "port": 9002,
+    "conference_users": 10,
+    "dm_users": 10,
+    "chat_users": 10,
+    "messages_per_chat_user": 3,
+    "action_timeout_s": 25.0,
+    "concurrency": 8,
+    "settle_s": 2.0,
+    "run_id": "full101010c8",
+    "user_pool": [
+      "da6c8e61-9d89-4f62-ac21-9d84e76cd1b0",
+      "04692988-fce1-4d31-afb7-2ff16db4c5d9",
+      "9679918e-a5bb-486f-b439-3c979ca24e27",
+      "79dd6d02-c6a2-4866-9307-241c0d66b894",
+      "095b7aa6-3358-477c-a796-d61a14497fa8",
+      "aaac6ea8-0294-4784-ba35-20e65d7ecd47",
+      "b126c0d8-664c-4486-896a-89118433d727",
+      "55d66f76-b588-4f04-ac7c-faf8cdb27f09",
+      "f051c102-6585-4041-888d-907b766f1b1c",
+      "d240f15d-f181-498e-9453-b1f37fdc520d",
+      "6ba21e6f-9579-4aef-8ab7-dccd04c6c713",
+      "14466614-8d22-4bf6-979f-bb0b13d268e7",
+      "dc8ed97b-7a4d-41ff-bf15-92ffadac2b81",
+      "8100145a-229e-4c2d-ace9-c323dc9acdcb",
+      "bdcfd94e-df14-4679-8939-61c91d4fe802",
+      "81e16e10-d01d-410d-927b-1689b34bbf30",
+      "ea343f82-6e64-458d-be7c-3c1c39fb8bfa",
+      "d0dc21bd-d355-49fd-8ed7-8bb824c91b07",
+      "d18882a6-e6c6-485a-b524-d7e121aa1ae6",
+      "b1c65bc0-c827-47ae-b42c-55c52c8c91c5",
+      "f54db391-0773-4c58-aab1-fc1ff7f24c3c",
+      "cf1fd9cf-c2f9-4e43-b505-e41ebde79311",
+      "4bbbb59b-1156-428e-aaf5-87772bb2054e",
+      "31526a11-d37b-4eb3-bfb1-cd6eef8c8707",
+      "db77f217-93d8-41bc-8b35-c2f3481d610e",
+      "27cfc8e1-5548-47e6-8ab4-2e67dd029b8e",
+      "4026230c-120c-461d-8519-fff690a699cd",
+      "84d3b548-8a86-4e96-b034-6da8e085df7a",
+      "7e0051a3-7053-48a6-878e-1943ef3403c5",
+      "4ee3ae1e-e02f-4959-8c66-bb429b42227d"
+    ]
+  },
+  "clientGroups": {
+    "aliveTotal": 30,
+    "conferenceClients": 10,
+    "dmClients": 10,
+    "chatClients": 10,
+    "conferencePairs": 5,
+    "dmPairs": 5,
+    "chatPairs": 5
+  },
+  "metrics": {
+    "connectOk": 30,
+    "connectFail": 0,
+    "authOk": 30,
+    "authFail": 0,
+    "operationsTotal": 294,
+    "operationsOk": 280,
+    "operationsFail": 14,
+    "operationFailureRate": 0.0476,
+    "criticalSuccessRate": {
+      "conference.open_transport": 0.8,
+      "direct_call.open_transport": 1.0,
+      "direct_call.create_call": 1.0,
+      "direct_call.accept_call": 1.0,
+      "direct_chat.send_message": 1.0
+    },
+    "events": {
+      "conference_member_joined": 5,
+      "transport_opened": 18,
+      "track_published": 36,
+      "consumer_resumed": 36,
+      "direct_call_accepted": 10,
+      "direct_call_ended": 10,
+      "direct_call_invite": 5,
+      "direct_chat_message": 30
+    },
+    "latencyMs": {
+      "auth.bind_session": {
+        "count": 30,
+        "p50": 2249.437,
+        "p95": 4305.457,
+        "p99": 4865.362,
+        "max": 5080.422,
+        "avg": 2450.54
+      },
+      "conference.create": {
+        "count": 5,
+        "p50": 176.422,
+        "p95": 593.274,
+        "p99": 659.952,
+        "max": 676.621,
+        "avg": 259.389
+      },
+      "conference.join": {
+        "count": 10,
+        "p50": 250.314,
+        "p95": 674.192,
+        "p99": 792.792,
+        "max": 822.443,
+        "avg": 314.773
+      },
+      "conference.open_transport": {
+        "count": 10,
+        "p50": 325.196,
+        "p95": 1756.8,
+        "p99": 2599.276,
+        "max": 2809.895,
+        "avg": 546.277
+      },
+      "conference.webrtc_offer": {
+        "count": 8,
+        "p50": 278.629,
+        "p95": 532.942,
+        "p99": 624.79,
+        "max": 647.752,
+        "avg": 317.278
+      },
+      "conference.webrtc_ice": {
+        "count": 10,
+        "p50": 239.964,
+        "p95": 494.849,
+        "p99": 557.418,
+        "max": 573.06,
+        "avg": 263.437
+      },
+      "conference.publish_track": {
+        "count": 16,
+        "p50": 244.364,
+        "p95": 426.332,
+        "p99": 473.15,
+        "max": 484.855,
+        "avg": 271.853
+      },
+      "conference.consume_track": {
+        "count": 16,
+        "p50": 249.737,
+        "p95": 588.443,
+        "p99": 646.649,
+        "max": 661.201,
+        "avg": 314.251
+      },
+      "conference.consumer_ready": {
+        "count": 16,
+        "p50": 317.939,
+        "p95": 518.997,
+        "p99": 614.296,
+        "max": 638.121,
+        "avg": 314.809
+      },
+      "conference.media_stats": {
+        "count": 8,
+        "p50": 318.355,
+        "p95": 673.238,
+        "p99": 718.387,
+        "max": 729.675,
+        "avg": 342.198
+      },
+      "conference.leave": {
+        "count": 10,
+        "p50": 25011.697,
+        "p95": 25024.196,
+        "p99": 25026.386,
+        "max": 25026.934,
+        "avg": 25012.886
+      },
+      "conference.close": {
+        "count": 5,
+        "p50": 87.397,
+        "p95": 104.738,
+        "p99": 106.036,
+        "max": 106.361,
+        "avg": 91.967
+      },
+      "direct_call.create_call": {
+        "count": 5,
+        "p50": 266.375,
+        "p95": 404.155,
+        "p99": 414.092,
+        "max": 416.576,
+        "avg": 267.113
+      },
+      "direct_call.invite": {
+        "count": 5,
+        "p50": 0.0,
+        "p95": 0.0,
+        "p99": 0.0,
+        "max": 0.0,
+        "avg": 0.0
+      },
+      "direct_call.accept_call": {
+        "count": 5,
+        "p50": 256.67,
+        "p95": 750.423,
+        "p99": 802.619,
+        "max": 815.668,
+        "avg": 412.89
+      },
+      "direct_call.open_transport": {
+        "count": 10,
+        "p50": 243.243,
+        "p95": 747.273,
+        "p99": 917.19,
+        "max": 959.67,
+        "avg": 331.495
+      },
+      "direct_call.webrtc_offer": {
+        "count": 10,
+        "p50": 242.177,
+        "p95": 411.566,
+        "p99": 473.35,
+        "max": 488.796,
+        "avg": 243.076
+      },
+      "direct_call.webrtc_ice": {
+        "count": 10,
+        "p50": 241.032,
+        "p95": 613.523,
+        "p99": 647.186,
+        "max": 655.602,
+        "avg": 329.185
+      },
+      "direct_call.publish_track": {
+        "count": 20,
+        "p50": 319.971,
+        "p95": 486.453,
+        "p99": 493.028,
+        "max": 494.672,
+        "avg": 315.984
+      },
+      "direct_call.consume_track": {
+        "count": 20,
+        "p50": 324.921,
+        "p95": 488.131,
+        "p99": 488.35,
+        "max": 488.405,
+        "avg": 321.129
+      },
+      "direct_call.consumer_ready": {
+        "count": 20,
+        "p50": 243.111,
+        "p95": 421.664,
+        "p99": 538.521,
+        "max": 567.736,
+        "avg": 267.899
+      },
+      "direct_call.media_stats": {
+        "count": 10,
+        "p50": 511.329,
+        "p95": 1050.832,
+        "p99": 1126.185,
+        "max": 1145.024,
+        "avg": 522.466
+      },
+      "direct_call.hangup_call": {
+        "count": 5,
+        "p50": 241.115,
+        "p95": 473.658,
+        "p99": 519.909,
+        "max": 531.472,
+        "avg": 251.366
+      },
+      "direct_chat.send_message": {
+        "count": 30,
+        "p50": 676.047,
+        "p95": 1395.394,
+        "p99": 1500.631,
+        "max": 1528.959,
+        "avg": 720.58
+      }
+    },
+    "stageSeconds": {
+      "connect_auth": 10.467,
+      "conference_group": 108.175,
+      "direct_call_group": 11.105,
+      "direct_chat_group": 2.88,
+      "settle": 2.006,
+      "total": 160.288
+    },
+    "failureSample": [
+      {
+        "op": "conference.leave",
+        "code": "transport_exception",
+        "message": "TimeoutError: "
+      },
+      {
+        "op": "conference.leave",
+        "code": "transport_exception",
+        "message": "TimeoutError: "
+      },
+      {
+        "op": "conference.leave",
+        "code": "transport_exception",
+        "message": "TimeoutError: "
+      },
+      {
+        "op": "conference.leave",
+        "code": "transport_exception",
+        "message": "TimeoutError: "
+      },
+      {
+        "op": "conference.leave",
+        "code": "transport_exception",
+        "message": "TimeoutError: "
+      },
+      {
+        "op": "conference.leave",
+        "code": "transport_exception",
+        "message": "TimeoutError: "
+      },
+      {
+        "op": "conference.open_transport",
+        "code": "operation_failed",
+        "message": "Peer must join room before opening transport."
+      },
+      {
+        "op": "conference.open_transport",
+        "code": "operation_failed",
+        "message": "Peer must join room before opening transport."
+      },
+      {
+        "op": "conference.webrtc_ice",
+        "code": "operation_failed",
+        "message": "Transport not found: mp-conf-tr-a-full101010c8-4"
+      },
+      {
+        "op": "conference.leave",
+        "code": "transport_exception",
+        "message": "TimeoutError: "
+      },
+      {
+        "op": "conference.webrtc_ice",
+        "code": "operation_failed",
+        "message": "Transport not found: mp-conf-tr-b-full101010c8-4"
+      },
+      {
+        "op": "conference.leave",
+        "code": "transport_exception",
+        "message": "TimeoutError: "
+      },
+      {
+        "op": "conference.leave",
+        "code": "transport_exception",
+        "message": "TimeoutError: "
+      },
+      {
+        "op": "conference.leave",
+        "code": "transport_exception",
+        "message": "TimeoutError: "
+      }
+    ]
+  }
+}
