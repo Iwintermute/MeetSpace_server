@@ -309,6 +309,28 @@ function Ensure-FirewallRule {
         -LocalPort $LocalPort | Out-Null
 }
 
+function Get-PhysicalCoreCount {
+    try {
+        $processors = Get-CimInstance Win32_Processor -ErrorAction Stop
+        $total = ($processors | Measure-Object -Property NumberOfCores -Sum).Sum
+        if ($total -is [ValueType]) {
+            $count = [int]$total
+            if ($count -gt 0) {
+                return $count
+            }
+        }
+    }
+    catch {
+    }
+
+    $logical = [Environment]::ProcessorCount
+    if ($logical -le 1) {
+        return 1
+    }
+
+    return [Math]::Max(1, [Math]::Floor($logical / 2))
+}
+
 function Try-EnsureFirewallRules {
     try {
         $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
@@ -344,6 +366,36 @@ $env:MEDIASOUP_RTC_LISTEN_IP = "0.0.0.0"
 $env:MEDIASOUP_ANNOUNCED_IP = $PublicIp
 $env:MEDIASOUP_RTC_MIN_PORT = "40000"
 $env:MEDIASOUP_RTC_MAX_PORT = "49999"
+$physicalCoreCount = Get-PhysicalCoreCount
+if ([string]::IsNullOrWhiteSpace($env:MEDIASOUP_PHYSICAL_CORE_COUNT)) {
+    $env:MEDIASOUP_PHYSICAL_CORE_COUNT = "$physicalCoreCount"
+}
+if ([string]::IsNullOrWhiteSpace($env:MEDIASOUP_WORKER_COUNT)) {
+    $env:MEDIASOUP_WORKER_COUNT = "$physicalCoreCount"
+}
+if ([string]::IsNullOrWhiteSpace($env:MEDIASOUP_MAX_PEERS_PER_WORKER)) {
+    $env:MEDIASOUP_MAX_PEERS_PER_WORKER = "500"
+}
+if ([string]::IsNullOrWhiteSpace($env:MEDIASOUP_MAX_INFLIGHT_OPERATIONS)) {
+    $defaultInflight = [Math]::Max(500, $physicalCoreCount * 500)
+    $env:MEDIASOUP_MAX_INFLIGHT_OPERATIONS = "$defaultInflight"
+}
+if ([string]::IsNullOrWhiteSpace($env:MEDIASOUP_MAX_GLOBAL_PENDING_MESSAGES)) {
+    $defaultPending = [Math]::Max(20000, $physicalCoreCount * 4000)
+    $env:MEDIASOUP_MAX_GLOBAL_PENDING_MESSAGES = "$defaultPending"
+}
+if ([string]::IsNullOrWhiteSpace($env:MEETSPACE_SIGNALING_MAX_CONNECTIONS)) {
+    $env:MEETSPACE_SIGNALING_MAX_CONNECTIONS = [string]([Math]::Max(5000, $physicalCoreCount * 1000))
+}
+$env:EDUSPACE_SIGNALING_MAX_CONNECTIONS = $env:MEETSPACE_SIGNALING_MAX_CONNECTIONS
+if ([string]::IsNullOrWhiteSpace($env:MEETSPACE_SIGNALING_MAX_MESSAGES_PER_SECOND_PER_PEER)) {
+    $env:MEETSPACE_SIGNALING_MAX_MESSAGES_PER_SECOND_PER_PEER = "240"
+}
+$env:EDUSPACE_SIGNALING_MAX_MESSAGES_PER_SECOND_PER_PEER = $env:MEETSPACE_SIGNALING_MAX_MESSAGES_PER_SECOND_PER_PEER
+if ([string]::IsNullOrWhiteSpace($env:MEETSPACE_SIGNALING_IO_THREADS)) {
+    $env:MEETSPACE_SIGNALING_IO_THREADS = "$physicalCoreCount"
+}
+$env:EDUSPACE_SIGNALING_IO_THREADS = $env:MEETSPACE_SIGNALING_IO_THREADS
 $effectiveSupabaseUrl = Resolve-ConfigValue `
     -ParamValue $SupabaseUrl `
     -EnvNames @("MEETSPACE_SUPABASE_URL", "SUPABASE_URL") `
@@ -431,6 +483,9 @@ if ($tlsMaterial.Generated) {
 }
 Write-Host "  backend:   ws://127.0.0.1:5001/ws"
 Write-Host "  announced: $PublicIp"
+Write-Host "  workers:   $($env:MEDIASOUP_WORKER_COUNT) (physical cores: $($env:MEDIASOUP_PHYSICAL_CORE_COUNT))"
+Write-Host "  peers/worker: $($env:MEDIASOUP_MAX_PEERS_PER_WORKER)"
+Write-Host "  inflight/pending: $($env:MEDIASOUP_MAX_INFLIGHT_OPERATIONS) / $($env:MEDIASOUP_MAX_GLOBAL_PENDING_MESSAGES)"
 
 Stop-PreviousStackProcesses -Root $resolvedRoot
 Try-EnsureFirewallRules

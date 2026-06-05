@@ -50,6 +50,7 @@ namespace eds::server_new::mediasoup::transport {
         void stop();
         bool sendText(void* session, const std::string& text);
         std::size_t sendTexts(const std::vector<void*>& sessions, const std::string& text);
+        bool closeSession(void* session);
 
     private:
         struct SessionHandle : std::enable_shared_from_this<SessionHandle> {

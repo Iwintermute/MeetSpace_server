@@ -24,6 +24,11 @@ namespace eds::server_new::features::direct_call {
     inline constexpr std::string_view kActionDeclineDirectCall = "decline_call";
     inline constexpr std::string_view kActionHangupDirectCall = "hangup_call";
     inline constexpr std::string_view kActionListActiveCalls = "list_active_calls";
+    inline constexpr std::string_view kActionFileOffer = "file_offer";
+    inline constexpr std::string_view kActionFileAccept = "file_accept";
+    inline constexpr std::string_view kActionFileChunk = "file_chunk";
+    inline constexpr std::string_view kActionFileComplete = "file_complete";
+    inline constexpr std::string_view kActionFileCancel = "file_cancel";
     inline constexpr std::string_view kActionOpenTransport = "open_transport";
     inline constexpr std::string_view kActionPublishTrack = "publish_track";
     inline constexpr std::string_view kActionPauseTrack = "pause_track";
@@ -35,5 +40,11 @@ namespace eds::server_new::features::direct_call {
     inline constexpr std::string_view kActionWebrtcIce = "webrtc_ice";
     inline constexpr std::string_view kActionWebrtcClose = "webrtc_close";
     inline constexpr std::string_view kActionMediaStats = "media_stats";
+
+    inline constexpr std::string_view kEventDirectCallFileOffer = "direct_call_file_offer";
+    inline constexpr std::string_view kEventDirectCallFileAccept = "direct_call_file_accept";
+    inline constexpr std::string_view kEventDirectCallFileChunk = "direct_call_file_chunk";
+    inline constexpr std::string_view kEventDirectCallFileComplete = "direct_call_file_complete";
+    inline constexpr std::string_view kEventDirectCallFileCancel = "direct_call_file_cancel";
 
 } // namespace eds::server_new::features::direct_call

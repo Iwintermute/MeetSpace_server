@@ -39,4 +39,12 @@ if "%MEDIASOUP_ANNOUNCED_IP%"=="" (
 ) else (
   if "%MEDIASOUP_RTC_LISTEN_IP%"=="" set "MEDIASOUP_RTC_LISTEN_IP=0.0.0.0"
 )
+if "%MEDIASOUP_PHYSICAL_CORE_COUNT%"=="" (
+  for /f "usebackq delims=" %%I in (`powershell -NoProfile -ExecutionPolicy Bypass -Command "$cores=(Get-CimInstance Win32_Processor ^| Measure-Object -Property NumberOfCores -Sum).Sum; if(-not $cores -or $cores -lt 1){$cores=[Math]::Max(1,[Math]::Floor([Environment]::ProcessorCount/2))}; [int]$cores" 2^>nul`) do set "MEDIASOUP_PHYSICAL_CORE_COUNT=%%I"
+)
+if "%MEDIASOUP_PHYSICAL_CORE_COUNT%"=="" set "MEDIASOUP_PHYSICAL_CORE_COUNT=1"
+if "%MEDIASOUP_WORKER_COUNT%"=="" set "MEDIASOUP_WORKER_COUNT=%MEDIASOUP_PHYSICAL_CORE_COUNT%"
+if "%MEDIASOUP_MAX_PEERS_PER_WORKER%"=="" set "MEDIASOUP_MAX_PEERS_PER_WORKER=500"
+if "%MEDIASOUP_MAX_INFLIGHT_OPERATIONS%"=="" set "MEDIASOUP_MAX_INFLIGHT_OPERATIONS=2000"
+if "%MEDIASOUP_MAX_GLOBAL_PENDING_MESSAGES%"=="" set "MEDIASOUP_MAX_GLOBAL_PENDING_MESSAGES=20000"
 node "%BACKEND_ROOT%src/server.js"

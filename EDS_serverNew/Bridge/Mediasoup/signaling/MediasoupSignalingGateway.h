@@ -55,6 +55,7 @@ namespace eds::server_new::mediasoup::signaling {
         void postTextToPeer(std::string peerId, std::string text);
         void postTextToPeers(std::vector<std::string> peerIds, std::string text);
         bool isPeerConnected(std::string_view peerId);
+        void loadRuntimeLimitsFromEnvironment();
 
         void startOfflineOutboxDispatcher();
         void stopOfflineOutboxDispatcher();
@@ -81,9 +82,9 @@ namespace eds::server_new::mediasoup::signaling {
         std::mutex peersMutex_;
         std::unordered_map<void*, std::string> sessionToPeer_;
         std::unordered_map<std::string, void*> peerToSession_;
-
-        static constexpr std::size_t kMaxConcurrentConnections = 50;
-        static constexpr std::uint64_t kMaxMessagesPerSecondPerPeer = 100;
+        std::size_t maxConcurrentConnections_ = 5000;
+        std::uint64_t maxMessagesPerSecondPerPeer_ = 100;
+        unsigned int ioThreadCount_ = 0;
         struct PeerRateState {
             std::uint64_t messageCount = 0;
             std::chrono::steady_clock::time_point windowStart = std::chrono::steady_clock::now();

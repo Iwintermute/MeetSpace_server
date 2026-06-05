@@ -113,6 +113,26 @@ namespace eds::server_new::features::direct_call {
             return core::contracts::OperationStatus::failure("Unsupported direct call action.");
         }
 
+        std::string_view resolveDirectCallFileEventType(std::string_view actionType) {
+            if (actionType == kActionFileOffer) {
+                return kEventDirectCallFileOffer;
+            }
+            if (actionType == kActionFileAccept) {
+                return kEventDirectCallFileAccept;
+            }
+            if (actionType == kActionFileChunk) {
+                return kEventDirectCallFileChunk;
+            }
+            if (actionType == kActionFileComplete) {
+                return kEventDirectCallFileComplete;
+            }
+            if (actionType == kActionFileCancel) {
+                return kEventDirectCallFileCancel;
+            }
+
+            return {};
+        }
+
         MediaTransportCommand buildMediaCommand(
             const eds::server_new::features::runtime::FeatureDispatchRequest& request,
             std::string roomId) {
@@ -448,6 +468,29 @@ namespace eds::server_new::features::direct_call {
         if (request.actionType == kActionListActiveCalls) {
             const auto limit = request.context.value("limit", static_cast<std::size_t>(100));
             result.status = repository->listUserActiveDirectCalls(authSession->userId, limit);
+            return result;
+        }
+
+        const auto fileEventType = resolveDirectCallFileEventType(request.actionType);
+        if (!fileEventType.empty()) {
+            const auto callId = request.context.value("callId", std::string{});
+            if (callId.empty()) {
+                result.status = core::contracts::OperationStatus::failure(
+                    "callId must not be empty for direct call file actions.");
+                return result;
+            }
+
+            const auto targetPeerId = request.context.value(
+                "targetPeerId",
+                request.context.value("peerIdTo", std::string{}));
+            result.status = repository->relayDirectCallFileEvent(
+                authSession->userId,
+                request.peerId,
+                callId,
+                fileEventType,
+                request.context,
+                targetPeerId);
+            appendOutboundEventsFromStatus(result.status, result);
             return result;
         }
 

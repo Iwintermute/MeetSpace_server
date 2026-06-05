@@ -1605,7 +1605,12 @@ LIMIT 1
         std::string_view senderPeerId,
         std::string_view targetUserId,
         std::string_view clientRequestId,
-        std::string_view text) {
+        std::string_view text,
+        std::string_view bodyType,
+        std::string_view fileName,
+        std::string_view mimeType,
+        std::int64_t fileSizeBytes,
+        std::string_view fileContentBase64) {
         if (!isReady()) {
             return dbFailure("Repository is not ready.");
         }
@@ -1615,11 +1620,38 @@ LIMIT 1
         if (senderUserId == targetUserId) {
             return dbFailure("sendDirectMessage: self direct message is not allowed.");
         }
-        if (text.empty()) {
-            return dbFailure("sendDirectMessage: text must not be empty.");
+
+        const auto normalizedBodyType = bodyType.empty() ? std::string("text") : std::string(bodyType);
+        const bool isFileMessage = normalizedBodyType == "file";
+        if (!isFileMessage && normalizedBodyType != "text") {
+            return dbFailure("sendDirectMessage: unsupported body type.");
         }
-        if (text.size() > 4000) {
-            return dbFailure("sendDirectMessage: text is too long.");
+
+        std::string effectiveBody = std::string(text);
+        if (isFileMessage) {
+            if (fileName.empty()) {
+                return dbFailure("sendDirectMessage: fileName must not be empty for file message.");
+            }
+            if (fileContentBase64.empty()) {
+                return dbFailure("sendDirectMessage: fileContentBase64 must not be empty for file message.");
+            }
+            if (fileSizeBytes <= 0) {
+                return dbFailure("sendDirectMessage: fileSizeBytes must be positive for file message.");
+            }
+            if (fileSizeBytes > 20LL * 1024LL * 1024LL) {
+                return dbFailure("sendDirectMessage: file is too large.");
+            }
+            if (fileContentBase64.size() > 30ULL * 1024ULL * 1024ULL) {
+                return dbFailure("sendDirectMessage: file payload is too large.");
+            }
+            effectiveBody = std::string(fileName);
+        } else {
+            if (effectiveBody.empty()) {
+                return dbFailure("sendDirectMessage: text must not be empty.");
+            }
+            if (effectiveBody.size() > 4000) {
+                return dbFailure("sendDirectMessage: text is too long.");
+            }
         }
 
         static const std::string sql = R"SQL(
@@ -1648,14 +1680,20 @@ upsert_message AS (
         $1::uuid,
         s.id,
         $5,
-        'text',
+        $6,
         NULLIF($4, ''),
-        jsonb_build_object('senderPeerId', $2)
+        jsonb_strip_nulls(jsonb_build_object(
+            'senderPeerId', $2,
+            'fileName', NULLIF($8, ''),
+            'mimeType', NULLIF($9, ''),
+            'fileSizeBytes', CASE WHEN $10::bigint > 0 THEN $10::bigint ELSE NULL END,
+            'fileContentBase64', NULLIF($11, '')
+        ))
     FROM thread_cte t
     CROSS JOIN sender_session s
     ON CONFLICT (sender_user_id, client_request_id) WHERE client_request_id IS NOT NULL
     DO UPDATE SET body = app.direct_messages.body
-    RETURNING id, thread_id, sender_user_id, body, created_at, client_request_id
+    RETURNING id, thread_id, sender_user_id, body, body_type, metadata, created_at, client_request_id
 ),
 sender_profile AS (
     SELECT
@@ -1745,6 +1783,12 @@ outbox AS (
             'senderDisplayName', (SELECT sender_display_name FROM sender_profile),
             'targetUserId', $3,
             'text', m.body,
+            'bodyType', m.body_type,
+            'metadata', m.metadata,
+            'fileName', m.metadata ->> 'fileName',
+            'mimeType', m.metadata ->> 'mimeType',
+            'fileSizeBytes', m.metadata ->> 'fileSizeBytes',
+            'fileContentBase64', m.metadata ->> 'fileContentBase64',
             'createdAt', m.created_at
         ),
         'pending'
@@ -1767,7 +1811,7 @@ offline_outbox AS (
         status
     )
     SELECT
-        $6,
+        $7,
         r.user_id,
         NULL,
         NULL,
@@ -1788,6 +1832,12 @@ offline_outbox AS (
             'senderDisplayName', (SELECT sender_display_name FROM sender_profile),
             'targetUserId', $3,
             'text', m.body,
+            'bodyType', m.body_type,
+            'metadata', m.metadata,
+            'fileName', m.metadata ->> 'fileName',
+            'mimeType', m.metadata ->> 'mimeType',
+            'fileSizeBytes', m.metadata ->> 'fileSizeBytes',
+            'fileContentBase64', m.metadata ->> 'fileContentBase64',
             'createdAt', m.created_at
         ),
         'pending'
@@ -1805,6 +1855,12 @@ SELECT json_build_object(
     'senderDisplayName', (SELECT sender_display_name FROM sender_profile),
     'targetUserId', $3,
     'text', m.body,
+    'bodyType', m.body_type,
+    'metadata', m.metadata,
+    'fileName', m.metadata ->> 'fileName',
+    'mimeType', m.metadata ->> 'mimeType',
+    'fileSizeBytes', m.metadata ->> 'fileSizeBytes',
+    'fileContentBase64', m.metadata ->> 'fileContentBase64',
     'createdAt', m.created_at,
     'outboundEvents', COALESCE((
         SELECT json_agg(
@@ -1820,6 +1876,12 @@ SELECT json_build_object(
                 'senderDisplayName', (SELECT sender_display_name FROM sender_profile),
                 'targetUserId', $3,
                 'text', m.body,
+                'bodyType', m.body_type,
+                'metadata', m.metadata,
+                'fileName', m.metadata ->> 'fileName',
+                'mimeType', m.metadata ->> 'mimeType',
+                'fileSizeBytes', m.metadata ->> 'fileSizeBytes',
+                'fileContentBase64', m.metadata ->> 'fileContentBase64',
                 'createdAt', m.created_at,
                 'deliverTo', a.peer_id
             )
@@ -1838,8 +1900,13 @@ LIMIT 1
                 std::string(senderPeerId),
                 std::string(targetUserId),
                 std::string(clientRequestId),
-                std::string(text),
-                serverNode_
+                effectiveBody,
+                normalizedBodyType,
+                serverNode_,
+                std::string(fileName),
+                std::string(mimeType),
+                std::to_string(fileSizeBytes),
+                std::string(fileContentBase64)
             },
             "Direct message sent.");
     }
@@ -1885,6 +1952,9 @@ thread_payload AS (
         lm.sender_user_id,
         lm.body,
         lm.body_type,
+        lm.file_name,
+        lm.mime_type,
+        lm.file_size_bytes,
         lm.created_at AS last_message_created_at,
         COALESCE(u.unread_count, 0) AS unread_count
       FROM thread_rows tr
@@ -1898,6 +1968,9 @@ thread_payload AS (
               m.sender_user_id,
               m.body,
               m.body_type,
+              m.metadata ->> 'fileName' AS file_name,
+              m.metadata ->> 'mimeType' AS mime_type,
+              m.metadata ->> 'fileSizeBytes' AS file_size_bytes,
               m.created_at
             FROM app.direct_messages m
            WHERE m.thread_id = tr.id
@@ -1935,6 +2008,9 @@ SELECT json_build_object(
                         'senderUserId', tp.sender_user_id::text,
                         'text', tp.body,
                         'bodyType', tp.body_type,
+                        'fileName', tp.file_name,
+                        'mimeType', tp.mime_type,
+                        'fileSizeBytes', tp.file_size_bytes,
                         'createdAt', tp.last_message_created_at
                     )
                 END
@@ -1999,6 +2075,7 @@ rows AS (
         m.sender_user_id,
         m.body,
         m.body_type,
+        m.metadata,
         m.client_request_id,
         m.created_at,
         m.edited_at,
@@ -2048,6 +2125,11 @@ SELECT COALESCE(
                         'senderUserId', p.sender_user_id::text,
                         'text', p.body,
                         'bodyType', p.body_type,
+                        'metadata', p.metadata,
+                        'fileName', p.metadata ->> 'fileName',
+                        'mimeType', p.metadata ->> 'mimeType',
+                        'fileSizeBytes', p.metadata ->> 'fileSizeBytes',
+                        'fileContentBase64', p.metadata ->> 'fileContentBase64',
                         'clientRequestId', p.client_request_id,
                         'createdAt', p.created_at,
                         'editedAt', p.edited_at,
@@ -3460,6 +3542,150 @@ LIMIT 1
                 std::string(callPublicId)
             },
             "Direct call ended.");
+    }
+
+    core::contracts::OperationStatus MessengerRepository::relayDirectCallFileEvent(
+        std::string_view actorUserId,
+        std::string_view actorPeerId,
+        std::string_view callPublicId,
+        std::string_view eventType,
+        const json& payload,
+        std::string_view targetPeerId) {
+        if (!isReady()) {
+            return dbFailure("Repository is not ready.");
+        }
+        if (actorUserId.empty() || actorPeerId.empty() || callPublicId.empty() || eventType.empty()) {
+            return dbFailure(
+                "relayDirectCallFileEvent: actorUserId, actorPeerId, callPublicId and eventType must not be empty.");
+        }
+
+        static const std::string sql = R"SQL(
+WITH actor_session AS (
+    SELECT us.id
+      FROM app.user_sessions us
+     WHERE us.peer_id = $2
+       AND us.user_id = $1::uuid
+       AND us.status = 'connected'
+     LIMIT 1
+),
+target AS (
+    SELECT c.id, c.public_id, c.media_room_id, c.status
+      FROM app.calls c
+      JOIN app.call_participants p
+        ON p.call_id = c.id
+       AND p.user_id = $1::uuid
+     WHERE c.public_id = $3
+       AND c.status = 'accepted'
+     LIMIT 1
+),
+event_payload AS (
+    SELECT
+        t.id AS call_id,
+        t.public_id,
+        t.media_room_id,
+        t.status,
+        jsonb_strip_nulls(
+            COALESCE($5::jsonb, '{}'::jsonb) ||
+            jsonb_build_object(
+                'type', $4,
+                'object', 'direct_call',
+                'callId', t.public_id,
+                'roomId', t.media_room_id,
+                'senderUserId', $1::uuid::text,
+                'senderPeerId', $2
+            )
+        ) AS payload
+      FROM target t
+),
+event_ins AS (
+    INSERT INTO app.call_events (
+        call_id,
+        actor_user_id,
+        actor_session_id,
+        event_type,
+        payload
+    )
+    SELECT
+        p.call_id,
+        $1::uuid,
+        s.id,
+        $4,
+        p.payload
+    FROM event_payload p
+    CROSS JOIN actor_session s
+    RETURNING id
+),
+recipient_sessions AS (
+    SELECT DISTINCT
+        us.user_id,
+        us.id AS session_id,
+        us.peer_id,
+        us.server_node
+      FROM target t
+      JOIN app.call_participants cp
+        ON cp.call_id = t.id
+      JOIN app.user_sessions us
+        ON us.user_id = cp.user_id
+       AND us.status = 'connected'
+     WHERE us.peer_id <> $2
+       AND ($6 = '' OR us.peer_id = $6)
+),
+outbox AS (
+    INSERT INTO app.realtime_outbox (
+        server_node,
+        target_user_id,
+        target_session_id,
+        target_peer_id,
+        recipient_user_id,
+        recipient_session_id,
+        aggregate_type,
+        aggregate_id,
+        event_type,
+        payload,
+        status
+    )
+    SELECT
+        rs.server_node,
+        rs.user_id,
+        rs.session_id,
+        rs.peer_id,
+        rs.user_id,
+        rs.session_id,
+        'direct_call',
+        p.public_id,
+        $4,
+        p.payload,
+        'pending'
+    FROM event_payload p
+    JOIN recipient_sessions rs ON TRUE
+    RETURNING id
+)
+SELECT json_build_object(
+    'callId', p.public_id,
+    'roomId', p.media_room_id,
+    'status', p.status,
+    'eventType', $4,
+    'recipientPeerIds', COALESCE((SELECT json_agg(rs.peer_id) FROM recipient_sessions rs), '[]'::json),
+    'outboundEvents', COALESCE((
+        SELECT json_agg((p.payload || jsonb_build_object('deliverTo', rs.peer_id))::json)
+          FROM recipient_sessions rs
+    ), '[]'::json)
+)
+FROM event_payload p
+LIMIT 1
+)SQL";
+
+        return querySingleJson(
+            sql,
+            {
+                std::string(actorUserId),
+                std::string(actorPeerId),
+                std::string(callPublicId),
+                std::string(eventType),
+                payload.dump(),
+                std::string(targetPeerId)
+            },
+            "Direct call file event relayed.");
     }
 
     std::shared_ptr<MessengerRepository> sharedMessengerRepository() {

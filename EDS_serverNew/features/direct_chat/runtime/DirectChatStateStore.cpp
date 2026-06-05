@@ -164,7 +164,12 @@ namespace eds::server_new::features::direct_chat {
             actor.peerId,
             resolvedTargetUserId,
             command.clientRequestId,
-            command.text);
+            command.text,
+            command.bodyType,
+            command.fileName,
+            command.mimeType,
+            command.fileSizeBytes,
+            command.fileContentBase64);
     }
 
     core::contracts::OperationStatus DirectChatStateStore::listThreads(const DirectChatCommand& command) {

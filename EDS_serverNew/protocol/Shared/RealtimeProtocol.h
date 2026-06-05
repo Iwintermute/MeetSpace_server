@@ -90,6 +90,11 @@ namespace eds::server_new::protocol {
             inline constexpr std::string_view kAcceptCall = "accept_call";
             inline constexpr std::string_view kDeclineCall = "decline_call";
             inline constexpr std::string_view kHangupCall = "hangup_call";
+            inline constexpr std::string_view kFileOffer = "file_offer";
+            inline constexpr std::string_view kFileAccept = "file_accept";
+            inline constexpr std::string_view kFileChunk = "file_chunk";
+            inline constexpr std::string_view kFileComplete = "file_complete";
+            inline constexpr std::string_view kFileCancel = "file_cancel";
             inline constexpr std::string_view kPauseTrack = "pause_track";
             inline constexpr std::string_view kResumeTrack = "resume_track";
             inline constexpr std::string_view kCloseTrack = "close_track";
@@ -120,6 +125,11 @@ namespace eds::server_new::protocol {
         inline constexpr std::string_view kDirectCallAccepted = "direct_call_accepted";
         inline constexpr std::string_view kDirectCallDeclined = "direct_call_declined";
         inline constexpr std::string_view kDirectCallEnded = "direct_call_ended";
+        inline constexpr std::string_view kDirectCallFileOffer = "direct_call_file_offer";
+        inline constexpr std::string_view kDirectCallFileAccept = "direct_call_file_accept";
+        inline constexpr std::string_view kDirectCallFileChunk = "direct_call_file_chunk";
+        inline constexpr std::string_view kDirectCallFileComplete = "direct_call_file_complete";
+        inline constexpr std::string_view kDirectCallFileCancel = "direct_call_file_cancel";
 
         inline constexpr std::string_view kRoomState = "room_state";
         inline constexpr std::string_view kSessionStarted = "session_started";

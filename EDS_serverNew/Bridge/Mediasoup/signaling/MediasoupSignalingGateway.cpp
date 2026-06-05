@@ -10,6 +10,7 @@
 
 #include <chrono>
 #include <cctype>
+#include <cstdlib>
 #include <iostream>
 #include <nlohmann/json.hpp>
 #include <thread>
@@ -281,6 +282,92 @@ namespace eds::server_new::mediasoup::signaling {
             return response;
         }
 
+        std::string readFirstEnvValue(std::initializer_list<const char*> names) {
+            for (const auto* name : names) {
+                if (name == nullptr || name[0] == '\0') {
+                    continue;
+                }
+                const auto* value = std::getenv(name);
+                if (value == nullptr || value[0] == '\0') {
+                    continue;
+                }
+                return std::string(value);
+            }
+            return {};
+        }
+
+        std::size_t readBoundedSizeTEnv(
+            std::initializer_list<const char*> names,
+            std::size_t fallbackValue,
+            std::size_t minValue,
+            std::size_t maxValue) {
+            auto value = fallbackValue;
+            const auto raw = readFirstEnvValue(names);
+            if (!raw.empty()) {
+                try {
+                    value = static_cast<std::size_t>(std::stoull(raw));
+                }
+                catch (...) {
+                    value = fallbackValue;
+                }
+            }
+            if (value < minValue) {
+                return minValue;
+            }
+            if (value > maxValue) {
+                return maxValue;
+            }
+            return value;
+        }
+
+        std::uint64_t readBoundedUint64Env(
+            std::initializer_list<const char*> names,
+            std::uint64_t fallbackValue,
+            std::uint64_t minValue,
+            std::uint64_t maxValue) {
+            auto value = fallbackValue;
+            const auto raw = readFirstEnvValue(names);
+            if (!raw.empty()) {
+                try {
+                    value = static_cast<std::uint64_t>(std::stoull(raw));
+                }
+                catch (...) {
+                    value = fallbackValue;
+                }
+            }
+            if (value < minValue) {
+                return minValue;
+            }
+            if (value > maxValue) {
+                return maxValue;
+            }
+            return value;
+        }
+
+        unsigned int readBoundedUnsignedIntEnv(
+            std::initializer_list<const char*> names,
+            unsigned int fallbackValue,
+            unsigned int minValue,
+            unsigned int maxValue) {
+            auto value = fallbackValue;
+            const auto raw = readFirstEnvValue(names);
+            if (!raw.empty()) {
+                try {
+                    value = static_cast<unsigned int>(std::stoul(raw));
+                }
+                catch (...) {
+                    value = fallbackValue;
+                }
+            }
+            if (value < minValue) {
+                return minValue;
+            }
+            if (value > maxValue) {
+                return maxValue;
+            }
+            return value;
+        }
+
         constexpr std::size_t kOfflineOutboxBatchSize = 16;
         constexpr std::int32_t kOfflineOutboxMaxAttempts = 8;
         constexpr auto kOfflineOutboxIdleSleep = std::chrono::milliseconds(450);
@@ -299,10 +386,41 @@ namespace eds::server_new::mediasoup::signaling {
         allowDirectMediasoupDebug_(allowDirectMediasoupDebug),
         debugMode_(debugMode),
         tlsOptions_(std::move(tlsOptions)) {
+        loadRuntimeLimitsFromEnvironment();
     }
 
     MediasoupSignalingGateway::~MediasoupSignalingGateway() {
         stop();
+    }
+
+    void MediasoupSignalingGateway::loadRuntimeLimitsFromEnvironment() {
+        maxConcurrentConnections_ = readBoundedSizeTEnv(
+            {
+                "MEETSPACE_SIGNALING_MAX_CONNECTIONS",
+                "EDUSPACE_SIGNALING_MAX_CONNECTIONS",
+                "MEDIASOUP_SIGNALING_MAX_CONNECTIONS"
+            },
+            5000,
+            64,
+            200000);
+        maxMessagesPerSecondPerPeer_ = readBoundedUint64Env(
+            {
+                "MEETSPACE_SIGNALING_MAX_MESSAGES_PER_SECOND_PER_PEER",
+                "EDUSPACE_SIGNALING_MAX_MESSAGES_PER_SECOND_PER_PEER",
+                "MEDIASOUP_SIGNALING_MAX_MESSAGES_PER_SECOND_PER_PEER"
+            },
+            100,
+            10,
+            100000);
+        ioThreadCount_ = readBoundedUnsignedIntEnv(
+            {
+                "MEETSPACE_SIGNALING_IO_THREADS",
+                "EDUSPACE_SIGNALING_IO_THREADS",
+                "MEDIASOUP_SIGNALING_IO_THREADS"
+            },
+            0,
+            0,
+            256);
     }
 
     bool MediasoupSignalingGateway::start() {
@@ -311,7 +429,7 @@ namespace eds::server_new::mediasoup::signaling {
             return true;
         }
 
-        if (!ioContext_.init()) {
+        if (!ioContext_.init(ioThreadCount_)) {
             running_.store(false);
             return false;
         }
@@ -355,6 +473,12 @@ namespace eds::server_new::mediasoup::signaling {
                 << (tlsOptions_.enabled ? "wss://" : "ws://")
                 << "0.0.0.0:"
                 << wsPort_
+                << ", max_connections="
+                << maxConcurrentConnections_
+                << ", max_messages_per_second_per_peer="
+                << maxMessagesPerSecondPerPeer_
+                << ", io_threads="
+                << (ioThreadCount_ == 0 ? std::string("auto") : std::to_string(ioThreadCount_))
                 << ".\n";
         }
 
@@ -397,6 +521,7 @@ namespace eds::server_new::mediasoup::signaling {
 
         sessionToPeer_.clear();
         peerToSession_.clear();
+        peerRateState_.clear();
     }
 
     void MediasoupSignalingGateway::wait() {
@@ -409,16 +534,29 @@ namespace eds::server_new::mediasoup::signaling {
         if (!running_.load() || session == nullptr) {
             return;
         }
+        bool rejectConnection = false;
 
         {
             std::lock_guard<std::mutex> lock(peersMutex_);
-            if (sessionToPeer_.size() >= kMaxConcurrentConnections) {
-                if (debugMode_) {
-                    std::cout << "[mediasoup][debug][signaling] connection rejected: max "
-                        << kMaxConcurrentConnections << " concurrent connections reached.\n";
-                }
-                return;
+            if (sessionToPeer_.size() >= maxConcurrentConnections_) {
+                rejectConnection = true;
             }
+        }
+
+        if (rejectConnection) {
+            if (debugMode_) {
+                std::cout << "[mediasoup][debug][signaling] connection rejected: max "
+                    << maxConcurrentConnections_
+                    << " concurrent connections reached.\n";
+            }
+            if (wsServer_) {
+                const auto rejectionPayload = makeDispatchFailureResponse(
+                    "Signaling capacity reached. Please retry shortly.",
+                    "capacity_exceeded");
+                wsServer_->sendText(session, rejectionPayload.dump());
+                wsServer_->closeSession(session);
+            }
+            return;
         }
 
         const auto trustedPeer = resolveTrustedPeer(session);
@@ -455,6 +593,7 @@ namespace eds::server_new::mediasoup::signaling {
                 peerToSession_.erase(peerId);
                 sessionToPeer_.erase(iterator);
             }
+            peerRateState_.erase(session);
         }
 
 
@@ -528,18 +667,45 @@ namespace eds::server_new::mediasoup::signaling {
             return;
         }
 
+        bool rejectForCapacity = false;
+        bool rejectForRateLimit = false;
         {
             std::lock_guard<std::mutex> lock(peersMutex_);
-            auto& rate = peerRateState_[session];
-            const auto now = std::chrono::steady_clock::now();
-            if (now - rate.windowStart >= std::chrono::seconds(1)) {
-                rate.messageCount = 0;
-                rate.windowStart = now;
+            const auto knownSession = sessionToPeer_.find(session) != sessionToPeer_.end();
+            if (!knownSession && sessionToPeer_.size() >= maxConcurrentConnections_) {
+                rejectForCapacity = true;
             }
-            ++rate.messageCount;
-            if (rate.messageCount > kMaxMessagesPerSecondPerPeer) {
-                return;
+            else {
+                auto& rate = peerRateState_[session];
+                const auto now = std::chrono::steady_clock::now();
+                if (now - rate.windowStart >= std::chrono::seconds(1)) {
+                    rate.messageCount = 0;
+                    rate.windowStart = now;
+                }
+                ++rate.messageCount;
+                if (rate.messageCount > maxMessagesPerSecondPerPeer_) {
+                    rejectForRateLimit = true;
+                }
             }
+        }
+
+        if (rejectForCapacity) {
+            postText(
+                session,
+                makeDispatchFailureResponse(
+                    "Signaling capacity reached. Please retry shortly.",
+                    "capacity_exceeded").dump());
+            wsServer_->closeSession(session);
+            return;
+        }
+
+        if (rejectForRateLimit) {
+            postText(
+                session,
+                makeDispatchFailureResponse(
+                    "Peer signaling rate limit exceeded.",
+                    "rate_limited").dump());
+            return;
         }
 
         const auto messageNo = receivedMessages_.fetch_add(1) + 1;

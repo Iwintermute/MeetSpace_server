@@ -17,6 +17,11 @@ namespace eds::server_new::features::direct_chat {
         std::string threadId;
         std::string clientRequestId;
         std::string text;
+        std::string bodyType = "text";
+        std::string fileName;
+        std::string mimeType;
+        std::string fileContentBase64;
+        std::int64_t fileSizeBytes = 0;
         std::string query;
         std::size_t limit = 50;
         std::string beforeCreatedAt;

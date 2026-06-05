@@ -630,6 +630,27 @@ namespace eds::server_new::mediasoup::transport {
         return true;
     }
 
+    bool WebSocketServer::closeSession(void* session) {
+        std::shared_ptr<SessionHandle> wsSession;
+
+        {
+            std::lock_guard<std::mutex> lock(sessionsMutex_);
+            auto iterator = sessions_.find(session);
+            if (iterator == sessions_.end()) {
+                return false;
+            }
+
+            wsSession = iterator->second.lock();
+        }
+
+        if (!wsSession) {
+            return false;
+        }
+
+        wsSession->close();
+        return true;
+    }
+
     std::size_t WebSocketServer::sendTexts(const std::vector<void*>& sessions, const std::string& text) {
         if (sessions.empty() || text.empty()) {
             return 0;

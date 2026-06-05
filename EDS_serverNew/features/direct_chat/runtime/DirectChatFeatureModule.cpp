@@ -114,6 +114,22 @@ namespace eds::server_new::features::direct_chat {
             "clientRequestId",
             request.context.value("messageId", std::string{}));
         command.text = request.context.value("text", request.context.value("message", std::string{}));
+        command.bodyType = request.context.value("bodyType", request.context.value("body_type", std::string("text")));
+        if (command.bodyType.empty()) {
+            command.bodyType = "text";
+        }
+        command.fileName = request.context.value(
+            "fileName",
+            request.context.value("file_name", std::string{}));
+        command.mimeType = request.context.value(
+            "mimeType",
+            request.context.value("mime_type", std::string{}));
+        command.fileContentBase64 = request.context.value(
+            "fileContentBase64",
+            request.context.value("file_content_base64", std::string{}));
+        command.fileSizeBytes = request.context.value(
+            "fileSizeBytes",
+            request.context.value("file_size_bytes", static_cast<std::int64_t>(0)));
         command.query = request.context.value(
             "query",
             request.context.value(

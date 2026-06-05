@@ -4,12 +4,22 @@ const http = require('node:http');
 const https = require('node:https');
 const fs = require('node:fs');
 const os = require('node:os');
+const crypto = require('node:crypto');
 const mediasoup = require('mediasoup');
 const { WebSocketServer } = require('ws');
 
+/**
+ * Calculates default mediasoup worker count from CPU topology and optional physical core hint.
+ * @returns {number} Worker count to use when MEDIASOUP_WORKER_COUNT is not explicitly provided.
+ */
 function defaultWorkerCount() {
-    const cpuCount = Array.isArray(os.cpus()) ? os.cpus().length : 1;
-    return Math.max(1, Math.min(16, cpuCount));
+    const logicalCpuCount = Array.isArray(os.cpus()) ? os.cpus().length : 1;
+    const envPhysicalCoreHint = Number.parseInt(process.env.MEDIASOUP_PHYSICAL_CORE_COUNT || '', 10);
+    if (Number.isFinite(envPhysicalCoreHint) && envPhysicalCoreHint > 0) {
+        return Math.max(1, envPhysicalCoreHint);
+    }
+
+    return Math.max(1, Math.floor(logicalCpuCount / 2));
 }
 
 function clampWorkerCount(value) {
@@ -19,6 +29,14 @@ function clampWorkerCount(value) {
     return Math.max(1, Math.min(64, Math.trunc(value)));
 }
 
+/**
+ * Reads integer value from environment and clamps it to a safe configured range.
+ * @param {string} name Environment variable name.
+ * @param {number} fallbackValue Value used when env variable is missing or invalid.
+ * @param {number} minValue Lower bound.
+ * @param {number} maxValue Upper bound.
+ * @returns {number} Clamped integer value.
+ */
 function readBoundedIntFromEnv(name, fallbackValue, minValue, maxValue) {
     const parsed = Number.parseInt(process.env[name] || '', 10);
     if (!Number.isFinite(parsed)) {
@@ -27,6 +45,12 @@ function readBoundedIntFromEnv(name, fallbackValue, minValue, maxValue) {
     return Math.max(minValue, Math.min(maxValue, Math.trunc(parsed)));
 }
 
+/**
+ * Parses boolean-like environment value from common representations (1/0, true/false, yes/no, on/off).
+ * @param {string} name Environment variable name.
+ * @param {boolean} [fallbackValue=false] Default value when env var is missing or unrecognized.
+ * @returns {boolean} Parsed boolean value.
+ */
 function parseBooleanEnv(name, fallbackValue = false) {
     const raw = (process.env[name] || '').trim().toLowerCase();
     if (raw.length === 0) {
@@ -70,12 +94,65 @@ const MAX_PRODUCERS_PER_ROOM = readBoundedIntFromEnv('MEDIASOUP_MAX_PRODUCERS_PE
 const MAX_TOTAL_PRODUCERS = readBoundedIntFromEnv('MEDIASOUP_MAX_TOTAL_PRODUCERS', 30000, 1, 200000);
 const MAX_CONSUMERS_PER_ROOM = readBoundedIntFromEnv('MEDIASOUP_MAX_CONSUMERS_PER_ROOM', 200000, 1, 1000000);
 const MAX_TOTAL_CONSUMERS = readBoundedIntFromEnv('MEDIASOUP_MAX_TOTAL_CONSUMERS', 150000, 1, 1000000);
+const MAX_PEERS_PER_WORKER = readBoundedIntFromEnv('MEDIASOUP_MAX_PEERS_PER_WORKER', 500, 50, 100000);
 const MAX_STRING_FIELD_LENGTH = readBoundedIntFromEnv('MEDIASOUP_MAX_STRING_FIELD_LENGTH', 256, 16, 2048);
+const MAX_GLOBAL_PENDING_MESSAGES = readBoundedIntFromEnv(
+    'MEDIASOUP_MAX_GLOBAL_PENDING_MESSAGES',
+    20000,
+    100,
+    1000000
+);
+const MAX_INFLIGHT_OPERATIONS = readBoundedIntFromEnv(
+    'MEDIASOUP_MAX_INFLIGHT_OPERATIONS',
+    Math.max(500, WORKER_COUNT * 500),
+    50,
+    200000
+);
 const LOG_LEVEL = process.env.MEDIASOUP_LOG_LEVEL || 'warn';
 const LOG_TAGS = (process.env.MEDIASOUP_LOG_TAGS || 'info,ice,dtls,rtp,rtcp,srtp')
     .split(',')
     .map((item) => item.trim())
     .filter((item) => item.length > 0);
+
+const REGION = process.env.MEDIASOUP_REGION || 'default';
+const AUTH_SECRET = process.env.MEDIASOUP_AUTH_SECRET || '';
+const AUTH_ENABLED = AUTH_SECRET.length > 0;
+const QOS_INTERVAL_MS = readBoundedIntFromEnv('MEDIASOUP_QOS_INTERVAL_MS', 10000, 2000, 60000);
+const DRAIN_TIMEOUT_MS = readBoundedIntFromEnv('MEDIASOUP_DRAIN_TIMEOUT_MS', 30000, 5000, 120000);
+const ICE_SERVERS = parseIceServers(process.env.MEDIASOUP_ICE_SERVERS || '');
+
+/**
+ * Parses ICE server list from JSON environment string and keeps only entries with `urls`.
+ * @param {string} raw Raw JSON string from MEDIASOUP_ICE_SERVERS.
+ * @returns {Array<object>} Valid ICE server descriptors.
+ */
+function parseIceServers(raw) {
+    if (!raw || raw.trim().length === 0) return [];
+    try {
+        const parsed = JSON.parse(raw);
+        if (!Array.isArray(parsed)) return [];
+        return parsed.filter((s) => s && typeof s === 'object' && s.urls);
+    } catch (_) {
+        return [];
+    }
+}
+
+const metrics = {
+    opsTotal: 0,
+    opsSuccess: 0,
+    opsFailed: 0,
+    opLatencySum: 0,
+    wsConnections: 0,
+    wsDisconnections: 0,
+    authRejections: 0,
+    workerDeaths: 0,
+    overloadRejections: 0
+};
+const auditLog = [];
+const MAX_AUDIT_ENTRIES = readBoundedIntFromEnv('MEDIASOUP_MAX_AUDIT_ENTRIES', 10000, 100, 100000);
+const peerRateWindows = new Map();
+const PEER_RATE_WINDOW_MS = readBoundedIntFromEnv('MEDIASOUP_PEER_RATE_WINDOW_MS', 10000, 1000, 120000);
+const PEER_MAX_OPS_PER_WINDOW = readBoundedIntFromEnv('MEDIASOUP_PEER_MAX_OPS_PER_WINDOW', 300, 10, 20000);
 
 const MEDIA_CODECS = [
     {
@@ -139,7 +216,9 @@ const state = {
     transports: new Map(),
     producers: new Map(),
     consumers: new Map(),
-    shuttingDown: false
+    shuttingDown: false,
+    inflightOperations: 0,
+    globalPendingMessages: 0
 };
 const socketRuntimeState = new WeakMap();
 let heartbeatTimer = null;
@@ -178,22 +257,46 @@ function buildTlsServerOptions() {
     return options;
 }
 
-const requestHandler = (_req, res) => {
+const requestHandler = (req, res) => {
+    const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
+    if (url.pathname === '/health') {
+        const health = buildHealthResponse();
+        res.writeHead(health.ok ? 200 : 503, { 'content-type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify(health));
+        return;
+    }
+    if (url.pathname === '/metrics') {
+        res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8' });
+        res.end(buildPrometheusMetrics());
+        return;
+    }
+    if (url.pathname === '/audit') {
+        const last = auditLog.slice(-200);
+        res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify({ entries: last }));
+        return;
+    }
     res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' });
     res.end(JSON.stringify({
         ok: true,
         service: 'meetspace-mediasoup-backend',
+        region: REGION,
         path: WS_PATH,
         transport: TLS_ENABLED ? 'wss' : 'ws',
         workers: WORKER_COUNT,
+        authEnabled: AUTH_ENABLED,
+        iceServersCount: ICE_SERVERS.length,
         limits: {
             wsMaxConnections: WS_MAX_CONNECTIONS,
             wsMaxPayloadBytes: WS_MAX_PAYLOAD_BYTES,
             maxRooms: MAX_ROOMS,
             maxPeersPerRoom: MAX_PEERS_PER_ROOM,
+            maxPeersPerWorker: MAX_PEERS_PER_WORKER,
             maxTransportsPerRoom: MAX_TRANSPORTS_PER_ROOM,
             maxProducersPerRoom: MAX_PRODUCERS_PER_ROOM,
-            maxConsumersPerRoom: MAX_CONSUMERS_PER_ROOM
+            maxConsumersPerRoom: MAX_CONSUMERS_PER_ROOM,
+            maxInflightOperations: MAX_INFLIGHT_OPERATIONS,
+            maxGlobalPendingMessages: MAX_GLOBAL_PENDING_MESSAGES
         }
     }));
 };
@@ -227,6 +330,16 @@ server.on('upgrade', (request, socket, head) => {
         socket.destroy();
         return;
     }
+    if (AUTH_ENABLED) {
+        const token = url.searchParams.get('token') || url.searchParams.get('auth') || '';
+        if (!verifyAuthToken(token)) {
+            metrics.authRejections++;
+            log('auth_rejected', 'warn', { ip: request.socket.remoteAddress });
+            socket.write('HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n');
+            socket.destroy();
+            return;
+        }
+    }
 
     wss.handleUpgrade(request, socket, head, (ws) => {
         wss.emit('connection', ws, request);
@@ -241,7 +354,8 @@ wss.on('connection', (ws, request) => {
         lastPongAt: Date.now()
     };
     socketRuntimeState.set(ws, runtimeState);
-    log(`client connected from ${request.socket.remoteAddress || 'unknown'}`);
+    metrics.wsConnections++;
+    log('ws_connect', 'info', { ip: request.socket.remoteAddress || 'unknown' });
     ws.on('pong', () => {
         const currentState = socketRuntimeState.get(ws);
         if (!currentState) {
@@ -255,12 +369,13 @@ wss.on('connection', (ws, request) => {
 
     ws.on('close', () => {
         runtimeState.closed = true;
-        runtimeState.queue.length = 0;
-        log('client disconnected');
+        clearSocketQueue(runtimeState);
+        metrics.wsDisconnections++;
+        log('ws_disconnect', 'info');
     });
 
     ws.on('error', (error) => {
-        log(`client websocket error: ${error?.message || String(error)}`);
+        log('ws_error', 'error', { error: error?.message || String(error) });
     });
 });
 
@@ -284,13 +399,36 @@ function withOperationTimeout(promise, timeoutMs) {
         })
     ]);
 }
+function clearSocketQueue(runtimeState) {
+    if (!runtimeState || !Array.isArray(runtimeState.queue)) {
+        return;
+    }
+    const droppedCount = runtimeState.queue.length;
+    if (droppedCount > 0) {
+        state.globalPendingMessages = Math.max(0, state.globalPendingMessages - droppedCount);
+        runtimeState.queue.length = 0;
+    }
+}
 
 function handleWsMessage(ws, rawBuffer) {
     const runtimeState = socketRuntimeState.get(ws);
     if (!runtimeState || runtimeState.closed) {
         return;
     }
+    if (state.globalPendingMessages >= MAX_GLOBAL_PENDING_MESSAGES) {
+        metrics.overloadRejections++;
+        safeSend(
+            ws,
+            makeFailure(
+                undefined,
+                'overloaded',
+                `Backend pending queue is full (${state.globalPendingMessages}/${MAX_GLOBAL_PENDING_MESSAGES}).`
+            )
+        );
+        return;
+    }
     if (runtimeState.queue.length >= WS_MAX_PENDING_MESSAGES_PER_SOCKET) {
+        metrics.overloadRejections++;
         safeSend(ws, makeFailure(undefined, 'overloaded', 'WebSocket queue overflow. Reduce signaling rate.'));
         return;
     }
@@ -299,8 +437,10 @@ function handleWsMessage(ws, rawBuffer) {
         ? rawBuffer.toString('utf8')
         : String(rawBuffer ?? '');
     runtimeState.queue.push(payloadText);
+    state.globalPendingMessages += 1;
     drainSocketQueue(ws, runtimeState).catch((error) => {
         log(`socket queue drain failure: ${error?.message || String(error)}`);
+        clearSocketQueue(runtimeState);
         try {
             ws.terminate();
         } catch (_) {
@@ -316,6 +456,9 @@ async function drainSocketQueue(ws, runtimeState) {
     try {
         while (runtimeState.queue.length > 0 && !runtimeState.closed) {
             const rawPayload = runtimeState.queue.shift();
+            if (state.globalPendingMessages > 0) {
+                state.globalPendingMessages -= 1;
+            }
             let requestPayload = null;
             try {
                 requestPayload = JSON.parse(rawPayload);
@@ -323,9 +466,29 @@ async function drainSocketQueue(ws, runtimeState) {
                 safeSend(ws, makeFailure(undefined, 'invalid_json', `Invalid JSON: ${error.message}`));
                 continue;
             }
+            if (state.inflightOperations >= MAX_INFLIGHT_OPERATIONS) {
+                metrics.overloadRejections++;
+                safeSend(
+                    ws,
+                    makeFailure(
+                        requestPayload?.id,
+                        'overloaded',
+                        `Backend inflight limit reached (${state.inflightOperations}/${MAX_INFLIGHT_OPERATIONS}).`
+                    )
+                );
+                continue;
+            }
 
-            const response = await withOperationTimeout(handleRequest(requestPayload), WS_OPERATION_TIMEOUT_MS)
-                .catch((error) => makeFailure(requestPayload?.id, 'timeout', error?.message || String(error)));
+            state.inflightOperations += 1;
+            let response;
+            try {
+                response = await withOperationTimeout(handleRequest(requestPayload), WS_OPERATION_TIMEOUT_MS)
+                    .catch((error) => makeFailure(requestPayload?.id, 'timeout', error?.message || String(error)));
+            } finally {
+                if (state.inflightOperations > 0) {
+                    state.inflightOperations -= 1;
+                }
+            }
             safeSend(ws, response);
         }
     } finally {
@@ -346,7 +509,7 @@ function startHeartbeatLoop() {
             }
             if (now - runtimeState.lastPongAt > WS_HEARTBEAT_TIMEOUT_MS) {
                 runtimeState.closed = true;
-                runtimeState.queue.length = 0;
+                clearSocketQueue(runtimeState);
                 try {
                     ws.terminate();
                 } catch (_) {
@@ -381,6 +544,59 @@ function countEntitiesByRoom(entries, roomId) {
     }
     return total;
 }
+function buildWorkerLoadSnapshot() {
+    const snapshot = new Map();
+    for (const context of state.workerPool) {
+        if (!context?.workerId) {
+            continue;
+        }
+        snapshot.set(context.workerId, {
+            roomCount: 0,
+            peerCount: 0
+        });
+    }
+
+    for (const [roomId, workerId] of state.workerByRoom.entries()) {
+        const load = snapshot.get(workerId);
+        if (!load) {
+            continue;
+        }
+        load.roomCount += 1;
+        const peers = state.roomPeers.get(roomId);
+        if (peers && peers.size > 0) {
+            load.peerCount += peers.size;
+        }
+    }
+
+    return snapshot;
+}
+
+function ensureWorkerPeerCapacityForJoin(roomId, peerId) {
+    const peers = state.roomPeers.get(roomId);
+    if (peers?.has(peerId)) {
+        return;
+    }
+
+    const workerId = state.workerByRoom.get(roomId);
+    if (typeof workerId !== 'string' || workerId.length === 0) {
+        return;
+    }
+
+    const workerContext = getWorkerContextById(workerId);
+    if (!workerContext || workerContext.worker?.closed || workerContext.webRtcServer?.closed) {
+        return;
+    }
+
+    const loadSnapshot = buildWorkerLoadSnapshot();
+    const currentWorkerLoad = loadSnapshot.get(workerId);
+    const currentPeerCount = currentWorkerLoad?.peerCount || 0;
+    if (currentPeerCount + 1 > MAX_PEERS_PER_WORKER) {
+        failWithCode(
+            'capacity_exceeded',
+            `Worker ${workerId} peer capacity reached (${currentPeerCount}/${MAX_PEERS_PER_WORKER}).`
+        );
+    }
+}
 
 function ensureEntityCapacity(currentValue, maxValue, entityName) {
     if (currentValue < maxValue) {
@@ -405,6 +621,7 @@ function ensureRoomCapacityForJoin(roomId, peerId) {
         failWithCode('capacity_exceeded', `Room ${roomId} is full (${peers.size}/${MAX_PEERS_PER_ROOM}).`);
     }
     ensureEntityCapacity(totalPeersCount(), MAX_TOTAL_PEERS, 'Peer');
+    ensureWorkerPeerCapacityForJoin(roomId, peerId);
 }
 
 function ensurePeerJoined(roomId, peerId) {
@@ -413,6 +630,67 @@ function ensurePeerJoined(roomId, peerId) {
         return;
     }
     failWithCode('peer_not_joined', `Peer ${peerId} is not joined in room ${roomId}.`);
+}
+
+function enforcePeerRateLimit(peerId) {
+    if (typeof peerId !== 'string' || peerId.trim().length === 0) {
+        return;
+    }
+    const normalizedPeerId = peerId.trim();
+    const now = Date.now();
+    let history = peerRateWindows.get(normalizedPeerId);
+    if (!history) {
+        history = [];
+        peerRateWindows.set(normalizedPeerId, history);
+    }
+
+    while (history.length > 0 && (now - history[0]) > PEER_RATE_WINDOW_MS) {
+        history.shift();
+    }
+    if (history.length >= PEER_MAX_OPS_PER_WINDOW) {
+        failWithCode(
+            'rate_limited',
+            `Peer ${normalizedPeerId} exceeded rate limit (${PEER_MAX_OPS_PER_WINDOW}/${PEER_RATE_WINDOW_MS}ms).`
+        );
+    }
+    history.push(now);
+}
+
+function resolvePeerIdForRateLimit(payload) {
+    if (!payload || typeof payload !== 'object') {
+        return '';
+    }
+
+    const explicitPeerId = typeof payload.peerId === 'string' ? payload.peerId.trim() : '';
+    if (explicitPeerId.length > 0) {
+        return explicitPeerId;
+    }
+
+    const transportId = typeof payload.transportId === 'string' ? payload.transportId.trim() : '';
+    if (transportId.length > 0) {
+        const transportEntry = state.transports.get(transportId);
+        if (transportEntry?.peerId) {
+            return transportEntry.peerId;
+        }
+    }
+
+    const producerId = typeof payload.producerId === 'string' ? payload.producerId.trim() : '';
+    if (producerId.length > 0) {
+        const producerEntry = state.producers.get(producerId);
+        if (producerEntry?.peerId) {
+            return producerEntry.peerId;
+        }
+    }
+
+    const consumerId = typeof payload.consumerId === 'string' ? payload.consumerId.trim() : '';
+    if (consumerId.length > 0) {
+        const consumerEntry = state.consumers.get(consumerId);
+        if (consumerEntry?.peerId) {
+            return consumerEntry.peerId;
+        }
+    }
+
+    return '';
 }
 
 function failWithCode(code, message) {
@@ -428,6 +706,12 @@ function ensureNotShuttingDown() {
     failWithCode('shutting_down', 'Backend is shutting down.');
 }
 
+/**
+ * Central signaling dispatcher that validates operation, enforces limits, routes to op-handlers,
+ * and records metrics/audit for success and failure paths.
+ * @param {object} request Incoming signaling request payload.
+ * @returns {Promise<object>} Standardized success/failure response envelope.
+ */
 async function handleRequest(request) {
     ensureNotShuttingDown();
     const id = request?.id;
@@ -440,52 +724,94 @@ async function handleRequest(request) {
         return makeFailure(id, 'invalid_request', 'Field "operation" must be a non-empty string.');
     }
 
+    const opStart = Date.now();
+    const peerId = resolvePeerIdForRateLimit(payload);
+    if (peerId)
+        enforcePeerRateLimit(peerId);
     try {
+        let result;
         switch (operation) {
             case 'system.getCapabilities':
-                return await opGetCapabilities(id);
+                result = await opGetCapabilities(id);
+                break;
             case 'system.getMediaStats':
-                return await opGetMediaStats(id, payload);
+                result = await opGetMediaStats(id, payload);
+                break;
             case 'worker.createRouter':
-                return await opCreateRouter(id, payload);
+                result = await opCreateRouter(id, payload);
+                break;
             case 'router.joinPeer':
-                return await opJoinPeer(id, payload);
+                result = await opJoinPeer(id, payload);
+                break;
             case 'router.leavePeer':
-                return await opLeavePeer(id, payload);
+                result = await opLeavePeer(id, payload);
+                break;
             case 'router.closePeer':
-                return await opClosePeer(id, payload);
+                result = await opClosePeer(id, payload);
+                break;
             case 'router.createWebRtcTransport':
-                return await opCreateWebRtcTransport(id, payload);
+                result = await opCreateWebRtcTransport(id, payload);
+                break;
             case 'transport.connectDtls':
-                return await opConnectDtls(id, payload);
+                result = await opConnectDtls(id, payload);
+                break;
             case 'transport.addIceCandidate':
-                return await opAddIceCandidate(id, payload);
+                result = await opAddIceCandidate(id, payload);
+                break;
             case 'transport.produce':
-                return await opProduce(id, payload);
+                result = await opProduce(id, payload);
+                break;
             case 'producer.pause':
-                return await opPauseProducer(id, payload);
+                result = await opPauseProducer(id, payload);
+                break;
             case 'producer.resume':
-                return await opResumeProducer(id, payload);
+                result = await opResumeProducer(id, payload);
+                break;
             case 'producer.close':
-                return await opCloseProducer(id, payload);
+                result = await opCloseProducer(id, payload);
+                break;
             case 'transport.consume':
-                return await opConsume(id, payload);
+                result = await opConsume(id, payload);
+                break;
             case 'consumer.resume':
-                return await opResumeConsumer(id, payload);
+                result = await opResumeConsumer(id, payload);
+                break;
             default:
-                return makeFailure(id, 'unsupported_operation', `Unsupported operation: ${operation}`);
+                result = makeFailure(id, 'unsupported_operation', `Unsupported operation: ${operation}`);
+                break;
         }
+        metrics.opsTotal++;
+        metrics.opLatencySum += Date.now() - opStart;
+        if (result.ok) {
+            metrics.opsSuccess++;
+        } else {
+            metrics.opsFailed++;
+        }
+        audit(peerId, operation, result.ok ? 'ok' : (result.code || 'error'));
+        return result;
     } catch (error) {
+        metrics.opsTotal++;
+        metrics.opsFailed++;
+        metrics.opLatencySum += Date.now() - opStart;
         const code = typeof error?.code === 'string' && error.code.length > 0
             ? error.code
             : 'internal_error';
+        audit(peerId, operation, code);
         return makeFailure(id, code, error?.message || String(error));
     }
 }
 
+/**
+ * Returns mediasoup backend capabilities including RTP capabilities and optional ICE server list.
+ * @param {string} id Correlation id of request.
+ * @returns {Promise<object>} Success response payload for `system.getCapabilities`.
+ */
 async function opGetCapabilities(id) {
     const router = await ensureCapabilityRouter();
-    return makeSuccess(id, 'Mediasoup backend capabilities.', {}, router);
+    return makeSuccess(id, 'Mediasoup backend capabilities.', {
+        region: REGION,
+        iceServers: ICE_SERVERS.length > 0 ? ICE_SERVERS : undefined
+    }, router);
 }
 
 function toFiniteNumber(value) {
@@ -499,6 +825,12 @@ function summarizeStatsRows(rows) {
     const normalizedRows = Array.isArray(rows) ? rows : [];
     let totalBytes = 0;
     let totalPackets = 0;
+    let totalPacketsLost = 0;
+    let totalBitrate = 0;
+    let jitterSum = 0;
+    let jitterCount = 0;
+    let rttSum = 0;
+    let rttCount = 0;
     for (const row of normalizedRows) {
         if (!row || typeof row !== 'object') {
             continue;
@@ -509,11 +841,30 @@ function summarizeStatsRows(rows) {
         totalPackets += toFiniteNumber(row.packetsReceived);
         totalPackets += toFiniteNumber(row.packetsSent);
         totalPackets += toFiniteNumber(row.packetCount);
+        totalPacketsLost += toFiniteNumber(row.packetsLost);
+        const bitrate = toFiniteNumber(row.bitrate);
+        if (bitrate > 0)
+            totalBitrate += bitrate;
+        const jitter = toFiniteNumber(row.jitter);
+        if (jitter > 0) {
+            jitterSum += jitter;
+            jitterCount += 1;
+        }
+        const roundTripTime = toFiniteNumber(
+            row.roundTripTime ?? row.totalRoundTripTime ?? row.currentRoundTripTime);
+        if (roundTripTime > 0) {
+            rttSum += roundTripTime;
+            rttCount += 1;
+        }
     }
     return {
         rowsCount: normalizedRows.length,
         totalBytes,
-        totalPackets
+        totalPackets,
+        totalPacketsLost,
+        avgJitter: jitterCount > 0 ? jitterSum / jitterCount : 0,
+        avgRoundTripTime: rttCount > 0 ? rttSum / rttCount : 0,
+        bitrateKbps: totalBitrate > 0 ? totalBitrate / 1000.0 : 0
     };
 }
 
@@ -542,6 +893,24 @@ function buildInjectedStatsFromPayload(payload) {
     };
 }
 
+function createEmptyStatsSummary() {
+    return {
+        rowsCount: 0,
+        totalBytes: 0,
+        totalPackets: 0,
+        totalPacketsLost: 0,
+        avgJitter: 0,
+        avgRoundTripTime: 0,
+        bitrateKbps: 0
+    };
+}
+
+/**
+ * Collects aggregated media stats for transports, producers, and consumers (optionally filtered by room).
+ * @param {string} id Correlation id of request.
+ * @param {object} payload Request payload that may include roomId.
+ * @returns {Promise<object>} Success response with per-entity and aggregate media metrics.
+ */
 async function opGetMediaStats(id, payload) {
     const roomId = typeof payload.roomId === 'string' && payload.roomId.trim().length > 0
         ? payload.roomId.trim()
@@ -561,7 +930,7 @@ async function opGetMediaStats(id, payload) {
         if (!roomFilter(entry.roomId)) {
             continue;
         }
-        let summary = { rowsCount: 0, totalBytes: 0, totalPackets: 0 };
+        let summary = createEmptyStatsSummary();
         let statsError = '';
         try {
             summary = summarizeStatsRows(await entry.transport.getStats());
@@ -578,6 +947,10 @@ async function opGetMediaStats(id, payload) {
             rowsCount: summary.rowsCount,
             totalBytes: summary.totalBytes,
             totalPackets: summary.totalPackets,
+            totalPacketsLost: summary.totalPacketsLost,
+            avgJitter: summary.avgJitter,
+            avgRoundTripTime: summary.avgRoundTripTime,
+            bitrateKbps: summary.bitrateKbps,
             statsError
         });
     }
@@ -586,7 +959,7 @@ async function opGetMediaStats(id, payload) {
         if (!roomFilter(entry.roomId)) {
             continue;
         }
-        let summary = { rowsCount: 0, totalBytes: 0, totalPackets: 0 };
+        let summary = createEmptyStatsSummary();
         let statsError = '';
         if (entry.producer) {
             try {
@@ -618,6 +991,10 @@ async function opGetMediaStats(id, payload) {
             rowsCount: summary.rowsCount,
             totalBytes: summary.totalBytes,
             totalPackets: summary.totalPackets,
+            totalPacketsLost: summary.totalPacketsLost,
+            avgJitter: summary.avgJitter,
+            avgRoundTripTime: summary.avgRoundTripTime,
+            bitrateKbps: summary.bitrateKbps,
             statsError
         });
     }
@@ -626,7 +1003,7 @@ async function opGetMediaStats(id, payload) {
         if (!roomFilter(entry.roomId)) {
             continue;
         }
-        let summary = { rowsCount: 0, totalBytes: 0, totalPackets: 0 };
+        let summary = createEmptyStatsSummary();
         let statsError = '';
         if (entry.consumer) {
             try {
@@ -659,6 +1036,10 @@ async function opGetMediaStats(id, payload) {
             rowsCount: summary.rowsCount,
             totalBytes: summary.totalBytes,
             totalPackets: summary.totalPackets,
+            totalPacketsLost: summary.totalPacketsLost,
+            avgJitter: summary.avgJitter,
+            avgRoundTripTime: summary.avgRoundTripTime,
+            bitrateKbps: summary.bitrateKbps,
             statsError
         });
     }
@@ -690,6 +1071,12 @@ async function opGetMediaStats(id, payload) {
     );
 }
 
+/**
+ * Ensures router existence for room and returns router identity for signaling layer.
+ * @param {string} id Correlation id of request.
+ * @param {object} payload Request payload with `roomId`.
+ * @returns {Promise<object>} Success response for `worker.createRouter`.
+ */
 async function opCreateRouter(id, payload) {
     const roomId = requireString(payload.roomId, 'roomId');
     if (!state.routers.has(roomId)) {
@@ -707,11 +1094,18 @@ async function opCreateRouter(id, payload) {
     );
 }
 
+/**
+ * Joins peer to room after capacity checks and router readiness.
+ * @param {string} id Correlation id of request.
+ * @param {object} payload Request payload with `roomId` and `peerId`.
+ * @returns {Promise<object>} Success response for `router.joinPeer`.
+ */
 async function opJoinPeer(id, payload) {
     const roomId = requireString(payload.roomId, 'roomId');
     const peerId = requireString(payload.peerId, 'peerId');
     ensureRoomCapacityForJoin(roomId, peerId);
     const router = await ensureRoomRouter(roomId);
+    ensureWorkerPeerCapacityForJoin(roomId, peerId);
     ensurePeerSet(roomId).add(peerId);
     return makeSuccess(
         id,
@@ -724,6 +1118,12 @@ async function opJoinPeer(id, payload) {
     );
 }
 
+/**
+ * Removes peer from room, closes related resources, and performs room cleanup when empty.
+ * @param {string} id Correlation id of request.
+ * @param {object} payload Request payload with `roomId` and `peerId`.
+ * @returns {Promise<object>} Success response for `router.leavePeer`.
+ */
 async function opLeavePeer(id, payload) {
     const roomId = requireString(payload.roomId, 'roomId');
     const peerId = requireString(payload.peerId, 'peerId');
@@ -780,6 +1180,12 @@ async function opClosePeer(id, payload) {
     );
 }
 
+/**
+ * Creates mediasoup WebRTC transport for peer within room and returns transport negotiation parameters.
+ * @param {string} id Correlation id of request.
+ * @param {object} payload Request payload containing room/peer/transport ids.
+ * @returns {Promise<object>} Success response with ICE/DTLS/SCTP transport data.
+ */
 async function opCreateWebRtcTransport(id, payload) {
     const roomId = requireString(payload.roomId, 'roomId');
     const peerId = requireString(payload.peerId, 'peerId');
@@ -831,12 +1237,19 @@ async function opCreateWebRtcTransport(id, payload) {
             iceParameters: transport.iceParameters,
             iceCandidates: transport.iceCandidates,
             dtlsParameters: transport.dtlsParameters,
-            sctpParameters: transport.sctpParameters
+            sctpParameters: transport.sctpParameters,
+            iceServers: ICE_SERVERS.length > 0 ? ICE_SERVERS : undefined
         },
         router
     );
 }
 
+/**
+ * Applies DTLS parameters to existing transport and marks it connected.
+ * @param {string} id Correlation id of request.
+ * @param {object} payload Request payload containing transport id and dtlsParameters.
+ * @returns {Promise<object>} Success response for `transport.connectDtls`.
+ */
 async function opConnectDtls(id, payload) {
     const transportId = requireString(payload.transportId, 'transportId');
     const transportEntry = getTransportEntry(transportId);
@@ -869,6 +1282,12 @@ async function opAddIceCandidate(id, payload) {
     );
 }
 
+/**
+ * Creates producer on transport and stores producer ownership/track metadata in runtime state.
+ * @param {string} id Correlation id of request.
+ * @param {object} payload Request payload containing producer/transport/RTP details.
+ * @returns {Promise<object>} Success response with producer identifiers.
+ */
 async function opProduce(id, payload) {
     const transportId = requireString(payload.transportId, 'transportId');
     const producerId = requireString(payload.producerId, 'producerId');
@@ -1030,6 +1449,12 @@ async function opCloseProducer(id, payload) {
     );
 }
 
+/**
+ * Creates paused consumer for a producer after consumability checks and records consumer metadata.
+ * @param {string} id Correlation id of request.
+ * @param {object} payload Request payload containing consumer/producers/rtpCapabilities details.
+ * @returns {Promise<object>} Success response with consumer identifiers and RTP parameters.
+ */
 async function opConsume(id, payload) {
     const transportId = requireString(payload.transportId, 'transportId');
     const producerId = requireString(payload.producerId, 'producerId');
@@ -1120,6 +1545,12 @@ async function opConsume(id, payload) {
     );
 }
 
+/**
+ * Resumes an existing paused consumer stream.
+ * @param {string} id Correlation id of request.
+ * @param {object} payload Request payload containing consumer id.
+ * @returns {Promise<object>} Success response with updated consumer pause state.
+ */
 async function opResumeConsumer(id, payload) {
     const consumerId = requireString(payload.consumerId, 'consumerId');
     const consumerEntry = state.consumers.get(consumerId);
@@ -1245,7 +1676,8 @@ async function createWorkerContext() {
             return;
         }
 
-        log(`${prefix}; draining affected rooms`);
+        metrics.workerDeaths++;
+        log('worker_died', 'error', { workerId, pid: worker.pid });
         removeWorkerContext(workerContext);
 
         if (state.capabilityWorkerId === workerId) {
@@ -1296,11 +1728,13 @@ function getWorkerContextById(workerId) {
 }
 
 function workerDiagnostics() {
+    const loadSnapshot = buildWorkerLoadSnapshot();
     return state.workerPool.map((context) => ({
+        ...(loadSnapshot.get(context.workerId) || { roomCount: 0, peerCount: 0 }),
         workerId: context.workerId,
         pid: context.worker?.pid || null,
         uptimeMs: Math.max(0, Date.now() - context.createdAt),
-        roomCount: [...state.workerByRoom.values()].filter((workerId) => workerId === context.workerId).length,
+        maxPeersPerWorker: MAX_PEERS_PER_WORKER,
         hasCapabilityRouter: state.capabilityWorkerId === context.workerId
     }));
 }
@@ -1310,19 +1744,64 @@ function pickWorkerContextForRoom(roomId) {
         throw new Error('No active mediasoup workers available.');
     }
 
+    const roomPeers = state.roomPeers.get(roomId);
+    const roomPeerCount = roomPeers ? roomPeers.size : 0;
+    const loadSnapshot = buildWorkerLoadSnapshot();
     const poolSize = state.workerPool.length;
+    let selectedCandidate = null;
     for (let offset = 0; offset < poolSize; offset += 1) {
         const index = (state.workerCursor + offset) % poolSize;
         const candidate = state.workerPool[index];
         if (!candidate || !candidate.worker || candidate.worker.closed || !candidate.webRtcServer || candidate.webRtcServer.closed) {
             continue;
         }
-        state.workerCursor = (index + 1) % poolSize;
-        state.workerByRoom.set(roomId, candidate.workerId);
-        return candidate;
+        const workerLoad = loadSnapshot.get(candidate.workerId) || { roomCount: 0, peerCount: 0 };
+        const projectedPeerCount = workerLoad.peerCount + roomPeerCount;
+        if (projectedPeerCount > MAX_PEERS_PER_WORKER) {
+            continue;
+        }
+
+        if (!selectedCandidate) {
+            selectedCandidate = {
+                index,
+                candidate,
+                projectedPeerCount,
+                roomCount: workerLoad.roomCount
+            };
+            continue;
+        }
+
+        if (projectedPeerCount < selectedCandidate.projectedPeerCount) {
+            selectedCandidate = {
+                index,
+                candidate,
+                projectedPeerCount,
+                roomCount: workerLoad.roomCount
+            };
+            continue;
+        }
+
+        if (projectedPeerCount === selectedCandidate.projectedPeerCount
+            && workerLoad.roomCount < selectedCandidate.roomCount) {
+            selectedCandidate = {
+                index,
+                candidate,
+                projectedPeerCount,
+                roomCount: workerLoad.roomCount
+            };
+        }
     }
 
-    throw new Error('No healthy mediasoup worker contexts available.');
+    if (!selectedCandidate) {
+        failWithCode(
+            'capacity_exceeded',
+            `All workers reached peer capacity (${MAX_PEERS_PER_WORKER} peers per worker).`
+        );
+    }
+
+    state.workerCursor = (selectedCandidate.index + 1) % poolSize;
+    state.workerByRoom.set(roomId, selectedCandidate.candidate.workerId);
+    return selectedCandidate.candidate;
 }
 
 function getRoomWorkerContext(roomId) {
@@ -1338,6 +1817,10 @@ function getRoomRouter(roomId) {
     return entry.router;
 }
 
+/**
+ * Maintains worker pool size and health up to configured WORKER_COUNT.
+ * @returns {Promise<Array<object>>} Active worker context list.
+ */
 async function ensureWorkerPool() {
     state.workerPool = state.workerPool.filter((context) => context?.worker && !context.worker.closed && context.webRtcServer && !context.webRtcServer.closed);
     if (state.workerCursor >= state.workerPool.length) {
@@ -1364,6 +1847,10 @@ async function ensureWorkerPool() {
     return state.workerPool;
 }
 
+/**
+ * Ensures singleton capability router exists and is bound to a live worker.
+ * @returns {Promise<object>} Active capability router.
+ */
 async function ensureCapabilityRouter() {
     await ensureWorkerPool();
     if (state.capabilityRouter && !state.capabilityRouter.closed) {
@@ -1383,6 +1870,11 @@ async function ensureCapabilityRouter() {
     return state.capabilityRouter;
 }
 
+/**
+ * Returns active router for room or creates one on selected worker with codec configuration.
+ * @param {string} roomId Room identifier.
+ * @returns {Promise<object>} Active room router instance.
+ */
 async function ensureRoomRouter(roomId) {
     await ensureWorkerPool();
     const existing = state.routers.get(roomId);
@@ -1476,6 +1968,7 @@ function closePeerResources(roomId, peerId) {
             safeCloseTransportById(transportId);
         }
     }
+    peerRateWindows.delete(peerId);
 }
 
 function closeRoom(roomId) {
@@ -1506,20 +1999,182 @@ function normalizeWsPath(pathValue) {
     return normalized.replace(/\/+$/, '') || '/';
 }
 
-function log(message) {
-    const now = new Date().toISOString();
-    process.stdout.write(`[${now}] [meetspace-mediasoup-backend] ${message}\n`);
+function log(message, level = 'info', extra = null) {
+    const entry = {
+        ts: new Date().toISOString(),
+        svc: 'meetspace-mediasoup-backend',
+        region: REGION,
+        level,
+        msg: message
+    };
+    if (extra) Object.assign(entry, extra);
+    process.stdout.write(JSON.stringify(entry) + '\n');
 }
 
+function audit(peerId, operation, detail) {
+    const entry = { ts: Date.now(), peerId, operation, detail };
+    auditLog.push(entry);
+    if (auditLog.length > MAX_AUDIT_ENTRIES) auditLog.shift();
+}
+
+function verifyAuthToken(tokenString) {
+    if (!AUTH_ENABLED) return true;
+    if (!tokenString || typeof tokenString !== 'string') return false;
+    const parts = tokenString.split('.');
+    if (parts.length !== 2) return false;
+    const [payload, sig] = parts;
+    try {
+        const expected = crypto.createHmac('sha256', AUTH_SECRET).update(payload).digest('hex');
+        return crypto.timingSafeEqual(Buffer.from(sig, 'hex'), Buffer.from(expected, 'hex'));
+    } catch (_) {
+        return false;
+    }
+}
+
+/**
+ * Builds health snapshot for readiness/liveness endpoint consumption.
+ * @returns {object} Health payload with worker, room, peer, queue and runtime metrics.
+ */
+function buildHealthResponse() {
+    const healthy = state.workerPool.length > 0 && !state.shuttingDown;
+    return {
+        ok: healthy,
+        region: REGION,
+        draining: state.shuttingDown,
+        workers: state.workerPool.length,
+        workersTarget: WORKER_COUNT,
+        rooms: state.routers.size,
+        peers: totalPeersCount(),
+        transports: state.transports.size,
+        producers: state.producers.size,
+        consumers: state.consumers.size,
+        wsClients: wss.clients.size,
+        inflightOperations: state.inflightOperations,
+        maxInflightOperations: MAX_INFLIGHT_OPERATIONS,
+        globalPendingMessages: state.globalPendingMessages,
+        maxGlobalPendingMessages: MAX_GLOBAL_PENDING_MESSAGES,
+        maxPeersPerWorker: MAX_PEERS_PER_WORKER,
+        uptimeSeconds: Math.floor(process.uptime())
+    };
+}
+
+/**
+ * Renders internal counters and gauges in Prometheus text exposition format.
+ * @returns {string} Prometheus metrics body.
+ */
+function buildPrometheusMetrics() {
+    const lines = [];
+    const g = (name, help, value) => {
+        lines.push(`# HELP ${name} ${help}`);
+        lines.push(`# TYPE ${name} gauge`);
+        lines.push(`${name}{region="${REGION}"} ${value}`);
+    };
+    const c = (name, help, value) => {
+        lines.push(`# HELP ${name} ${help}`);
+        lines.push(`# TYPE ${name} counter`);
+        lines.push(`${name}{region="${REGION}"} ${value}`);
+    };
+    g('meetspace_workers', 'Active mediasoup workers', state.workerPool.length);
+    g('meetspace_rooms', 'Active rooms', state.routers.size);
+    g('meetspace_peers', 'Connected peers', totalPeersCount());
+    g('meetspace_transports', 'Active transports', state.transports.size);
+    g('meetspace_producers', 'Active producers', state.producers.size);
+    g('meetspace_consumers', 'Active consumers', state.consumers.size);
+    g('meetspace_ws_clients', 'WebSocket clients', wss.clients.size);
+    g('meetspace_inflight_operations', 'Currently inflight signaling operations', state.inflightOperations);
+    g('meetspace_pending_ws_messages', 'Queued websocket signaling messages', state.globalPendingMessages);
+    g('meetspace_uptime_seconds', 'Process uptime', Math.floor(process.uptime()));
+    g('meetspace_max_peers_per_worker', 'Configured max peers per worker', MAX_PEERS_PER_WORKER);
+    g('meetspace_max_inflight_operations', 'Configured max inflight signaling operations', MAX_INFLIGHT_OPERATIONS);
+    g('meetspace_max_global_pending_messages', 'Configured max pending websocket messages', MAX_GLOBAL_PENDING_MESSAGES);
+    c('meetspace_ops_total', 'Total operations processed', metrics.opsTotal);
+    c('meetspace_ops_success', 'Successful operations', metrics.opsSuccess);
+    c('meetspace_ops_failed', 'Failed operations', metrics.opsFailed);
+    c('meetspace_ws_connections', 'Total WS connections', metrics.wsConnections);
+    c('meetspace_ws_disconnections', 'Total WS disconnections', metrics.wsDisconnections);
+    c('meetspace_auth_rejections', 'Auth rejections', metrics.authRejections);
+    c('meetspace_worker_deaths', 'Worker crashes', metrics.workerDeaths);
+    c('meetspace_overload_rejections', 'Requests rejected due to overload protection', metrics.overloadRejections);
+    if (metrics.opsTotal > 0) {
+        g('meetspace_op_avg_latency_ms', 'Average operation latency ms', Math.round(metrics.opLatencySum / metrics.opsTotal));
+    }
+    return lines.join('\n') + '\n';
+}
+
+let qosTimer = null;
+function startQosCollectionLoop() {
+    if (qosTimer) return;
+    qosTimer = setInterval(async () => {
+        try {
+            for (const [producerId, entry] of state.producers.entries()) {
+                if (!entry.producer) continue;
+                try {
+                    const stats = await entry.producer.getStats();
+                    const rows = Array.isArray(stats) ? stats : [];
+                    for (const row of rows) {
+                        if (!row || typeof row !== 'object') continue;
+                        log('qos_producer', 'info', {
+                            producerId, roomId: entry.roomId, peerId: entry.peerId,
+                            kind: entry.kind, trackType: entry.trackType,
+                            bitrate: toFiniteNumber(row.bitrate),
+                            jitter: toFiniteNumber(row.jitter),
+                            packetCount: toFiniteNumber(row.packetCount),
+                            packetsLost: toFiniteNumber(row.packetsLost),
+                            roundTripTime: toFiniteNumber(row.roundTripTime)
+                        });
+                    }
+                } catch (_) {}
+            }
+            for (const [consumerId, entry] of state.consumers.entries()) {
+                if (!entry.consumer) continue;
+                try {
+                    const stats = await entry.consumer.getStats();
+                    const rows = Array.isArray(stats) ? stats : [];
+                    for (const row of rows) {
+                        if (!row || typeof row !== 'object') continue;
+                        log('qos_consumer', 'info', {
+                            consumerId, roomId: entry.roomId, peerId: entry.peerId,
+                            kind: entry.kind, trackType: entry.trackType,
+                            bitrate: toFiniteNumber(row.bitrate),
+                            jitter: toFiniteNumber(row.jitter),
+                            packetCount: toFiniteNumber(row.packetCount),
+                            packetsLost: toFiniteNumber(row.packetsLost),
+                            roundTripTime: toFiniteNumber(row.roundTripTime)
+                        });
+                    }
+                } catch (_) {}
+            }
+        } catch (_) {}
+    }, QOS_INTERVAL_MS);
+    qosTimer.unref();
+}
+
+/**
+ * Performs graceful backend shutdown with draining, mediasoup resource cleanup, and server close.
+ * @returns {Promise<void>} Resolves when shutdown sequence reaches process-exit handoff.
+ */
 async function shutdown() {
     if (state.shuttingDown) {
         return;
     }
     state.shuttingDown = true;
+    log('shutdown_start', 'warn', { drainTimeoutMs: DRAIN_TIMEOUT_MS });
     if (heartbeatTimer) {
         clearInterval(heartbeatTimer);
         heartbeatTimer = null;
     }
+    if (qosTimer) {
+        clearInterval(qosTimer);
+        qosTimer = null;
+    }
+
+    // Graceful drain: wait for rooms to empty
+    const drainStart = Date.now();
+    while (state.routers.size > 0 && (Date.now() - drainStart) < DRAIN_TIMEOUT_MS) {
+        await new Promise((r) => setTimeout(r, 500));
+    }
+    log('shutdown_drain_done', 'info', { remainingRooms: state.routers.size, elapsed: Date.now() - drainStart });
+
     try {
         for (const roomId of [...state.routers.keys()]) {
             closeRoom(roomId);
@@ -1553,6 +2208,8 @@ async function shutdown() {
         wss.clients.forEach((ws) => ws.close());
     } catch (_) {
     }
+    state.inflightOperations = 0;
+    state.globalPendingMessages = 0;
 
     server.close(() => {
         process.exit(0);
@@ -1568,10 +2225,21 @@ process.on('SIGTERM', shutdown);
     await ensureWorkerPool();
     await ensureCapabilityRouter();
     startHeartbeatLoop();
+    startQosCollectionLoop();
     server.listen(PORT, HOST, () => {
-        log(`listening ${TLS_ENABLED ? 'wss' : 'ws'}://${HOST}:${PORT}${WS_PATH}`);
-        log(`rtc listen ip ${RTC_LISTEN_IP}, announced ip ${ANNOUNCED_IP || 'n/a'}`);
-        log(`rtc ports ${RTC_MIN_PORT}-${RTC_MAX_PORT}`);
-        log(`worker pool size ${state.workerPool.length}/${WORKER_COUNT}`);
+        log('server_start', 'info', {
+            listen: `${TLS_ENABLED ? 'wss' : 'ws'}://${HOST}:${PORT}${WS_PATH}`,
+            rtcListenIp: RTC_LISTEN_IP,
+            announcedIp: ANNOUNCED_IP || 'n/a',
+            rtcPorts: `${RTC_MIN_PORT}-${RTC_MAX_PORT}`,
+            workerPool: `${state.workerPool.length}/${WORKER_COUNT}`,
+            region: REGION,
+            authEnabled: AUTH_ENABLED,
+            iceServers: ICE_SERVERS.length,
+            qosIntervalMs: QOS_INTERVAL_MS,
+            maxPeersPerWorker: MAX_PEERS_PER_WORKER,
+            maxInflightOperations: MAX_INFLIGHT_OPERATIONS,
+            maxGlobalPendingMessages: MAX_GLOBAL_PENDING_MESSAGES
+        });
     });
 })();

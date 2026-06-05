@@ -95,7 +95,12 @@ namespace eds::server_new::infrastructure::db {
             std::string_view senderPeerId,
             std::string_view targetUserId,
             std::string_view clientRequestId,
-            std::string_view text);
+            std::string_view text,
+            std::string_view bodyType,
+            std::string_view fileName,
+            std::string_view mimeType,
+            std::int64_t fileSizeBytes,
+            std::string_view fileContentBase64);
         core::contracts::OperationStatus listDirectThreads(
             std::string_view requesterUserId,
             std::size_t limit) const;
@@ -152,6 +157,14 @@ namespace eds::server_new::infrastructure::db {
             std::string_view actorUserId,
             std::string_view actorPeerId,
             std::string_view callPublicId);
+
+        core::contracts::OperationStatus relayDirectCallFileEvent(
+            std::string_view actorUserId,
+            std::string_view actorPeerId,
+            std::string_view callPublicId,
+            std::string_view eventType,
+            const json& payload,
+            std::string_view targetPeerId = {});
 
     private:
         static core::contracts::OperationStatus dbFailure(std::string error);
