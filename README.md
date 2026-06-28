@@ -5,7 +5,6 @@
 - `apps/mediasoup-server/src/server.js` — основной backend (WebSocket signaling + mediasoup orchestration).
 - `apps/mediasoup-server/scripts/*` — JS стресс-тесты signaling/media plane.
 - `scripts/*` — вспомогательные нагрузочные сценарии (Python).
-- `deploy/meetspace-server-31.177.83.146/*` — deploy-копия.
 
 ## Что делает backend
 - Принимает WebSocket-соединения (ws/wss).
@@ -21,7 +20,3 @@ Event-driven исполнение реализовано через:
 3. runtime события worker/QoS/shutdown.
 
 Это фактически серверный event bus: входящий сигнал -> операция -> state transition -> ответ/метрика/аудит.
-
-## Документация
-- Полный method-level reference: `docs/server/SERVER_METHOD_REFERENCE.md`
-- Архитектура и процессы: `docs/server/SERVER_ARCHITECTURE_AND_EVENTBUS.md`
